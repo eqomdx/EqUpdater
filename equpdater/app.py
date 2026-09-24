@@ -2372,6 +2372,8 @@ RECOMMENDED_ADDONS = {
     "InstanceJournal":      "https://github.com/Arthur-Helias/InstanceJournal",
     "ModernMapMarkers":     "https://github.com/tilare/ModernMapMarkers",
     "NampowerSettings":     "https://github.com/brues-code/NampowerSettings",
+    # Folder name from the repository's Questie-Octo.toc.
+    "Questie-Octo":         "https://github.com/SandreaSub/Questie-Octo",
     "ShaguDPS":             "https://github.com/shagu/ShaguDPS",
     "SuperAPI":             "https://github.com/balakethelock/SuperAPI",
     "SuperCleveRoidMacros": "https://github.com/brues-code/SuperCleveRoidMacros",
@@ -2391,7 +2393,7 @@ RECOMMENDED_ADDONS = {
 #:
 #: Taken off the recommended list 2026-09-24 at the maintainer's request:
 #: ItemRack, Magnify, PallyPowerTW, pfQuest, pfQuest-turtle, pfUI, SUCC-bag.
-#: Added the same day: Questie-Octo (folder name from its Questie-Octo.toc).
+#: Questie-Octo was added here the same day, then promoted to recommended.
 LISTED_ADDONS = {
     "ItemRack":             "https://github.com/Otari98/ItemRack",
     "Magnify":              "https://github.com/paokkerkir/Magnify",
@@ -2399,7 +2401,6 @@ LISTED_ADDONS = {
     "pfQuest":              "https://github.com/The-Kludge-Bureau/pfQuest",
     "pfQuest-turtle":       "https://github.com/KameleonUK/pfQuest-turtle",
     "pfUI":                 "https://github.com/brues-code/pfUI",
-    "Questie-Octo":         "https://github.com/SandreaSub/Questie-Octo",
     "SUCC-bag":             "https://github.com/Otari98/SUCC-bag",
 }
 

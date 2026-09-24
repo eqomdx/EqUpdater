@@ -164,12 +164,12 @@ class TestPlannerReachesTheUI(unittest.TestCase):
         taken_off = {"ItemRack", "Magnify", "PallyPowerTW", "pfQuest",
                      "pfQuest-turtle", "pfUI", "SUCC-bag"}
         self.assertFalse(taken_off & set(self.m.RECOMMENDED_ADDONS))
-        for name in taken_off | {"Questie-Octo"}:
+        for name in taken_off:
             with self.subTest(name=name):
                 self.assertIn(name, self.m.LISTED_ADDONS)
                 self.assertEqual(self.m.CURATED_ADDONS[name],
                                  self.m.LISTED_ADDONS[name])
-        self.assertEqual(self.m.LISTED_ADDONS["Questie-Octo"],
+        self.assertEqual(self.m.RECOMMENDED_ADDONS["Questie-Octo"],
                          "https://github.com/SandreaSub/Questie-Octo")
         self.assertFalse(set(self.m.LISTED_ADDONS) & set(self.m.RECOMMENDED_ADDONS))
 
