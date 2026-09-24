@@ -351,6 +351,40 @@ def photo_image(image, master=None):
     return ImageTk.PhotoImage(image, master=master)
 
 
+def edge_fade_layers(width: int, height: int, color: str, *,
+                     top: tuple = (0, 0.0), bottom: tuple = (0, 0.0)) -> list:
+    """Soft dark gradients for the top and bottom of the background.
+
+    ``top`` and ``bottom`` are (height in px, strength 0..1 at the window
+    edge). The strength eases in (smoothstep), so there is no line where a
+    fade begins. Returns layers for ``apply_edge_fades``: (solid strip, alpha
+    mask, y). Built once; applying them is one masked paste per edge."""
+    if Image is None:
+        return []
+    layers = []
+    for (size, strength), at_top in ((top, True), (bottom, False)):
+        size = max(0, min(int(size), height))
+        if not size or strength <= 0:
+            continue
+        values = []
+        for i in range(size):
+            t = (size - i) / size if at_top else (i + 1) / size   # 1 at the edge
+            values.append(int(round(255 * strength * t * t * (3 - 2 * t))))
+        column = Image.new("L", (1, size))
+        column.putdata(values)
+        mask = column.resize((width, size), Image.Resampling.NEAREST)
+        strip = Image.new("RGB", (width, size), color)
+        layers.append((strip, mask, 0 if at_top else height - size))
+    return layers
+
+
+def apply_edge_fades(img, layers):
+    """Darken ``img`` in place with ``edge_fade_layers`` output; returns it."""
+    for strip, mask, y in layers or ():
+        img.paste(strip, (0, y), mask)
+    return img
+
+
 class AnimatedBackground:
     """Play a looping GIF into one canvas image item, cover-cropped to the
     window.
@@ -374,10 +408,12 @@ class AnimatedBackground:
     QUEUE_FRAMES = 4
 
     def __init__(self, widget, canvas, item, path: str, width: int,
-                 height: int, *, darken: float = 0.93, on_fail=None):
+                 height: int, *, darken: float = 0.93, fades=None,
+                 on_fail=None):
         self.widget, self.canvas, self.item = widget, canvas, item
         self.path, self.width, self.height = path, width, height
         self.darken, self.on_fail = darken, on_fail
+        self.fades = fades or []
         self.photo = None
         self.error: str | None = None
         self._queue: queue.Queue = queue.Queue(maxsize=self.QUEUE_FRAMES)
@@ -452,6 +488,7 @@ class AnimatedBackground:
                             Image.Resampling.BILINEAR, box=box)
                         if self.darken != 1.0:
                             frame = frame.point(lut)
+                        apply_edge_fades(frame, self.fades)
                         while not self._stop.is_set():
                             try:
                                 self._queue.put((frame, duration), timeout=0.25)

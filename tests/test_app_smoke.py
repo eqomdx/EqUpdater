@@ -274,6 +274,28 @@ class TestAnimatedBackground(unittest.TestCase):
                           if t.name == "bg-animation"])
 
 
+class TestEdgeFades(unittest.TestCase):
+    """The top and bottom fades ease in: nothing at their inner edge, full
+    strength at the window edge, and no step anywhere in between."""
+
+    def test_fades_have_no_edge(self):
+        from equpdater.ui import edge_fade_layers
+        layers = edge_fade_layers(10, 100, "#000000", top=(30, 0.5),
+                                  bottom=(40, 0.9))
+        (_, top_mask, top_y), (_, bot_mask, bot_y) = layers
+        self.assertEqual((top_y, bot_y), (0, 60))
+        top = [top_mask.getpixel((0, y)) for y in range(30)]
+        bot = [bot_mask.getpixel((0, y)) for y in range(40)]
+        self.assertEqual(top, sorted(top, reverse=True))      # fades downwards
+        self.assertEqual(bot, sorted(bot))                    # fades upwards
+        self.assertLessEqual(top[-1], 3)
+        self.assertLessEqual(bot[0], 3)
+        self.assertAlmostEqual(top[0], 0.5 * 255, delta=3)
+        self.assertAlmostEqual(bot[-1], 0.9 * 255, delta=3)
+        steps = [abs(a - b) for a, b in zip(bot, bot[1:])]
+        self.assertLessEqual(max(steps), 12)                  # smooth
+
+
 @unittest.skipUnless(HAVE_TK, "no display")
 class TestAnimatedBackgroundSetting(unittest.TestCase):
     """The Settings checkbox, its default, and what the app does with it."""
@@ -336,6 +358,19 @@ class TestAnimatedBackgroundSetting(unittest.TestCase):
         self.app._bg_animation_failed("test")
         self.assertIsNone(self.app._bg_anim)
         self.assertEqual(self.image_on_canvas(), str(self.app._bg_photo))
+
+    def test_header_and_footer_sit_on_the_background(self):
+        """No separate header image and no solid footer block: both were
+        hard-edged rectangles over the moving background."""
+        self.assertIs(self.app._hdr_canvas, self.app._bg_canvas)
+        bottoms = [w for w in self.app.place_slaves()
+                   if w.winfo_y() + w.winfo_height() >= self.m.WIN_H - 2
+                   and w.winfo_width() >= self.m.WIN_W - 2
+                   and w is not self.app._bg_canvas]
+        self.assertEqual(bottoms, [])
+        self.app._status_var.set("status text")
+        self.assertEqual(self.app._bg_canvas.itemcget(
+            self.app._foot_items["status"], "text"), "status text")
 
     def test_both_assets_ship(self):
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

@@ -21,9 +21,16 @@ EqUpdater is no longer just an Octo Updater skin. The current branch has the saf
   static. Settings → **Animated background** (config `animated_background`,
   default true). `ui.AnimatedBackground` decodes/scales/darkens frames on a
   worker thread into a 4-frame queue; the Tk thread only pastes one
-  PhotoImage per frame on an `after()` clock (24 fps, ~25-35% of one core;
-  0% when off or minimised). Any failure logs and restores the PNG.
-  `bubbles.jpg` retired.
+  PhotoImage per frame on an `after()` clock (the current GIF is 80-100 ms
+  per frame, a 52 s loop; 0% CPU when off or minimised). Any failure logs and
+  restores the PNG. `bubbles.jpg` retired.
+- Edge fades (`ui.edge_fade_layers`) are baked into the still and every
+  frame: the top eases to dark over 120 px, the bottom over the footer plus
+  70 px. The header is drawn on the background canvas itself (it used to be
+  a separate canvas with a still crop, which showed a hard line once the
+  background moved), and the footer's status, version, progress bar and
+  text are canvas items over the fade -- there is no solid footer block.
+  `_layout_footer()` re-places them from the font's line height.
 - Dark navy panels over the background.
 - Reusable Canvas gradient buttons for PLAY / UPDATE / UPDATE ALL.
 - The one-pixel/right-edge gap in the gradient button fill is fixed.
@@ -125,8 +132,16 @@ forum and `octonews.php`. The old code parsed it as JSON (error) and HTML
 (zero topics, reported as "no topics"). It is now detected and reported as
 `ForumBlockedError` naming the stage; the panel keeps cached content. EqUpdater
 does **not** try to solve the challenge -- that is circumventing the site's
-anti-bot protection. It works again as soon as OctoWoW lifts the check or
-exempts `viewforum.php`/`viewtopic.php` for launchers.
+anti-bot protection.
+
+**Why OctoBot gets through (diagnosed 2026-09-24):** BlazingFast has a
+*named* User-Agent allowlist entry for OctoBot. Same client (urllib) from the
+same PC: `User-Agent: OctoBot/1.0 (+OctoWoW Discord bot)` gets the forum;
+`EqUpdater/2.0.1`, a Chrome UA, and honest variants such as
+`EqUpdater/2.0.1 (+https://github.com/eqomdx/EqUpdater)` all get the
+challenge. EqUpdater must not send OctoBot's UA: that is borrowing another
+client's exemption. The fix is asking OctoWoW to add `EqUpdater/` to the
+same allowlist; no code change is needed after that.
 
 Every failure is logged to the session log as `<stage> failed: <why> [<url>]`.
 
@@ -149,7 +164,7 @@ Every failure is logged to the session log as `<stage> failed: <why> [<url>]`.
 
 Latest validation:
 
-`Ran 186 tests ... OK` (Windows, 2026-09-24, after the animated background)
+`Ran 188 tests ... OK` (Windows, 2026-09-24, after the edge fades)
 
 Command used in a virtual display:
 

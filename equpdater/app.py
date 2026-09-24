@@ -57,7 +57,8 @@ from .versions import Ordering, compare as compare_versions, is_newer
 from .news import (ANNOUNCEMENTS_FORUM_ID, CHANGELOG_FORUM_ID,
                    fetch_latest_post, fetch_topic_list)
 from .ui import (AnimatedBackground, FontManager, GradientButton,
-                 GradientPalette, cover_background, photo_image)
+                 GradientPalette, apply_edge_fades, cover_background,
+                 edge_fade_layers, photo_image)
 
 # ──────────────────────────────────────────────────────────────────────────────
 #  Constants
@@ -3650,6 +3651,7 @@ class EqUpdaterApp(tk.Tk):
     def _apply_app_fonts(self):
         """Apply the selected family immediately to the live widget tree."""
         self._fonts.apply_tree(self)
+        self._layout_footer()
         if hasattr(self, "_hdr_canvas"):
             self._draw_logo()
             for tab in getattr(self, "_nav_pos", {}):
@@ -3692,8 +3694,17 @@ class EqUpdaterApp(tk.Tk):
         c = self._bg_canvas
         c.delete("all")
         self._bg_item = None
+        # The top eases into the window edge behind the header, and the
+        # bottom fades to the footer's dark so the controls sit on a soft
+        # dark gradient rather than a solid block with a hard top edge.
+        self._bg_fades = edge_fade_layers(
+            WIN_W, WIN_H, C_BG,
+            top=(self._px(120), 0.45),
+            bottom=(FOOT_H + self._px(70), 0.9))
         self._bg_pil = cover_background(
             self._background_path(), WIN_W, WIN_H, darken=0.93)
+        if self._bg_pil is not None:
+            apply_edge_fades(self._bg_pil, self._bg_fades)
         self._bg_photo = photo_image(self._bg_pil, master=self)
         if self._bg_photo is not None:
             self._bg_item = c.create_image(0, 0, image=self._bg_photo,
@@ -3722,7 +3733,8 @@ class EqUpdaterApp(tk.Tk):
             self._bg_canvas.tag_lower("bg")
         self._bg_anim = AnimatedBackground(
             self, self._bg_canvas, self._bg_item, path, WIN_W, WIN_H,
-            darken=0.93, on_fail=self._bg_animation_failed)
+            darken=0.93, fades=self._bg_fades,
+            on_fail=self._bg_animation_failed)
         self._bg_anim.start()
 
     def _stop_bg_animation(self, restore_static: bool = True,
@@ -3779,18 +3791,11 @@ class EqUpdaterApp(tk.Tk):
     def _build_header(self):
         HDR_H = self._px(108)
 
-        hdr = tk.Canvas(self, width=WIN_W, height=HDR_H,
-                        bg=C_BG, highlightthickness=0)
-        hdr.place(x=0, y=0, width=WIN_W, height=HDR_H)
+        # The header is drawn straight onto the background canvas. It used to
+        # be its own canvas holding a still crop of the background, which
+        # left a hard line at its bottom edge once the background moved.
+        hdr = self._bg_canvas
         self._hdr_canvas = hdr
-
-        # Use the exact same cover-cropped artwork as the main surface so the
-        # header feels like part of the background rather than a separate bar.
-        if getattr(self, "_bg_pil", None) is not None:
-            self._hdr_bg_photo = photo_image(
-                self._bg_pil.crop((0, 0, WIN_W, HDR_H)), master=self)
-            if self._hdr_bg_photo is not None:
-                hdr.create_image(0, 0, image=self._hdr_bg_photo, anchor="nw")
 
         import tkinter.font as tkfont
 
@@ -7239,27 +7244,27 @@ class EqUpdaterApp(tk.Tk):
     # ── footer ────────────────────────────────────────────────────────────────
 
     def _build_footer(self):
-        foot = tk.Frame(self, bg=C_BG, height=FOOT_H)
-        foot.place(x=0, y=WIN_H - FOOT_H, width=WIN_W, height=FOOT_H)
+        """PLAY/UPDATE, UPDATE ALL, the status line, the progress bar and the
+        version -- drawn over the bottom of the background, which fades to
+        dark there (see _draw_bg), instead of on a solid block. Text is
+        canvas text so the gradient shows through around it."""
+        c = self._bg_canvas
+        self._foot_items = {}
 
-        # Bottom-left column: status message on top, PLAY/UPDATE button in
-        # the middle, client version at the bottom (with a bottom margin so
-        # the content doesn't sit flush against the window edge).
-        left = tk.Frame(foot, bg=C_BG)
-        left.place(x=self._px(40), y=self._px(6))
+        def text(key, var=None, **kw):
+            self._foot_items[key] = c.create_text(0, 0, **kw)
+            if var is not None:
+                var.trace_add("write", lambda *_a, k=key, v=var:
+                              c.itemconfigure(self._foot_items[k], text=v.get()))
 
         self._status_var = tk.StringVar(value="Ready to update")
-        tk.Label(left, textvariable=self._status_var,
-                 font=self._font(10, bold=True),
-                 fg=C_TEXT, bg=C_BG, width=26, anchor="w").pack(anchor="w")
+        text("status", self._status_var, text=self._status_var.get(),
+             anchor="nw", fill=C_TEXT)
 
         # Thin halo frame around the button gives a soft glow that follows
         # the button state (gold for UPDATE, green for PLAY).
         self._btn_mode = "update"
-        btn_row = tk.Frame(left, bg=C_BG)
-        btn_row.pack(anchor="w", pady=(self._px(6), self._px(6)))
-        self._btn_glow = tk.Frame(btn_row, bg="#5a4828")
-        self._btn_glow.pack(side="left")
+        self._btn_glow = tk.Frame(c, bg="#5a4828")
         self._upd_btn = GradientButton(
             self._btn_glow, width=self._px(132), height=self._px(38),
             text="UPDATE", palette=UPDATE_GRADIENT,
@@ -7267,10 +7272,11 @@ class EqUpdaterApp(tk.Tk):
             font_factory=lambda: self._font(11, bold=True))
         self._upd_btn.pack(padx=self._px(2), pady=self._px(2))
         self._gradient_buttons.append(self._upd_btn)
+        self._foot_items["btn"] = c.create_window(
+            0, 0, window=self._btn_glow, anchor="nw")
 
         # UPDATE ALL: only safe, managed, provably newer components.
-        self._all_glow = tk.Frame(btn_row, bg=UPDALL_GLOW_OFF)
-        self._all_glow.pack(side="left", padx=(self._px(10), 0))
+        self._all_glow = tk.Frame(c, bg=UPDALL_GLOW_OFF)
         self._all_btn = GradientButton(
             self._all_glow, width=self._px(132), height=self._px(38),
             text="UPDATE ALL", palette=UPDATE_ALL_GRADIENT,
@@ -7281,53 +7287,70 @@ class EqUpdaterApp(tk.Tk):
         self._gradient_buttons.append(self._all_btn)
         self._all_ready = False
         self._update_all_chain = False
+        self._foot_items["all"] = c.create_window(
+            0, 0, window=self._all_glow, anchor="nw")
 
         self._client_ver_var = tk.StringVar(value="")
-        tk.Label(left, textvariable=self._client_ver_var,
-                 font=self._font(8), fg=C_TEXT_DIM, bg=C_BG).pack(
-                 anchor="w", pady=(0, self._px(36)))
+        text("client", self._client_ver_var, text="", anchor="nw",
+             fill=C_TEXT_DIM)
 
-        pb_frame = tk.Frame(foot, bg=C_BG)
-        pb_frame.place(x=self._px(400), y=0,
-                       width=WIN_W - self._px(400) - self._px(40), height=FOOT_H)
-
-        self._pb_canvas = tk.Canvas(pb_frame,
-                                    height=self._px(6), bg=C_BG,
-                                    highlightthickness=0)
-        self._pb_canvas.pack(fill="x", side="bottom", padx=0,
-                             ipady=0, pady=(0, self._px(56)))
-        self._pb_width  = WIN_W - self._px(400) - self._px(40)
-        self._pb_val    = 0.0
-
+        self._pb_x0 = self._px(400)
+        self._pb_width = WIN_W - self._px(400) - self._px(40)
+        self._pb_val = 0.0
+        self._pb_y = 0
         self._prog_label_var = tk.StringVar(value="")
-        tk.Label(pb_frame, textvariable=self._prog_label_var,
-                 font=self._font(10), fg=C_TEXT, bg=C_BG).pack(
-                 side="bottom", pady=(0, self._px(6)))
+        text("progress", self._prog_label_var, text="", anchor="s",
+             fill=C_TEXT)
 
-        tk.Label(foot, text=f"v{UPDATER_VERSION}",
-                 font=("Courier New", 8),
-                 fg="#555560", bg=C_BG).place(relx=1.0, rely=1.0,
-                                              x=self._px(-10), y=self._px(-6),
-                                              anchor="se")
+        text("version", text=f"v{UPDATER_VERSION}", anchor="se",
+             fill="#6a7690", font=("Courier New", 8))
+        self._layout_footer()
 
-        # Align the progress bar's bottom edge exactly with the PLAY/UPDATE
-        # button's bottom edge once real geometry is known.
-        def _align_pb():
-            self.update_idletasks()
-            gap = (foot.winfo_rooty() + FOOT_H) - (
-                self._btn_glow.winfo_rooty() + self._btn_glow.winfo_height())
-            if gap > 0:
-                self._pb_canvas.pack_configure(pady=(0, gap))
-        self.after(60, _align_pb)
+    def _layout_footer(self):
+        """Place the footer from the current font's line height, so a larger
+        face (OpenDyslexic) pushes the buttons down instead of under the
+        status line. Called again whenever the font changes."""
+        items = getattr(self, "_foot_items", None)
+        if not items:
+            return
+        import tkinter.font as tkfont
+        c = self._bg_canvas
+        status_font = self._font(10, bold=True)
+        line = tkfont.Font(font=status_font).metrics("linespace")
+        y0 = WIN_H - FOOT_H
+        x = self._px(40)
+        status_y = y0 + self._px(6)
+        btn_y = status_y + line + self._px(6)
+        glow_w = self._px(132) + 2 * self._px(2)
+        glow_h = self._px(38) + 2 * self._px(2)
+        btn_bottom = btn_y + glow_h
+
+        c.coords(items["status"], x, status_y)
+        c.itemconfigure(items["status"], font=status_font)
+        c.coords(items["btn"], x, btn_y)
+        c.coords(items["all"], x + glow_w + self._px(10), btn_y)
+        c.coords(items["client"], x, btn_bottom + self._px(6))
+        c.itemconfigure(items["client"], font=self._font(8))
+
+        # The progress bar's bottom edge lines up with the buttons'.
+        self._pb_y = btn_bottom - self._px(6)
+        c.coords(items["progress"], self._pb_x0 + self._pb_width // 2,
+                 self._pb_y - self._px(6))
+        c.itemconfigure(items["progress"], font=self._font(10))
+        c.coords(items["version"], WIN_W - self._px(10), WIN_H - self._px(6))
+        self._draw_progress(self._pb_val)
 
     def _draw_progress(self, value: float):
+        """The progress bar, drawn on the background canvas (tag "pb") and
+        only while something is running."""
         self._pb_val = max(0.0, min(1.0, value))
-        c = self._pb_canvas
-        w = self._pb_width
-        c.delete("all")
-        if not self._running:
+        c = self._bg_canvas
+        c.delete("pb")
+        if not getattr(self, "_running", False):
             return
-        c.create_rectangle(0, 0, w, self._px(6), fill="#1e1e26", outline="")
+        w, x0, y0, h = self._pb_width, self._pb_x0, self._pb_y, self._px(6)
+        c.create_rectangle(x0, y0, x0 + w, y0 + h, fill="#1e1e26",
+                           outline="", tags="pb")
         filled = int(w * self._pb_val)
         if filled > 0:
             for x in range(filled):
@@ -7336,7 +7359,7 @@ class EqUpdaterApp(tk.Tk):
                 g_val = int(0x92 + t * (0xb8 - 0x92))
                 b_val = int(0x2a + t * (0x4b - 0x2a))
                 col   = f"#{r_val:02x}{g_val:02x}{b_val:02x}"
-                c.create_line(x, 0, x, self._px(6), fill=col)
+                c.create_line(x0 + x, y0, x0 + x, y0 + h, fill=col, tags="pb")
 
     # ── helpers ───────────────────────────────────────────────────────────────
 
