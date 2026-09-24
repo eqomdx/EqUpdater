@@ -432,6 +432,39 @@ def apply_edge_fades(img, layers):
     return img
 
 
+class BackdropCanvas(tk.Canvas):
+    """A Canvas used as a panel that shows the window background behind its
+    children -- see-through gaps between opaque Tk frames.
+
+    It displays the *same* PhotoImage as the main background, offset by its
+    own position, so every animation frame pasted there appears here too,
+    aligned to the pixel, at no extra cost.
+
+    tkinter aliases ``Canvas.tkraise``/``lift`` to ``tag_raise`` (raising
+    canvas *items*); a stacked panel needs the widget raised, so those are
+    restored to the window versions."""
+
+    def __init__(self, parent, **kw):
+        kw.setdefault("highlightthickness", 0)
+        kw.setdefault("bd", 0)
+        super().__init__(parent, **kw)
+        self._backdrop = self.create_image(0, 0, anchor="nw")
+        self.bind("<Configure>", self._align, add="+")
+
+    def tkraise(self, aboveThis=None):
+        tk.Misc.tkraise(self, aboveThis)
+
+    lift = tkraise
+
+    def set_image(self, photo) -> None:
+        self.itemconfigure(self._backdrop, image=photo or "")
+        self._align()
+
+    def _align(self, _event=None) -> None:
+        self.coords(self._backdrop, -self.winfo_x(), -self.winfo_y())
+        self.tag_lower(self._backdrop)
+
+
 class AnimatedBackground:
     """Play a looping GIF into one canvas image item, cover-cropped to the
     window.
@@ -456,11 +489,12 @@ class AnimatedBackground:
 
     def __init__(self, widget, canvas, item, path: str, width: int,
                  height: int, *, darken: float = 0.93, fades=None,
-                 on_fail=None):
+                 on_fail=None, on_image=None):
         self.widget, self.canvas, self.item = widget, canvas, item
         self.path, self.width, self.height = path, width, height
         self.darken, self.on_fail = darken, on_fail
         self.fades = fades or []
+        self.on_image = on_image     # told the PhotoImage once it exists
         self.photo = None
         self.error: str | None = None
         self._queue: queue.Queue = queue.Queue(maxsize=self.QUEUE_FRAMES)
@@ -596,6 +630,8 @@ class AnimatedBackground:
             if self.photo is None:
                 self.photo = ImageTk.PhotoImage(frame, master=self.widget)
                 self.canvas.itemconfigure(self.item, image=self.photo)
+                if self.on_image:
+                    self.on_image(self.photo)
             else:
                 self.photo.paste(frame)
         except (tk.TclError, RuntimeError, ValueError) as exc:

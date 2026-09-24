@@ -58,7 +58,8 @@ from .news import (ANNOUNCEMENTS_FORUM_ID, CHANGELOG_FORUM_ID,
                    fetch_latest_post, fetch_topic_list)
 from .ui import (AnimatedBackground, FontManager, GradientButton,
                  GradientPalette, apply_edge_fades, cover_background,
-                 blend, edge_fade_layers, photo_image, style_title_bar)
+                 BackdropCanvas, blend, edge_fade_layers, photo_image,
+                 style_title_bar)
 
 # ──────────────────────────────────────────────────────────────────────────────
 #  Constants
@@ -3711,6 +3712,7 @@ class EqUpdaterApp(tk.Tk):
         if self._bg_pil is not None:
             apply_edge_fades(self._bg_pil, self._bg_fades)
         self._bg_photo = photo_image(self._bg_pil, master=self)
+        self._bg_current = self._bg_photo
         if self._bg_photo is not None:
             self._bg_item = c.create_image(0, 0, image=self._bg_photo,
                                            anchor="nw", tags="bg")
@@ -3739,7 +3741,8 @@ class EqUpdaterApp(tk.Tk):
         self._bg_anim = AnimatedBackground(
             self, self._bg_canvas, self._bg_item, path, WIN_W, WIN_H,
             darken=0.93, fades=self._bg_fades,
-            on_fail=self._bg_animation_failed)
+            on_fail=self._bg_animation_failed,
+            on_image=self._show_bg_image)
         self._bg_anim.start()
 
     def _stop_bg_animation(self, restore_static: bool = True,
@@ -3752,6 +3755,18 @@ class EqUpdaterApp(tk.Tk):
             try:
                 self._bg_canvas.itemconfigure(
                     self._bg_item, image=self._bg_photo or "")
+            except tk.TclError:
+                pass
+            self._show_bg_image(self._bg_photo)
+
+    def _show_bg_image(self, photo):
+        """Point every see-through panel at the background image now on
+        screen -- the still, or the animation's PhotoImage, whose frames
+        then appear in those panels too."""
+        self._bg_current = photo
+        for backdrop in getattr(self, "_bg_backdrops", ()):
+            try:
+                backdrop.set_image(photo)
             except tk.TclError:
                 pass
 
@@ -3951,18 +3966,23 @@ class EqUpdaterApp(tk.Tk):
         PANEL_H    = WIN_H - PANEL_TOP - PANEL_BOT
         PAD        = self._px(40)
 
-        panel = tk.Frame(self, bg=C_BG)
+        # A backdrop, not a plain frame: the gap between the two news panels
+        # shows the (animated) window background instead of a flat colour.
+        panel = BackdropCanvas(self, bg=C_BG)
+        self._bg_backdrops = [panel]
         panel.place(x=PAD, y=PANEL_TOP + self._px(10),
                     width=WIN_W - PAD * 2,
                     height=PANEL_H - self._px(20))
+        panel.set_image(getattr(self, "_bg_current", None))
         self._news_panel = panel
         self._active_panel = panel
 
         inner_w = WIN_W - PAD * 2
-        # The two panels meet on one shared border line. A gap between them
-        # showed the flat dark container instead of the background.
+        # A small gap between the two panels; the backdrop shows the
+        # bubbles through it.
+        gap = self._px(10)
         self._news_left_w  = int(inner_w * 0.60)
-        self._news_right_w = inner_w - self._news_left_w + 1
+        self._news_right_w = inner_w - self._news_left_w - gap
 
         feat = tk.Frame(panel, bg=C_PANEL,
                         highlightthickness=1,
@@ -3973,7 +3993,7 @@ class EqUpdaterApp(tk.Tk):
         changelog = tk.Frame(panel, bg=C_PANEL,
                              highlightthickness=1,
                              highlightbackground=C_PANEL_BDR)
-        changelog.place(x=self._news_left_w - 1, y=0,
+        changelog.place(x=self._news_left_w + gap, y=0,
                         width=self._news_right_w, relheight=1.0)
         self._patch_frame = changelog
 
