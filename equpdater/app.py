@@ -3958,8 +3958,10 @@ class EqUpdaterApp(tk.Tk):
         self._active_panel = panel
 
         inner_w = WIN_W - PAD * 2
+        # The two panels meet on one shared border line. A gap between them
+        # showed the flat dark container instead of the background.
         self._news_left_w  = int(inner_w * 0.60)
-        self._news_right_w = inner_w - self._news_left_w - self._px(12)
+        self._news_right_w = inner_w - self._news_left_w + 1
 
         feat = tk.Frame(panel, bg=C_PANEL,
                         highlightthickness=1,
@@ -3970,7 +3972,7 @@ class EqUpdaterApp(tk.Tk):
         changelog = tk.Frame(panel, bg=C_PANEL,
                              highlightthickness=1,
                              highlightbackground=C_PANEL_BDR)
-        changelog.place(x=self._news_left_w + self._px(12), y=0,
+        changelog.place(x=self._news_left_w - 1, y=0,
                         width=self._news_right_w, relheight=1.0)
         self._patch_frame = changelog
 
