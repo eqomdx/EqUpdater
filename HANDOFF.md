@@ -86,18 +86,29 @@ Do not silently present OpenDyslexic while rendering a fallback family.
 
 ## News / changelog
 
-`equpdater/news.py` owns News fetching/parsing.
+`equpdater/news.py` owns News fetching/parsing; `app.py` only renders.
 
-Primary source is OctoWoW's public `octonews.php` JSON endpoint, matching the upstream launcher's mechanism:
+Primary source is the phpBB forum itself (forum 2 Announcements, forum 4
+Changelog): `fetch_forum_topics` reads the listing (`sk=tt&sd=d`), takes every
+`li.row`, and sorts by each topic's **start** date (never row order, never the
+last-post column); `fetch_topic_first_post` opens the canonical
+`viewtopic.php?t=<id>` and reads only the first `div.post#p<N>`. Announcements
+shows 1 topic, Changelog 8. `octonews.php` (the official launcher's JSON feed)
+is the fallback.
 
-- Announcements: forum 2, full/latest post
-- Patch Notes & Changelog: forum 4, recent list
+**Why News was blank (diagnosed 2026-09-24):** octowow.st is behind
+BlazingFast DDoS protection, which answers every non-browser client --
+whatever the User-Agent -- with a JavaScript "Just a moment please..."
+interstitial, HTTP 200, header `X-BF-Challenge: pending`. That hits both the
+forum and `octonews.php`. The old code parsed it as JSON (error) and HTML
+(zero topics, reported as "no topics"). It is now detected and reported as
+`ForumBlockedError` naming the stage; the panel keeps cached content. EqUpdater
+does **not** try to solve the challenge -- that is circumventing the site's
+anti-bot protection. It works again as soon as OctoWoW lifts the check or
+exempts `/forum/octonews.php` or the forum pages for launchers (their own
+launcher reads `octonews.php` and is blocked the same way).
 
-HTML/phpBB scraping remains as a fallback and is intentionally more tolerant than the earlier `topictitle`-only parser.
-
-The app keeps the last successful News data in config and renders cache immediately, refreshing in a worker thread.
-
-Important: the hosted endpoint could not be directly fetched from the development web sandbox, so final live verification still needs to be done by running EqUpdater on the user's machine. If News still fails, use the session log and inspect the exact HTTP/JSON error before changing the parser again.
+Every failure is logged to the session log as `<stage> failed: <why> [<url>]`.
 
 ## Important files
 

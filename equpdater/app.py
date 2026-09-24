@@ -54,8 +54,7 @@ from .planner import (Component, plan, plan_all, skipped_notably, summarise,
                       updatable)
 from .states import Action, Plan, Status
 from .versions import Ordering, compare as compare_versions, is_newer
-from .news import (ANNOUNCEMENTS_FORUM_ID, CHANGELOG_FORUM_ID,
-                   fetch_forum_topics)
+from .news import ANNOUNCEMENTS_FORUM_ID, CHANGELOG_FORUM_ID, fetch_news
 from .ui import (FontManager, GradientButton, GradientPalette,
                  cover_background, photo_image)
 
@@ -81,11 +80,11 @@ APP_DIR = branding.app_dir()
 # varies with how the app was launched).
 DEFAULT_GAME_DIR = os.path.join(APP_DIR, "OctoWoW")
 
-# News uses the canonical public OctoWoW forum sections rather than the
-# inherited bespoke octonews.php endpoint.  Forum 2 is Announcements and
-# forum 4 is Patch Notes and Changelog.
+# News is read from the public OctoWoW forum (equpdater/news.py): forum 2 is
+# Announcements, forum 4 is Patch Notes and Changelog.
 NEWS_TIMEOUT      = 8
 NEWS_CACHE_TTL    = 300
+NEWS_CHANGELOG_COUNT = 8
 
 # Design dimensions, authored at 96 DPI (100% scaling). At startup the app
 # multiplies these — and every other hard-coded pixel value, via self._px() —
@@ -3101,23 +3100,26 @@ def _news_open(req, timeout):
 
 
 def fetch_patch_notes() -> list:
-    """Newest topics from the canonical Patch Notes and Changelog forum."""
-    items = fetch_forum_topics(
-        CHANGELOG_FORUM_ID, opener=_news_open, user_agent=UA,
-        timeout=NEWS_TIMEOUT, limit=8)
-    if not items:
-        raise RuntimeError("no changelog topics returned")
-    return items
+    """The newest Patch Notes and Changelog topics, each with its opening
+    post. Raises news.ForumError, naming the stage that failed."""
+    return fetch_news(CHANGELOG_FORUM_ID, NEWS_CHANGELOG_COUNT,
+                      opener=_news_open, user_agent=UA,
+                      timeout=NEWS_TIMEOUT, log=log)
 
 
-def fetch_featured_post() -> dict | None:
-    """Newest topic-start from the canonical Announcements forum."""
-    items = fetch_forum_topics(
-        ANNOUNCEMENTS_FORUM_ID, opener=_news_open, user_agent=UA,
-        timeout=NEWS_TIMEOUT, limit=1)
-    if not items:
-        raise RuntimeError("no announcement topics returned")
-    return items[0]
+def fetch_featured_post() -> dict:
+    """The newest announcement, by the date it was posted -- not the pinned
+    topic at the top of the forum, and not the latest reply."""
+    return fetch_news(ANNOUNCEMENTS_FORUM_ID, 1,
+                      opener=_news_open, user_agent=UA,
+                      timeout=NEWS_TIMEOUT, log=log)[0]
+
+
+def _news_error(section: str, exc: Exception) -> str:
+    """The panel's line for a failed refresh; the full reason goes to the
+    session log."""
+    log(f"{section}: {exc}", "err")
+    return f"{section} unavailable: {getattr(exc, 'short', None) or exc}"
 
 # ──────────────────────────────────────────────────────────────────────────────
 #  GUI
@@ -3937,7 +3939,7 @@ class EqUpdaterApp(tk.Tk):
             try:
                 feat = fetch_featured_post()
             except Exception as exc:
-                err = f"Announcements unavailable ({exc})"
+                err = _news_error("Announcements", exc)
 
             def apply():
                 if feat is not None:
@@ -3962,7 +3964,7 @@ class EqUpdaterApp(tk.Tk):
             try:
                 items = fetch_patch_notes()
             except Exception as exc:
-                err = f"Changelog unavailable ({exc})"
+                err = _news_error("Changelog", exc)
 
             def apply():
                 if items is not None:
@@ -4062,7 +4064,9 @@ class EqUpdaterApp(tk.Tk):
 
         if error:
             tk.Label(f, text=error + " · showing cached content",
-                     font=self._font(8), fg=C_TEXT_DIM, bg=C_PANEL).pack(
+                     font=self._font(8), fg=C_TEXT_DIM, bg=C_PANEL,
+                     wraplength=self._news_left_w - self._px(40),
+                     justify="left", anchor="w").pack(
                          side="bottom", fill="x", padx=self._px(20),
                          pady=(0, self._px(4)))
 
@@ -4148,7 +4152,9 @@ class EqUpdaterApp(tk.Tk):
 
         if error:
             tk.Label(f, text=error + " · showing cached content",
-                     font=self._font(8), fg=C_TEXT_DIM, bg=C_PANEL).pack(
+                     font=self._font(8), fg=C_TEXT_DIM, bg=C_PANEL,
+                     wraplength=self._news_right_w - self._px(30),
+                     justify="left", anchor="w").pack(
                          side="bottom", fill="x", padx=self._px(14), pady=(0, self._px(4)))
 
     # ── tweaks panel ─────────────────────────────────────────────────────────────
