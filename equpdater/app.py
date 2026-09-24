@@ -58,7 +58,7 @@ from .news import (ANNOUNCEMENTS_FORUM_ID, CHANGELOG_FORUM_ID,
                    fetch_latest_post, fetch_topic_list)
 from .ui import (AnimatedBackground, FontManager, GradientButton,
                  GradientPalette, apply_edge_fades, cover_background,
-                 edge_fade_layers, photo_image)
+                 edge_fade_layers, photo_image, style_title_bar)
 
 # ──────────────────────────────────────────────────────────────────────────────
 #  Constants
@@ -3411,6 +3411,10 @@ class EqUpdaterApp(tk.Tk):
         if self._first_run:
             self.after(500, self._open_settings)
 
+        # Dark title bar on Windows 10; the app's own navy on Windows 11.
+        # Set before the window is first shown: Windows 10 only paints the
+        # whole bar dark if it is dark from the start.
+        style_title_bar(self, caption=C_BG, text=C_TEXT)
         # Everything is positioned and built — reveal the centered window.
         self.deiconify()
 

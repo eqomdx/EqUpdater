@@ -350,6 +350,54 @@ def photo_image(image, master=None):
     return ImageTk.PhotoImage(image, master=master)
 
 
+def style_title_bar(window, *, caption: str | None = None,
+                    text: str | None = None, dark: bool = True) -> bool:
+    """Colour the native Windows title bar through DWM. Returns whether
+    Windows accepted anything; a no-op off Windows.
+
+    What Windows allows depends on the version, and each request simply
+    fails on a version that does not know it:
+
+    - Windows 10 1809+ and 11: the dark title bar (``dark``).
+    - Windows 11: an exact ``caption`` and ``text`` colour, over the dark one.
+
+    The bar stays the real one, so snapping, the system menu and the taskbar
+    all behave as normal -- which a hand-drawn title bar in Tk would not.
+
+    Call it while the window is still withdrawn: Windows 10 paints only part
+    of the bar dark when dark mode is switched on after it is showing."""
+    if os.name != "nt":
+        return False
+    try:
+        import ctypes
+        from ctypes import wintypes
+        window.update_idletasks()
+        user32 = ctypes.windll.user32
+        hwnd = user32.GetParent(window.winfo_id()) or window.winfo_id()
+        dwm = ctypes.windll.dwmapi
+
+        def attr(key: int, value: int) -> bool:
+            v = ctypes.c_int(value)
+            return dwm.DwmSetWindowAttribute(
+                wintypes.HWND(hwnd), key, ctypes.byref(v), ctypes.sizeof(v)) == 0
+
+        def colorref(colour: str) -> int:
+            r, g, b = (int(colour[i:i + 2], 16) for i in (1, 3, 5))
+            return r | (g << 8) | (b << 16)
+
+        accepted = False
+        if dark:
+            # 20 = DWMWA_USE_IMMERSIVE_DARK_MODE; 19 on builds before 18985.
+            accepted = attr(20, 1) or attr(19, 1)
+        if caption:
+            accepted = attr(35, colorref(caption)) or accepted   # CAPTION_COLOR
+        if text:
+            attr(36, colorref(text))                               # TEXT_COLOR
+        return accepted
+    except Exception:
+        return False
+
+
 def edge_fade_layers(width: int, height: int, color: str, *,
                      top: tuple = (0, 0.0), bottom: tuple = (0, 0.0)) -> list:
     """Soft dark gradients for the top and bottom of the background.
