@@ -17,7 +17,13 @@ EqUpdater is no longer just an Octo Updater skin. The current branch has the saf
 
 ## Current UI
 
-- Full-window `bubbles.jpg` background.
+- Full-window background: `bubbles.gif` animated (default), `pubbles.png`
+  static. Settings → **Animated background** (config `animated_background`,
+  default true). `ui.AnimatedBackground` decodes/scales/darkens frames on a
+  worker thread into a 4-frame queue; the Tk thread only pastes one
+  PhotoImage per frame on an `after()` clock (24 fps, ~25-35% of one core;
+  0% when off or minimised). Any failure logs and restores the PNG.
+  `bubbles.jpg` retired.
 - Dark navy panels over the background.
 - Reusable Canvas gradient buttons for PLAY / UPDATE / UPDATE ALL.
 - The one-pixel/right-edge gap in the gradient button fill is fixed.
@@ -143,7 +149,7 @@ Every failure is logged to the session log as `<stage> failed: <why> [<url>]`.
 
 Latest validation:
 
-`Ran 158 tests ... OK` (Windows, 2026-09-24, after the consent and texture-pack pass)
+`Ran 186 tests ... OK` (Windows, 2026-09-24, after the animated background)
 
 Command used in a virtual display:
 

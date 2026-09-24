@@ -97,11 +97,27 @@ def icon_candidates() -> list:
     return out
 
 
-def background_candidates() -> list:
-    """Where the bundled/source blue bubble background may live."""
+#: The window background: a still image, and the looping animation shown
+#: over it when "Animated background" is on.
+BACKGROUND_STATIC = "pubbles.png"
+BACKGROUND_ANIMATED = "bubbles.gif"
+
+
+def _asset_candidates(name: str) -> list:
+    """Where a bundled (frozen) or source-tree asset may live."""
     out = []
     base = getattr(sys, "_MEIPASS", None)
     if base:
-        out.append(os.path.join(base, "bubbles.jpg"))
-    out.append(os.path.join(app_dir(), "bubbles.jpg"))
+        out.append(os.path.join(base, name))
+    out.append(os.path.join(app_dir(), name))
     return out
+
+
+def background_candidates() -> list:
+    """Where the static bubble background may live."""
+    return _asset_candidates(BACKGROUND_STATIC)
+
+
+def animated_background_candidates() -> list:
+    """Where the looping bubble animation may live."""
+    return _asset_candidates(BACKGROUND_ANIMATED)

@@ -48,7 +48,8 @@ from equpdater import branding  # noqa: E402
 NAME = branding.APP_NAME
 ICON = os.path.join(HERE, "icon.ico")
 ICON_PNG = os.path.join(HERE, "icon.png")
-BACKGROUND = os.path.join(HERE, "bubbles.jpg")
+BACKGROUNDS = [os.path.join(HERE, branding.BACKGROUND_STATIC),
+               os.path.join(HERE, branding.BACKGROUND_ANIMATED)]
 FONTS_DIR = os.path.join(HERE, "fonts")
 # The frozen build starts at the top-level launcher, not at the package's
 # __main__: PyInstaller runs its entry script as `__main__` with no parent
@@ -98,8 +99,9 @@ def main() -> None:
         cmd += ["--icon", ICON, "--add-data", ICON + os.pathsep + "."]
     if os.path.exists(ICON_PNG):
         cmd += ["--add-data", ICON_PNG + os.pathsep + "."]
-    if os.path.exists(BACKGROUND):
-        cmd += ["--add-data", BACKGROUND + os.pathsep + "."]
+    for background in BACKGROUNDS:
+        if os.path.exists(background):
+            cmd += ["--add-data", background + os.pathsep + "."]
     if os.path.isdir(FONTS_DIR):
         cmd += ["--add-data", FONTS_DIR + os.pathsep + "fonts"]
 

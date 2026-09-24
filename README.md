@@ -66,8 +66,11 @@ The application icon is kept as `icon.png` (canonical transparent source) and
 `icon.ico` (Windows/PyInstaller multi-size icon).
 
 
-EqUpdater uses the bundled `bubbles.jpg` artwork as its window background and
-a dark navy UI designed around it. PLAY and UPDATE ALL use deliberately subtle
+EqUpdater's window background is a looping underwater animation
+(`bubbles.gif`), with a still version (`pubbles.png`) shown when **Animated
+background** is unticked in Settings, or whenever the animation cannot be
+played. The animation pauses while the window is minimised. The UI is a dark
+navy designed around it. PLAY and UPDATE ALL use deliberately subtle
 vertical gradients rather than flat fills.
 
 The preferred interface typeface is **Friz Quadrata**. Settings can switch

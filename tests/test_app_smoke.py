@@ -9,6 +9,7 @@ the kind that only shows up assembled.
 Skipped where there is no display.
 """
 
+import gc
 import os
 import shutil
 import sys
@@ -50,6 +51,7 @@ class TestAppStarts(unittest.TestCase):
             cls.app.destroy()
         except Exception:
             pass
+        gc.collect()  # free Tk objects on the Tk thread, never a worker's GC
         shutil.rmtree(cls.tmp, ignore_errors=True)
 
     def test_product_identity(self):
@@ -93,6 +95,7 @@ class TestPlannerReachesTheUI(unittest.TestCase):
             cls.app.destroy()
         except Exception:
             pass
+        gc.collect()  # free Tk objects on the Tk thread, never a worker's GC
         shutil.rmtree(cls.tmp, ignore_errors=True)
 
     def _mod(self, mod_id="ClassicAPI"):
@@ -174,6 +177,174 @@ class TestPlannerReachesTheUI(unittest.TestCase):
 
 
 @unittest.skipUnless(HAVE_TK, "no display")
+class TestAnimatedBackground(unittest.TestCase):
+    """The GIF plays on the Tk timer, loops, and gives way to the still image
+    whenever it cannot be played."""
+
+    COLOURS = [(255, 0, 0), (0, 255, 0), (0, 0, 255)]
+
+    def setUp(self):
+        from PIL import Image
+        from equpdater import ui
+        self.ui, self.Image = ui, Image
+        self.tmp = tempfile.mkdtemp(prefix="equ-gif-")
+        self.root = tk.Tk()
+        self.canvas = tk.Canvas(self.root, width=40, height=30)
+        self.canvas.pack()
+        self.item = self.canvas.create_image(0, 0, anchor="nw")
+
+    def tearDown(self):
+        try:
+            self.root.destroy()
+        except tk.TclError:
+            pass
+        del self.root, self.canvas
+        gc.collect()  # free Tk objects on the Tk thread, never a worker's GC
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def gif(self, frames, name="t.gif"):
+        path = os.path.join(self.tmp, name)
+        imgs = [self.Image.new("RGB", (32, 18), c) for c in frames]
+        imgs[0].save(path, save_all=True, append_images=imgs[1:],
+                     duration=30, loop=0)
+        return path
+
+    def run_for(self, anim, ms, sample=None):
+        def tick():
+            if sample:
+                sample()
+            self.root.after(10, tick)
+        self.root.after(10, tick)
+        self.root.after(ms, self.root.quit)
+        anim.start()
+        self.root.mainloop()
+        anim.stop()
+
+    def test_plays_every_frame_and_loops(self):
+        seen = []
+        anim = self.ui.AnimatedBackground(
+            self.root, self.canvas, self.item, self.gif(self.COLOURS),
+            40, 30, darken=1.0)
+
+        def sample():
+            if anim.photo is not None:
+                rgb = tuple(int(v) for v in anim.photo._PhotoImage__photo.get(5, 5))
+                if not seen or seen[-1] != rgb:
+                    seen.append(rgb)
+        self.run_for(anim, 700, sample)
+        self.assertIsNone(anim.error)
+        self.assertEqual(set(seen), set(self.COLOURS))
+        self.assertGreater(len(seen), len(self.COLOURS))      # came round again
+        self.assertEqual(seen[:4], self.COLOURS + [self.COLOURS[0]])
+        self.assertEqual(self.canvas.itemcget(self.item, "image"), str(anim.photo))
+
+    def test_unreadable_gif_falls_back(self):
+        path = os.path.join(self.tmp, "broken.gif")
+        with open(path, "wb") as f:
+            f.write(b"GIF89a not really")
+        failed = []
+        anim = self.ui.AnimatedBackground(self.root, self.canvas, self.item,
+                                          path, 40, 30, on_fail=failed.append)
+        self.run_for(anim, 300)
+        self.assertEqual(len(failed), 1)
+        self.assertFalse(anim.running)
+        self.assertIsNone(anim.photo)
+
+    def test_a_still_gif_is_not_an_animation(self):
+        failed = []
+        anim = self.ui.AnimatedBackground(
+            self.root, self.canvas, self.item, self.gif(self.COLOURS[:1]),
+            40, 30, on_fail=failed.append)
+        self.run_for(anim, 300)
+        self.assertEqual(len(failed), 1)
+        self.assertIn("1 frame", failed[0])
+
+    def test_stop_ends_the_worker(self):
+        anim = self.ui.AnimatedBackground(
+            self.root, self.canvas, self.item, self.gif(self.COLOURS),
+            40, 30)
+        self.run_for(anim, 200)
+        import threading
+        import time
+        deadline = time.time() + 2
+        while time.time() < deadline and any(
+                t.name == "bg-animation" for t in threading.enumerate()):
+            time.sleep(0.05)
+        self.assertFalse([t for t in threading.enumerate()
+                          if t.name == "bg-animation"])
+
+
+@unittest.skipUnless(HAVE_TK, "no display")
+class TestAnimatedBackgroundSetting(unittest.TestCase):
+    """The Settings checkbox, its default, and what the app does with it."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="equ-bgset-")
+        os.environ["LOCALAPPDATA"] = cls.tmp
+        os.environ["XDG_DATA_HOME"] = cls.tmp
+        for mod in [m for m in list(sys.modules) if m.startswith("equpdater")]:
+            del sys.modules[mod]
+        from equpdater import app, branding
+        cls.m, cls.branding = app, branding
+        cls.app = app.EqUpdaterApp()
+        for _ in range(8):
+            cls.app.update()
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls.app.destroy()
+        except Exception:
+            pass
+        gc.collect()  # free Tk objects on the Tk thread, never a worker's GC
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def image_on_canvas(self):
+        return self.app._bg_canvas.itemcget(self.app._bg_item, "image")
+
+    def test_on_by_default_and_playing(self):
+        self.assertTrue(self.app._animated_bg_var.get())
+        self.assertIsNotNone(self.app._bg_anim)
+        self.assertTrue(self.app._bg_anim.running)
+
+    def test_off_shows_the_still_and_is_remembered(self):
+        self.app._animated_bg_var.set(False)
+        self.app._toggle_animated_background()
+        self.assertIsNone(self.app._bg_anim)
+        self.assertEqual(self.image_on_canvas(), str(self.app._bg_photo))
+        self.assertIs(self.m.load_config()["animated_background"], False)
+
+        self.app._animated_bg_var.set(True)
+        self.app._toggle_animated_background()
+        self.assertTrue(self.app._bg_anim.running)
+        self.assertIs(self.m.load_config()["animated_background"], True)
+
+    def test_missing_gif_keeps_the_still(self):
+        real = self.branding.animated_background_candidates
+        self.branding.animated_background_candidates = lambda: [
+            os.path.join(self.tmp, "nope.gif")]
+        try:
+            self.app._start_bg_animation()
+        finally:
+            self.branding.animated_background_candidates = real
+        self.assertIsNone(self.app._bg_anim)
+        self.assertEqual(self.image_on_canvas(), str(self.app._bg_photo))
+
+    def test_failure_restores_the_still(self):
+        self.app._start_bg_animation()
+        self.app._bg_animation_failed("test")
+        self.assertIsNone(self.app._bg_anim)
+        self.assertEqual(self.image_on_canvas(), str(self.app._bg_photo))
+
+    def test_both_assets_ship(self):
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        for name in (self.branding.BACKGROUND_STATIC,
+                     self.branding.BACKGROUND_ANIMATED):
+            self.assertTrue(os.path.isfile(os.path.join(root, name)), name)
+
+
+@unittest.skipUnless(HAVE_TK, "no display")
 class TestNewsCadence(unittest.TestCase):
     """The forum is read once at launch and once per refresh click. Never on
     a tab switch, never on a timer, never twice at once."""
@@ -231,6 +402,8 @@ class TestNewsCadence(unittest.TestCase):
             a.destroy()
         except Exception:
             pass
+        del a
+        gc.collect()  # free Tk objects on the Tk thread, never a worker's GC
         shutil.rmtree(tmp, ignore_errors=True)
 
         one, two = {"announcements": 1, "patch": 1}, {"announcements": 2, "patch": 2}
@@ -315,6 +488,7 @@ class TestNoDllWithoutConsent(unittest.TestCase):
             cls.app.destroy()
         except Exception:
             pass
+        gc.collect()  # free Tk objects on the Tk thread, never a worker's GC
         shutil.rmtree(cls.tmp, ignore_errors=True)
 
     def setUp(self):

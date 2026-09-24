@@ -56,8 +56,8 @@ from .states import Action, Plan, Status
 from .versions import Ordering, compare as compare_versions, is_newer
 from .news import (ANNOUNCEMENTS_FORUM_ID, CHANGELOG_FORUM_ID,
                    fetch_latest_post, fetch_topic_list)
-from .ui import (FontManager, GradientButton, GradientPalette,
-                 cover_background, photo_image)
+from .ui import (AnimatedBackground, FontManager, GradientButton,
+                 GradientPalette, cover_background, photo_image)
 
 # ──────────────────────────────────────────────────────────────────────────────
 #  Constants
@@ -95,7 +95,7 @@ NEWS_CHANGELOG_COUNT = 8
 WIN_W, WIN_H = 1000, 700
 FOOT_H       = 130
 
-# Dark underwater palette tuned against bubbles.jpg.  The artwork is the
+# Dark underwater palette tuned against the bubble artwork.  The artwork is the
 # visual identity; panels stay deliberately restrained so text remains legible.
 C_BG         = "#06132d"
 C_PANEL      = "#081a35"
@@ -3450,6 +3450,7 @@ class EqUpdaterApp(tk.Tk):
         if getattr(self, "_destroying", False):
             return
         self._destroying = True
+        self._stop_bg_animation(restore_static=False, wait=1.0)
         self._cancel_pending_after_callbacks()
         try:
             self.unbind_all("<MouseWheel>")
@@ -3667,6 +3668,12 @@ class EqUpdaterApp(tk.Tk):
                 return path
         return None
 
+    def _animated_background_path(self):
+        for path in branding.animated_background_candidates():
+            if os.path.exists(path):
+                return path
+        return None
+
     def _build(self):
         self._bg_canvas = tk.Canvas(self, width=WIN_W, height=WIN_H,
                                     bg=C_BG, highlightthickness=0)
@@ -3679,18 +3686,71 @@ class EqUpdaterApp(tk.Tk):
         self._apply_app_fonts()
 
     def _draw_bg(self):
+        """The static background, always drawn first: it is what shows while
+        the animation's first frame is being made, when animation is off,
+        and if the animation cannot be played."""
         c = self._bg_canvas
         c.delete("all")
+        self._bg_item = None
         self._bg_pil = cover_background(
             self._background_path(), WIN_W, WIN_H, darken=0.93)
         self._bg_photo = photo_image(self._bg_pil, master=self)
         if self._bg_photo is not None:
-            c.create_image(0, 0, image=self._bg_photo, anchor="nw")
+            self._bg_item = c.create_image(0, 0, image=self._bg_photo,
+                                           anchor="nw", tags="bg")
         else:
             c.create_rectangle(0, 0, WIN_W, WIN_H, fill=C_BG, outline="")
         # A tiny dark veil keeps the bright bubble highlights from fighting
         # with edge text while leaving the supplied artwork clearly visible.
         c.create_rectangle(0, 0, WIN_W, WIN_H, fill="", outline=C_PANEL_BDR)
+        if self._cfg.get("animated_background", True):
+            self._start_bg_animation()
+
+    def _start_bg_animation(self):
+        """Play the looping GIF over the static background. Any failure --
+        file missing, unreadable, not animated -- leaves the static image in
+        place and says why in the session log."""
+        self._stop_bg_animation()
+        path = self._animated_background_path()
+        if not path:
+            log("Animated background unavailable: %s not found; using the "
+                "static background." % branding.BACKGROUND_ANIMATED, "dim")
+            return
+        if self._bg_item is None:
+            self._bg_item = self._bg_canvas.create_image(
+                0, 0, anchor="nw", tags="bg")
+            self._bg_canvas.tag_lower("bg")
+        self._bg_anim = AnimatedBackground(
+            self, self._bg_canvas, self._bg_item, path, WIN_W, WIN_H,
+            darken=0.93, on_fail=self._bg_animation_failed)
+        self._bg_anim.start()
+
+    def _stop_bg_animation(self, restore_static: bool = True,
+                           wait: float = 0.0):
+        anim = getattr(self, "_bg_anim", None)
+        self._bg_anim = None
+        if anim is not None:
+            anim.stop(wait=wait)
+        if restore_static and getattr(self, "_bg_item", None) is not None:
+            try:
+                self._bg_canvas.itemconfigure(
+                    self._bg_item, image=self._bg_photo or "")
+            except tk.TclError:
+                pass
+
+    def _bg_animation_failed(self, why: str):
+        log("Animated background could not be played (%s); using the static "
+            "background." % why, "dim")
+        self._stop_bg_animation()
+
+    def _toggle_animated_background(self):
+        val = bool(self._animated_bg_var.get())
+        self._cfg = update_config(
+            lambda c: c.__setitem__("animated_background", val))
+        if val:
+            self._start_bg_animation()
+        else:
+            self._stop_bg_animation()
 
     def _apply_window_icon(self):
         """Put EqUpdater's icon on the title bar/taskbar cross-platform.
@@ -3790,6 +3850,8 @@ class EqUpdaterApp(tk.Tk):
             value=bool(self._cfg.get("auto_install_addons", False)))
         self._ignore_speech_var = tk.BooleanVar(
             value=bool(self._cfg.get("ignore_speech", False)))
+        self._animated_bg_var = tk.BooleanVar(
+            value=bool(self._cfg.get("animated_background", True)))
         # Deferred "install missing" pending from turning an auto-install
         # option on in Settings — applied on close (see _close_settings).
         self._auto_mods_retrigger = False
@@ -7607,6 +7669,18 @@ class EqUpdaterApp(tk.Tk):
             cb_ignore_speech,
             "Ignores verification and updates for speech.mpq, allowing custom "
             "speech sounds")
+        cb_animated_bg = tk.Checkbutton(
+            rcol, text=" Animated background",
+            variable=self._animated_bg_var,
+            command=self._toggle_animated_background,
+            font=self._font(10), fg=C_TEXT, bg=P_BG,
+            activebackground=P_BG, activeforeground=C_TEXT,
+            selectcolor=P_INP, highlightthickness=0, bd=0, cursor="hand2")
+        cb_animated_bg.pack(anchor="w", pady=(self._px(10), 0))
+        self._add_tooltip(
+            cb_animated_bg,
+            "Moving bubbles behind the window. Off shows a still image and "
+            "uses less CPU.")
 
         # Settings is created after the main-window font pass, so apply the
         # current family to the newly-created overlay immediately.
