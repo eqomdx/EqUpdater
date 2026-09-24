@@ -1,4 +1,4 @@
-"""Build EqUpdater.exe.
+"""Build EqUpdater.
 
 This is the whole build. It is short because there is nothing to patch: the
 source in this repository *is* the product.
@@ -13,9 +13,24 @@ one, and a rewrite should be readable as itself.
 
 Upstream is credited in NOTICE and its licence terms are met in LICENSE.
 
+**A folder build, not a single file, and that is deliberate.** A one-file
+PyInstaller executable is a self-extracting archive: every launch unpacks
+~30 MB into %TEMP% and runs from there. That is a hidden requirement for
+free space on the system drive, which this updater does not otherwise need --
+it lives on whichever drive the game does, and the people most likely to run
+it are the people whose C: is full of games. When that space runs out the
+failure is opaque:
+
+    Failed to extract EqUpdater.ico: decompression resulted in return
+    code -1!
+
+which names a file that is not the problem, and in a --windowed build there
+is no console to say anything better. A folder build never unpacks anything,
+starts faster, and cannot fail that way.
+
 Usage:
-    python build.py            # build into dist/, then copy to the repo root
-    python build.py --onedir   # a folder build, for debugging a frozen run
+    python build.py             # dist/EqUpdater/EqUpdater.exe  (recommended)
+    python build.py --onefile   # one portable file; needs %TEMP% space to run
 """
 
 from __future__ import annotations
@@ -38,6 +53,9 @@ ICON = os.path.join(HERE, f"{NAME}.ico")
 # ImportError there before a window ever appears. See EqUpdater.py.
 ENTRY = os.path.join(HERE, f"{NAME}.py")
 
+DIST = os.path.join(HERE, "dist")
+WORK = os.path.join(HERE, "build")
+
 
 def run(cmd: list) -> None:
     print("  $ " + " ".join(cmd))
@@ -47,7 +65,7 @@ def run(cmd: list) -> None:
 
 
 def main() -> None:
-    onedir = "--onedir" in sys.argv
+    onefile = "--onefile" in sys.argv
 
     try:
         import PyInstaller  # noqa: F401
@@ -57,48 +75,61 @@ def main() -> None:
             "    python -m pip install --user pyinstaller certifi")
 
     cmd = [sys.executable, "-m", "PyInstaller",
-           "--onedir" if onedir else "--onefile",
+           "--onefile" if onefile else "--onedir",
            "--windowed",
            "--name", NAME,
            "--noconfirm",
-           "--distpath", os.path.join(HERE, "dist"),
-           "--workpath", os.path.join(HERE, "build"),
+           "--distpath", DIST,
+           "--workpath", WORK,
            "--specpath", HERE,
            # The package is imported by name from the entry script, and
-           # PyInstaller's analysis of a `python -m` style entry does not
-           # always follow that; naming it is cheap insurance.
+           # PyInstaller's analysis does not always follow that; naming it is
+           # cheap insurance.
            "--hidden-import", "equpdater.app"]
 
     if os.path.exists(ICON):
-        # --icon brands the .exe file. --add-data puts the same file inside
-        # the bundle, because that is what the running *window* reads: see
-        # branding.icon_candidates. Doing only the first leaves an app with
+        # --icon brands the .exe *file*. --add-data puts the same file inside
+        # the build, because that is what the running *window* reads (see
+        # branding.icon_candidates). Doing only the first leaves an app with
         # the right icon in Explorer and Tk's feather on the taskbar.
         cmd += ["--icon", ICON, "--add-data", ICON + os.pathsep + "."]
 
     cmd.append(ENTRY)
-    print(f"Building {NAME} {branding.APP_VERSION}...")
+    kind = "one file" if onefile else "folder"
+    print(f"Building {NAME} {branding.APP_VERSION}  ({kind})...")
     run(cmd)
 
-    built = os.path.join(HERE, "dist",
-                         NAME if onedir else (NAME + (".exe" if os.name == "nt"
-                                                      else "")))
+    exe_name = NAME + (".exe" if os.name == "nt" else "")
+    if onefile:
+        built = os.path.join(DIST, exe_name)
+    else:
+        built = os.path.join(DIST, NAME, exe_name)
+
     if not os.path.exists(built):
         raise SystemExit(f"PyInstaller reported success but {built} is missing")
 
-    if not onedir:
-        final = os.path.join(HERE, os.path.basename(built))
+    print(f"\n  {built}")
+
+    if onefile:
+        # A single file is portable, so it is also worth having at the repo
+        # root. A folder build is not copied anywhere: its executable only
+        # works beside its own _internal directory, and half of a folder
+        # build sitting at the root would be a trap.
+        final = os.path.join(HERE, exe_name)
         try:
             shutil.copy2(built, final)
-            print(f"\n  {final}")
+            print(f"  {final}")
         except PermissionError:
-            # Windows holds the file while it is running. Say so plainly
-            # rather than failing with a raw OS error.
-            print(f"\n  Built: {built}")
             print(f"  Could not copy over {final} - it is in use.")
             print("  Close EqUpdater and copy it yourself, or re-run this.")
-            return
-    print(f"\n  {built}")
+        print("\n  Note: a one-file build unpacks to %TEMP% on every launch "
+              "and\n  will not start if the system drive is full. The folder "
+              "build\n  (python build.py) has no such requirement.")
+    else:
+        print("\n  Run the executable from inside that folder - it needs the "
+              "\n  _internal directory beside it. Move the whole folder, "
+              "never\n  the .exe on its own.")
+
     print("\nDone.")
 
 

@@ -5,8 +5,15 @@
 **`INSTALL.cmd`**.
 
 It installs Python for you if you do not have it, runs the test suite, builds
-`EqUpdater.exe` in the project folder, and offers a desktop shortcut. No
+`dist\EqUpdater\EqUpdater.exe`, and offers a desktop shortcut. No
 administrator rights; safe to run again.
+
+**It builds a folder, not a loose .exe.** `EqUpdater.exe` needs the
+`_internal` directory beside it, so move the whole folder or use the
+shortcut. That is on purpose: a one-file build unpacks ~30 MB into `%TEMP%`
+on every launch and will not start at all when the system drive is full —
+which is a real state for anyone who keeps games on C:. `python build.py
+--onefile` still makes the portable single file if you want it.
 
 **Windows — from PowerShell**
 

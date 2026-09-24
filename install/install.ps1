@@ -178,9 +178,16 @@ Write-Head "4/4  Build"
 if ($LASTEXITCODE -ne 0) {
     throw "The build failed. See the messages above."
 }
-$exe = Join-Path $projectDir "EqUpdater.exe"
+
+# A folder build: the executable needs the _internal directory beside it, so
+# the shortcut points into dist\EqUpdater rather than at a loose .exe. This
+# is not a single file on purpose - see the note at the top of build.py. A
+# one-file build unpacks itself into %TEMP% on every launch and simply will
+# not start when the system drive is full, which is a real state for anybody
+# who keeps games on it.
+$exe = Join-Path $projectDir "dist\EqUpdater\EqUpdater.exe"
 if (-not (Test-Path $exe)) {
-    $exe = Join-Path $projectDir "dist\EqUpdater.exe"
+    throw "The build finished but $exe is missing."
 }
 Write-Ok $exe
 
@@ -209,7 +216,8 @@ if (-not $NoShortcut) {
 }
 
 Write-Head "Done"
-Write-Host "  Run EqUpdater.exe." -ForegroundColor Green
+Write-Host "  Run $exe" -ForegroundColor Green
+Write-Host "  (keep that folder together - the .exe needs what is beside it)" -ForegroundColor DarkGray
 Write-Host ""
 Write-Host "  The first time it starts it will look for an Octo Updater" -ForegroundColor DarkGray
 Write-Host "  configuration and import your settings. The old one is copied" -ForegroundColor DarkGray

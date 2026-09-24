@@ -36,8 +36,21 @@ Click the green **Code** button above → **Download ZIP**, extract it, and
 double-click **`install/INSTALL.cmd`**.
 
 It installs Python if you need it, runs the test suite, builds
-`EqUpdater.exe`, and offers a desktop shortcut. No administrator rights, and
-it is safe to run more than once. It does **not** touch your game folder.
+`dist\EqUpdater\EqUpdater.exe`, and offers a desktop shortcut. No
+administrator rights, and it is safe to run more than once. It does **not**
+touch your game folder.
+
+> **It is a folder, not a single file.** Keep `EqUpdater.exe` next to the
+> `_internal` directory beside it; move the whole folder or use the shortcut.
+>
+> This is deliberate. A one-file build is a self-extracting archive that
+> unpacks ~30 MB into `%TEMP%` every time it starts — a hidden requirement
+> for space on your system drive that an updater living on your games drive
+> should not have. When that space runs out the failure is
+> `Failed to extract EqUpdater.ico: decompression resulted in return code -1`,
+> which names a file that is not the problem. A folder build unpacks nothing
+> and starts faster. `python build.py --onefile` still produces the portable
+> single file if you would rather have it.
 
 On Linux, or by hand:
 
