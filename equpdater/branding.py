@@ -21,7 +21,7 @@ import sys
 #: The product.
 APP_NAME = "EqUpdater"
 APP_TITLE = "EqUpdater"
-APP_VERSION = "2.0.0"
+APP_VERSION = "2.0.1"
 
 #: Upstream, for the About box and the attribution the licence requires.
 #: EqUpdater is a substantially reworked derivative of Octo Updater; see
@@ -33,6 +33,7 @@ PROJECT_REPO = "eqomdx/EqUpdater"
 PROJECT_URL = f"https://github.com/{PROJECT_REPO}"
 
 USER_AGENT = f"{APP_NAME}/{APP_VERSION}"
+WINDOWS_APP_ID = "eqomdx.EqUpdater.2"
 
 #: The products whose settings this one inherits, newest first. Each is a
 #: directory name under the platform's application-data root.
@@ -77,13 +78,14 @@ def app_dir() -> str:
 
 
 def icon_candidates() -> list:
-    """Where the window icon might be, best first.
+    """Where the runtime window icon assets might be, best first.
 
-    PyInstaller's --icon brands the .exe file only; the running window keeps
-    Tk's default until `iconbitmap` is pointed at something. Bundled copy
-    first, then the source tree, then the frozen executable itself -- whose
-    icon resource Tk can read on Windows."""
-    names = [f"{APP_NAME}.ico"]
+    ``icon.png`` is the canonical cross-platform source used by Tk's
+    ``iconphoto``. ``icon.ico`` is retained for Windows ``iconbitmap`` and
+    PyInstaller's executable resource. Bundled copies are preferred over the
+    source tree; a frozen executable itself is the final Windows fallback.
+    """
+    names = ["icon.png", "icon.ico"]
     out = []
     base = getattr(sys, "_MEIPASS", None)
     for name in names:
@@ -92,4 +94,14 @@ def icon_candidates() -> list:
         out.append(os.path.join(app_dir(), name))
     if getattr(sys, "frozen", False):
         out.append(sys.executable)
+    return out
+
+
+def background_candidates() -> list:
+    """Where the bundled/source blue bubble background may live."""
+    out = []
+    base = getattr(sys, "_MEIPASS", None)
+    if base:
+        out.append(os.path.join(base, "bubbles.jpg"))
+    out.append(os.path.join(app_dir(), "bubbles.jpg"))
     return out

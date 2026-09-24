@@ -21,8 +21,7 @@ built so that cannot happen by accident.
 > **rebasedkon**, and most of what it *does* — the client sync, the MPQ
 > engine, the addon installer, the window you are looking at — is their work.
 > Please support them:
-> **[Ko-fi](https://ko-fi.com/rebased)** ·
-> **[Buy Me a Coffee](https://buymeacoffee.com/rebased)**
+> **[Buy Me a Coffee](https://ko-fi.com/equadis)**
 >
 > Full attribution in [NOTICE](NOTICE); licence terms in [LICENSE](LICENSE).
 
@@ -47,7 +46,7 @@ touch your game folder.
 > unpacks ~30 MB into `%TEMP%` every time it starts — a hidden requirement
 > for space on your system drive that an updater living on your games drive
 > should not have. When that space runs out the failure is
-> `Failed to extract EqUpdater.ico: decompression resulted in return code -1`,
+> `Failed to extract icon.ico: decompression resulted in return code -1`,
 > which names a file that is not the problem. A folder build unpacks nothing
 > and starts faster. `python build.py --onefile` still produces the portable
 > single file if you would rather have it.
@@ -55,11 +54,36 @@ touch your game folder.
 On Linux, or by hand:
 
 ```sh
-python3 -m pip install --user pyinstaller certifi
+python3 -m pip install --user pyinstaller certifi pillow
 python3 build.py          # or just: python3 -m equpdater
 ```
 
 More in [`install/README.md`](install/README.md).
+
+### Visuals and accessibility
+
+The application icon is kept as `icon.png` (canonical transparent source) and
+`icon.ico` (Windows/PyInstaller multi-size icon).
+
+
+EqUpdater uses the bundled `bubbles.jpg` artwork as its window background and
+a dark navy UI designed around it. PLAY and UPDATE ALL use deliberately subtle
+vertical gradients rather than flat fills.
+
+The preferred interface typeface is **Friz Quadrata**. Settings can switch
+live between **Friz Quadrata**, **Arial**, and **OpenDyslexic**, and the choice
+is remembered between runs. OpenDyslexic is rendered at a slightly smaller
+point scale so its larger glyph metrics stay inside the fixed launcher layout
+without making normal text hard to read. Font binaries are not redistributed
+by this project: EqUpdater uses installed fonts, `.ttf`/`.otf` files placed in
+`%LOCALAPPDATA%\EqUpdater\fonts`, or supported font archives the user places
+beside EqUpdater.
+
+The News page uses OctoWoW's public `octonews.php` JSON feed first, matching
+the mechanism used by the official launcher, for **Announcements** (forum 2)
+and **Patch Notes and Changelog** (forum 4). Direct phpBB parsing remains a
+fallback. The last successful result is cached, so a temporary forum outage
+does not blank the page or interfere with updating/launching the client.
 
 ### Coming from Octo Updater
 

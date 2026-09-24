@@ -21,7 +21,7 @@ it lives on whichever drive the game does, and the people most likely to run
 it are the people whose C: is full of games. When that space runs out the
 failure is opaque:
 
-    Failed to extract EqUpdater.ico: decompression resulted in return
+    Failed to extract icon.ico: decompression resulted in return
     code -1!
 
 which names a file that is not the problem, and in a --windowed build there
@@ -46,7 +46,10 @@ sys.path.insert(0, HERE)
 from equpdater import branding  # noqa: E402
 
 NAME = branding.APP_NAME
-ICON = os.path.join(HERE, f"{NAME}.ico")
+ICON = os.path.join(HERE, "icon.ico")
+ICON_PNG = os.path.join(HERE, "icon.png")
+BACKGROUND = os.path.join(HERE, "bubbles.jpg")
+FONTS_DIR = os.path.join(HERE, "fonts")
 # The frozen build starts at the top-level launcher, not at the package's
 # __main__: PyInstaller runs its entry script as `__main__` with no parent
 # package, and the relative imports in equpdater/__main__.py raise
@@ -72,7 +75,7 @@ def main() -> None:
     except ImportError:
         raise SystemExit(
             "PyInstaller is not installed.\n"
-            "    python -m pip install --user pyinstaller certifi")
+            "    python -m pip install --user pyinstaller certifi pillow")
 
     cmd = [sys.executable, "-m", "PyInstaller",
            "--onefile" if onefile else "--onedir",
@@ -93,6 +96,12 @@ def main() -> None:
         # branding.icon_candidates). Doing only the first leaves an app with
         # the right icon in Explorer and Tk's feather on the taskbar.
         cmd += ["--icon", ICON, "--add-data", ICON + os.pathsep + "."]
+    if os.path.exists(ICON_PNG):
+        cmd += ["--add-data", ICON_PNG + os.pathsep + "."]
+    if os.path.exists(BACKGROUND):
+        cmd += ["--add-data", BACKGROUND + os.pathsep + "."]
+    if os.path.isdir(FONTS_DIR):
+        cmd += ["--add-data", FONTS_DIR + os.pathsep + "fonts"]
 
     cmd.append(ENTRY)
     kind = "one file" if onefile else "folder"

@@ -27,7 +27,7 @@ shortcut. `-Yes` answers every prompt.
 **Linux / macOS, or if you would rather do it by hand**
 
 ```sh
-python3 -m pip install --user pyinstaller certifi
+python3 -m pip install --user pyinstaller certifi pillow
 python3 -m unittest discover -s tests
 python3 build.py
 ```

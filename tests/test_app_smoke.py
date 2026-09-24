@@ -54,14 +54,14 @@ class TestAppStarts(unittest.TestCase):
 
     def test_product_identity(self):
         self.assertEqual(self.app.title(), "EqUpdater")
-        self.assertEqual(self.app_mod.UA, "EqUpdater/2.0.0")
+        self.assertEqual(self.app_mod.UA, "EqUpdater/2.0.1")
 
     def test_settings_live_under_the_new_name(self):
         self.assertIn("EqUpdater", self.app_mod.CONFIG_FILE)
 
     def test_the_window_carries_the_product_icon(self):
         icon = getattr(self.app, "_window_icon", "")
-        self.assertTrue(icon.lower().endswith("equpdater.ico"), icon)
+        self.assertTrue(icon.lower().endswith(("icon.png", "icon.ico")), icon)
 
     def test_update_all_starts_faded(self):
         """Nothing is installed in a throwaway folder, so there is nothing to

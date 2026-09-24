@@ -4,7 +4,7 @@
 
 .DESCRIPTION
     Bootstraps a real Python (the Microsoft Store stub does not count),
-    installs PyInstaller and certifi, then builds EqUpdater.exe from this
+    installs PyInstaller, certifi and Pillow, then builds EqUpdater.exe from this
     repository.
 
     That is the whole job. EqUpdater does not touch your game folder during
@@ -149,21 +149,86 @@ if (-not $py) { $py = Install-Python }
 Write-Ok "$($py.Path)  (Python $($py.Version))"
 
 Write-Head "2/4  Dependencies"
-Write-Step "pip install --user --upgrade pyinstaller certifi"
+Write-Step "pip install --user --upgrade pyinstaller certifi pillow"
 & $py.Path -m pip install --user --upgrade --disable-pip-version-check `
-    pyinstaller certifi
+    pyinstaller certifi pillow
 if ($LASTEXITCODE -ne 0) {
     throw "Installing PyInstaller failed. See the messages above."
 }
-Write-Ok "PyInstaller and certifi ready"
+Write-Ok "PyInstaller, certifi and Pillow ready"
+
+# Import the user-supplied UI font archives into EqUpdater's private per-user
+# font directory. No administrator rights and no system-wide font install.
+# The app also repeats this discovery at runtime, but doing it here means the
+# first packaged launch already has the fonts available.
+Write-Step "Importing EqUpdater UI fonts (Friz Quadrata / Arial / OpenDyslexic)"
+$fontDest = Join-Path $env:LOCALAPPDATA "EqUpdater\fonts"
+New-Item -ItemType Directory -Force -Path $fontDest | Out-Null
+$fontPatterns = @(
+    "friz-quadrata*.zip", "friz*.zip",
+    "arial*.zip",
+    "opendyslexic*.zip"
+)
+$fontSearchRoots = @(
+    $projectDir,
+    (Join-Path $env:USERPROFILE "Downloads"),
+    (Join-Path $env:USERPROFILE "Desktop"),
+    (Join-Path $env:USERPROFILE "Documents")
+)
+$fontArchives = @()
+foreach ($root in $fontSearchRoots) {
+    if (-not (Test-Path $root)) { continue }
+    foreach ($pattern in $fontPatterns) {
+        $fontArchives += Get-ChildItem -Path $root -Filter $pattern -File `
+            -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
+    }
+}
+$fontArchives = $fontArchives | Sort-Object -Unique
+$fontImported = 0
+foreach ($archive in $fontArchives) {
+    $tmp = Join-Path $env:TEMP ("EqUpdaterFonts-" + [guid]::NewGuid().ToString("N"))
+    try {
+        New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+        Expand-Archive -Path $archive -DestinationPath $tmp -Force
+        Get-ChildItem -Path $tmp -Recurse -File -ErrorAction SilentlyContinue |
+            Where-Object { $_.Extension -match '^\.(ttf|otf)$' } |
+            ForEach-Object {
+                Copy-Item $_.FullName (Join-Path $fontDest $_.Name) -Force
+                $script:fontImported++
+            }
+    } catch {
+        Write-Host "  Font archive skipped: $archive ($_)" -ForegroundColor Yellow
+    } finally {
+        Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
+    }
+}
+if ($fontImported -gt 0) {
+    Write-Ok "imported $fontImported font files into $fontDest"
+} else {
+    Write-Host "  No font archives found. EqUpdater will also check Downloads/Desktop at launch." -ForegroundColor Yellow
+}
 
 Write-Head "3/4  Tests"
 # The safety rules are the product. Building without checking them would be
 # shipping an updater that might overwrite somebody's files on the strength
 # of an edit nobody ran.
-& $py.Path -m unittest discover -s (Join-Path $projectDir "tests") `
-    -t $projectDir 2>&1 | Select-Object -Last 5
-if ($LASTEXITCODE -ne 0) {
+# unittest writes its progress/result stream to stderr by design.  Windows
+# PowerShell turns native stderr into ErrorRecord objects; with the installer's
+# global ErrorActionPreference=Stop that can abort the script even when Python
+# exits successfully.  Temporarily allow native stderr, capture it, then make
+# the build decision from the process exit code (the authoritative result).
+$oldErrorActionPreference = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+try {
+    $testOutput = @(& $py.Path -m unittest discover `
+        -s (Join-Path $projectDir "tests") -t $projectDir 2>&1)
+    $testExitCode = $LASTEXITCODE
+}
+finally {
+    $ErrorActionPreference = $oldErrorActionPreference
+}
+$testOutput | ForEach-Object { "$_" } | Select-Object -Last 8 | Write-Host
+if ($testExitCode -ne 0) {
     throw "The test suite failed. Not building."
 }
 Write-Ok "tests passed"

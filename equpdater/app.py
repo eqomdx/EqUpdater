@@ -54,6 +54,10 @@ from .planner import (Component, plan, plan_all, skipped_notably, summarise,
                       updatable)
 from .states import Action, Plan, Status
 from .versions import Ordering, compare as compare_versions, is_newer
+from .news import (ANNOUNCEMENTS_FORUM_ID, CHANGELOG_FORUM_ID,
+                   fetch_forum_topics)
+from .ui import (FontManager, GradientButton, GradientPalette,
+                 cover_background, photo_image)
 
 # ──────────────────────────────────────────────────────────────────────────────
 #  Constants
@@ -77,10 +81,9 @@ APP_DIR = branding.app_dir()
 # varies with how the app was launched).
 DEFAULT_GAME_DIR = os.path.join(APP_DIR, "OctoWoW")
 
-# News tab: the latest announcement (forum 2, full post) fills the left panel,
-# the patch-notes list (forum 4) fills the right.
-NEWS_FEATURED_URL = f"{SERVER}/forum/octonews.php?forum=2&mode=full"
-PATCHNOTES_URL    = f"{SERVER}/forum/octonews.php?mode=list&forum=4&limit=8"
+# News uses the canonical public OctoWoW forum sections rather than the
+# inherited bespoke octonews.php endpoint.  Forum 2 is Announcements and
+# forum 4 is Patch Notes and Changelog.
 NEWS_TIMEOUT      = 8
 NEWS_CACHE_TTL    = 300
 
@@ -91,41 +94,52 @@ NEWS_CACHE_TTL    = 300
 WIN_W, WIN_H = 1000, 700
 FOOT_H       = 130
 
-C_BG         = "#120e1a"
-C_PANEL      = "#161120"
-C_PANEL_BDR  = "#261d3a"
-C_HDR        = "#0d0a14"
-C_DIVIDER    = "#2a2142"
-C_GOLD       = "#c8922a"
-C_GOLD_LT    = "#e8b84b"
-C_PURPLE     = "#8a4fa5"
-C_GREEN_BTN  = "#4a7c2f"
-C_GREEN_HOV  = "#5a9438"
-C_TEXT       = "#d8d4cc"
-C_TEXT_DIM   = "#7a7670"
-C_LOG_BG     = "#0f0b16"
-C_OK         = "#6abf69"
-C_ERR        = "#bf6969"
-C_MOD_HL     = "#a8b83c"   # olive-green highlight for installed mods
+# Dark underwater palette tuned against bubbles.jpg.  The artwork is the
+# visual identity; panels stay deliberately restrained so text remains legible.
+C_BG         = "#06132d"
+C_PANEL      = "#081a35"
+C_PANEL_ALT  = "#0b2142"
+C_PANEL_BDR  = "#18385f"
+C_HDR        = "#06142c"
+C_DIVIDER    = "#19385f"
+C_GOLD       = "#c99a3d"
+C_GOLD_LT    = "#e4bd67"
+C_PURPLE     = "#d7b56c"
+C_GREEN_BTN  = "#3f713d"
+C_GREEN_HOV  = "#4e844b"
+C_TEXT       = "#eee9dc"
+C_TEXT_DIM   = "#91a3bd"
+C_LOG_BG     = "#041027"
+C_OK         = "#79bf73"
+C_ERR        = "#d17a7a"
+C_MOD_HL     = "#a8b83c"
 
-# UPDATE ALL: lit when there is something to update, faded when there is not
-UPDALL_BG_ON    = C_GOLD
-UPDALL_BG_HOV   = C_GOLD_LT
 UPDALL_FG_ON    = "#ffffff"
-UPDALL_GLOW_ON  = "#4a3812"
-UPDALL_BG_OFF   = "#3a2c12"
-UPDALL_FG_OFF   = "#7a6640"
-UPDALL_GLOW_OFF = "#241c10"
+UPDALL_FG_OFF   = "#728198"
+UPDALL_GLOW_ON  = "#6d5524"
+UPDALL_GLOW_OFF = "#13223a"
 
-# Parchment palette for the featured news post
-C_PARCH       = "#e9dcb8"
-C_PARCH_BAND  = "#ddcda0"
-C_PARCH_LINE  = "#c3b083"
-C_PARCH_TITLE = "#7c5a12"
-C_PARCH_TEXT  = "#3a352a"
-C_PARCH_DIM   = "#8b8064"
-C_PARCH_LINK  = "#a3561c"
-C_PARCH_EDGE  = "#b7a678"
+PLAY_GRADIENT = GradientPalette(
+    top="#4d8049", bottom="#396637",
+    hover_top="#5b9155", hover_bottom="#427640",
+    disabled_top="#24344a", disabled_bottom="#1a293e",
+    border="#6f9d69", hover_border="#8aba84")
+UPDATE_GRADIENT = GradientPalette(
+    top="#d2a84e", bottom="#b8872f",
+    hover_top="#e0ba62", hover_bottom="#c7963b",
+    disabled_top="#28354a", disabled_bottom="#1c293d",
+    border="#e0bd6d", hover_border="#f0d18a")
+UPDATE_ALL_GRADIENT = GradientPalette(
+    top="#cda348", bottom="#ad7f2d",
+    hover_top="#dfb95f", hover_bottom="#c29036",
+    disabled_top="#26344a", disabled_bottom="#19273a",
+    border="#d6b160", hover_border="#eed185",
+    disabled_fg=UPDALL_FG_OFF)
+BUSY_GRADIENT = GradientPalette(
+    top="#293a53", bottom="#1b2a40",
+    hover_top="#293a53", hover_bottom="#1b2a40",
+    disabled_top="#293a53", disabled_bottom="#1b2a40",
+    border="#304966", disabled_fg=C_TEXT_DIM)
 
 FONT_BODY   = ("Segoe UI", 9)
 FONT_MONO   = ("Consolas", 9)
@@ -3025,24 +3039,29 @@ def _format_news_date(iso: str) -> str:
         return iso
 
 
+def _news_open(req, timeout):
+    return secure_urlopen(req, timeout=timeout,
+                          allowed_hosts={"octowow.st"})
+
+
 def fetch_patch_notes() -> list:
-    """Patch-notes list → [{id, title, date, body, url?, author?}, …]"""
-    req = urllib.request.Request(PATCHNOTES_URL, headers={"User-Agent": UA})
-    with secure_urlopen(req, timeout=NEWS_TIMEOUT) as r:
-        data = json.load(r)
-    items = data.get("items", [])
-    # The feed lists topics in forum order — show newest first (ISO dates
-    # with a fixed offset sort correctly as strings).
-    items.sort(key=lambda it: it.get("date", ""), reverse=True)
+    """Newest topics from the canonical Patch Notes and Changelog forum."""
+    items = fetch_forum_topics(
+        CHANGELOG_FORUM_ID, opener=_news_open, user_agent=UA,
+        timeout=NEWS_TIMEOUT, limit=8)
+    if not items:
+        raise RuntimeError("no changelog topics returned")
     return items
 
 
 def fetch_featured_post() -> dict | None:
-    """Latest announcements-forum post → {id, title, author?, date, url, html}"""
-    req = urllib.request.Request(NEWS_FEATURED_URL, headers={"User-Agent": UA})
-    with secure_urlopen(req, timeout=NEWS_TIMEOUT) as r:
-        data = json.load(r)
-    return data if isinstance(data, dict) and data.get("id") else None
+    """Newest topic-start from the canonical Announcements forum."""
+    items = fetch_forum_topics(
+        ANNOUNCEMENTS_FORUM_ID, opener=_news_open, user_agent=UA,
+        timeout=NEWS_TIMEOUT, limit=1)
+    if not items:
+        raise RuntimeError("no announcement topics returned")
+    return items[0]
 
 # ──────────────────────────────────────────────────────────────────────────────
 #  GUI
@@ -3107,7 +3126,25 @@ class SlimScrollbar(tk.Canvas):
 
 class EqUpdaterApp(tk.Tk):
     def __init__(self):
+        # Give EqUpdater its own Windows taskbar identity before Tk creates
+        # the native window. This prevents Windows from grouping it under an
+        # older Octo/EqUpdater shortcut and reusing that cached taskbar icon.
+        if os.name == "nt":
+            try:
+                import ctypes
+                ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+                    branding.WINDOWS_APP_ID)
+            except Exception:
+                pass
         super().__init__()
+        # Tk ``after`` callbacks are Tcl commands.  If the root is destroyed
+        # while one is still queued, Tcl later tries to invoke a command that
+        # no longer exists and writes ``invalid command name ...`` to stderr.
+        # Keep an explicit lifecycle flag and cancel pending callbacks in
+        # destroy(); this matters both for clean shutdown and for GUI smoke
+        # tests that construct/destroy several roots in one Python process.
+        self._destroying = False
+        self._poll_job = None
 
         # ── DPI scaling ────────────────────────────────────────────────────
         # With awareness declared (see _enable_dpi_awareness) Windows reports
@@ -3169,6 +3206,18 @@ class EqUpdaterApp(tk.Tk):
         # the user just added it themselves.
         self._av_excluded = False
         self._cfg        = load_config()
+
+        # One font policy for the whole application. Friz Quadrata is the
+        # default presentation, with Arial and OpenDyslexic available live
+        # from Settings. ``dyslexic_font`` is still honoured for migrated
+        # configs and maps to the explicit font selector.
+        accessibility = self._cfg.get("accessibility", {})
+        font_choice = accessibility.get("font_choice")
+        if not font_choice:
+            font_choice = "opendyslexic" if accessibility.get("dyslexic_font") else "friz"
+        self._fonts = FontManager(self, font_choice)
+        self._font_choice_var = tk.StringVar(value=self._fonts.choice)
+        self._gradient_buttons = []
         # Pending reconcile mode (None = none): _offer_reconcile surfaces the
         # Update button and the Update the user clicks runs an integrity pass
         # instead of a routine size-based sync. "full" also writes a fresh
@@ -3217,11 +3266,16 @@ class EqUpdaterApp(tk.Tk):
         self._addon_errors = {}
         self._addon_sections_open = {"INSTALLED": True, "AVAILABLE": True}
 
-        # News feed cache (featured post and announcements cached separately)
-        self._feat_ts    = 0.0
-        self._patch_ts    = 0.0
-        self._patch_items = None
-        self._featured   = None
+        # Persistent News cache: render the last successful content immediately
+        # and refresh in the background. A temporary forum outage should never
+        # turn the front page into an empty error panel.
+        news_cache = self._cfg.get("news_cache", {})
+        feat_cache = news_cache.get("announcements", {})
+        patch_cache = news_cache.get("changelog", {})
+        self._feat_ts = float(feat_cache.get("timestamp", 0.0) or 0.0)
+        self._patch_ts = float(patch_cache.get("timestamp", 0.0) or 0.0)
+        self._featured = feat_cache.get("item")
+        self._patch_items = patch_cache.get("items")
 
         # Scrollable list canvases that respond to the mouse wheel whenever
         # the pointer is anywhere over them (not just over the scrollbar).
@@ -3308,10 +3362,46 @@ class EqUpdaterApp(tk.Tk):
 
     # ── build ─────────────────────────────────────────────────────────────────
 
+    def _cancel_pending_after_callbacks(self):
+        """Cancel every callback queued on this Tcl interpreter.
+
+        ``after`` jobs outlive the Python method that created them.  Destroying
+        the root without cancelling them produces noisy Tcl errors such as
+        ``invalid command name \"..._poll\"`` on some Tk builds.  At final
+        window teardown none of these jobs should survive, so cancelling the
+        interpreter's complete queue is the safest cleanup.
+        """
+        try:
+            jobs = self.tk.call("after", "info")
+            if isinstance(jobs, str):
+                jobs = self.tk.splitlist(jobs)
+            for job in jobs:
+                try:
+                    self.after_cancel(job)
+                except (tk.TclError, RuntimeError):
+                    pass
+        except (tk.TclError, RuntimeError):
+            pass
+        self._poll_job = None
+
+    def destroy(self):
+        """Destroy EqUpdater without leaving scheduled Tcl callbacks."""
+        if getattr(self, "_destroying", False):
+            return
+        self._destroying = True
+        self._cancel_pending_after_callbacks()
+        try:
+            self.unbind_all("<MouseWheel>")
+        except (tk.TclError, RuntimeError):
+            pass
+        try:
+            super().destroy()
+        except tk.TclError:
+            # A second/late destroy during interpreter teardown is harmless.
+            pass
+
     def _on_close(self):
-        """Hide the window first so the close feels instant
-        Config/caches are already saved at write time,
-        and the worker threads are daemons, so nothing blocks the exit."""
+        """Hide immediately, stop external work, then tear Tk down cleanly."""
         try:
             self.withdraw()
         except Exception:
@@ -3319,7 +3409,7 @@ class EqUpdaterApp(tk.Tk):
         # A download's aria2c child isn't a daemon thread — kill it explicitly
         # so it can't keep syncing headless after the window is gone.
         stop_aria2c()
-        self.quit()
+        self.destroy()
 
     def _add_tooltip(self, widget, text: str):
         """Attach a small hover tooltip to a widget."""
@@ -3333,7 +3423,7 @@ class EqUpdaterApp(tk.Tk):
             tw = tk.Toplevel(self)
             tw.wm_overrideredirect(True)
             tw.wm_geometry(f"+{x}+{y}")
-            tk.Label(tw, text=text, font=("Segoe UI", 9),
+            tk.Label(tw, text=text, font=self._font(9),
                      fg=C_TEXT, bg="#0f0b16",
                      highlightthickness=1, highlightbackground=C_PANEL_BDR,
                      padx=self._px(6), pady=self._px(2)).pack()
@@ -3374,7 +3464,7 @@ class EqUpdaterApp(tk.Tk):
             tw = tk.Toplevel(self)
             tw.wm_overrideredirect(True)
             tw.wm_geometry(f"+{x}+{y}")
-            tk.Label(tw, text=text, font=("Segoe UI", 9),
+            tk.Label(tw, text=text, font=self._font(9),
                      fg=C_TEXT, bg="#0f0b16", justify="left",
                      wraplength=self._px(320),
                      highlightthickness=1, highlightbackground=C_PANEL_BDR,
@@ -3419,7 +3509,7 @@ class EqUpdaterApp(tk.Tk):
         tag = f"nav_{tab}"
         cv.delete(tag)
         cx, cy = self._nav_pos[tab], self._px(54)
-        font = ("Segoe UI", 11, "bold")
+        font = self._font(11, bold=True)
         if tab == self._active_tab:
             for r, col in ((self._px(2), "#42340f"), (self._px(1), "#7a5c1d")):
                 for dx, dy in ((-r, 0), (r, 0), (0, -r), (0, r),
@@ -3452,7 +3542,7 @@ class EqUpdaterApp(tk.Tk):
             cv.create_oval(bx - r8, by - r8, bx + r8, by + r8,
                            fill=C_GOLD, outline="", tags=tag)
             cv.create_text(bx, by, text=str(count),
-                           font=("Segoe UI", 8, "bold"),
+                           font=self._font(8, bold=True),
                            fill="#1a1408", tags=tag)
 
     def _switch_tab(self, tab: str):
@@ -3493,6 +3583,30 @@ class EqUpdaterApp(tk.Tk):
         else:
             self._load_news()
 
+    def _font(self, size: int, *, bold=False, italic=False, underline=False):
+        return self._fonts.spec(size, bold=bold, italic=italic, underline=underline)
+
+    def _apply_app_fonts(self):
+        """Apply the selected family immediately to the live widget tree."""
+        self._fonts.apply_tree(self)
+        if hasattr(self, "_hdr_canvas"):
+            self._draw_logo()
+            for tab in getattr(self, "_nav_pos", {}):
+                self._draw_nav_tab(tab)
+            self._draw_update_label()
+            self._draw_gear()
+        for button in getattr(self, "_gradient_buttons", []):
+            try:
+                button.refresh()
+            except tk.TclError:
+                pass
+
+    def _background_path(self):
+        for path in branding.background_candidates():
+            if os.path.exists(path):
+                return path
+        return None
+
     def _build(self):
         self._bg_canvas = tk.Canvas(self, width=WIN_W, height=WIN_H,
                                     bg=C_BG, highlightthickness=0)
@@ -3502,38 +3616,43 @@ class EqUpdaterApp(tk.Tk):
         self._build_header()
         self._build_panel()
         self._build_footer()
+        self._apply_app_fonts()
 
     def _draw_bg(self):
         c = self._bg_canvas
-        bloom_cx, bloom_cy = WIN_W - self._px(80), self._px(80)
-        for i in range(40, 0, -1):
-            r  = self._px(i * 9)
-            alpha_frac = (40 - i) / 40
-            r_val = int(0x12 + alpha_frac * (0x2e - 0x12))
-            g_val = int(0x0e + alpha_frac * (0x18 - 0x0e))
-            b_val = int(0x1a + alpha_frac * (0x50 - 0x1a))
-            col = f"#{r_val:02x}{g_val:02x}{b_val:02x}"
-            c.create_oval(bloom_cx - r, bloom_cy - r,
-                          bloom_cx + r, bloom_cy + r,
-                          fill=col, outline="")
-
-        c.create_line(0, WIN_H - self._px(1), WIN_W, WIN_H - self._px(1),
-                      fill=C_PANEL_BDR)
+        c.delete("all")
+        self._bg_pil = cover_background(
+            self._background_path(), WIN_W, WIN_H, darken=0.93)
+        self._bg_photo = photo_image(self._bg_pil, master=self)
+        if self._bg_photo is not None:
+            c.create_image(0, 0, image=self._bg_photo, anchor="nw")
+        else:
+            c.create_rectangle(0, 0, WIN_W, WIN_H, fill=C_BG, outline="")
+        # A tiny dark veil keeps the bright bubble highlights from fighting
+        # with edge text while leaving the supplied artwork clearly visible.
+        c.create_rectangle(0, 0, WIN_W, WIN_H, fill="", outline=C_PANEL_BDR)
 
     def _apply_window_icon(self):
-        """Put the product icon on the title bar and the taskbar entry.
+        """Put EqUpdater's icon on the title bar/taskbar cross-platform.
 
-        PyInstaller's --icon brands the .exe *file*; the running window keeps
-        Tk's default until iconbitmap is pointed at something. The candidate
-        list -- bundle, source tree, then the frozen executable's own icon
-        resource -- lives in branding so a rebrand does not have to find this
-        function."""
+        Prefer the canonical PNG through Tk's ``iconphoto`` (works on Windows
+        and Linux and preserves alpha). Fall back to the generated ICO / the
+        frozen executable resource for Windows builds. Keep the PhotoImage on
+        ``self`` so Tk does not garbage-collect it after this method returns.
+        """
         for path in branding.icon_candidates():
             try:
-                if os.path.exists(path):
-                    self.iconbitmap(default=path)
+                if not os.path.exists(path):
+                    continue
+                if path.lower().endswith(".png"):
+                    photo = tk.PhotoImage(file=path)
+                    self.iconphoto(True, photo)
+                    self._window_icon_photo = photo
                     self._window_icon = path
                     return
+                self.iconbitmap(default=path)
+                self._window_icon = path
+                return
             except Exception:
                 continue
 
@@ -3545,20 +3664,13 @@ class EqUpdaterApp(tk.Tk):
         hdr.place(x=0, y=0, width=WIN_W, height=HDR_H)
         self._hdr_canvas = hdr
 
-        # Same corner bloom as the main background (identical coordinates
-        # and colors) so the header blends seamlessly with the body instead
-        # of sitting as a darker separated band.
-        bloom_cx, bloom_cy = WIN_W - self._px(80), self._px(80)
-        for i in range(40, 0, -1):
-            r = self._px(i * 9)
-            alpha_frac = (40 - i) / 40
-            r_val = int(0x12 + alpha_frac * (0x2e - 0x12))
-            g_val = int(0x0e + alpha_frac * (0x18 - 0x0e))
-            b_val = int(0x1a + alpha_frac * (0x50 - 0x1a))
-            col = f"#{r_val:02x}{g_val:02x}{b_val:02x}"
-            hdr.create_oval(bloom_cx - r, bloom_cy - r,
-                            bloom_cx + r, bloom_cy + r,
-                            fill=col, outline="")
+        # Use the exact same cover-cropped artwork as the main surface so the
+        # header feels like part of the background rather than a separate bar.
+        if getattr(self, "_bg_pil", None) is not None:
+            self._hdr_bg_photo = photo_image(
+                self._bg_pil.crop((0, 0, WIN_W, HDR_H)), master=self)
+            if self._hdr_bg_photo is not None:
+                hdr.create_image(0, 0, image=self._hdr_bg_photo, anchor="nw")
 
         import tkinter.font as tkfont
 
@@ -3567,7 +3679,7 @@ class EqUpdaterApp(tk.Tk):
 
         # Point-sized font: Tk scales it by tk-scaling, so measure() below
         # already returns device pixels at the current DPI.
-        nav_font = tkfont.Font(family="Segoe UI", size=11, weight="bold")
+        nav_font = tkfont.Font(family=self._fonts.active_family, size=11, weight="bold")
         tabs = ["NEWS", "TWEAKS", "ADDONS", "MODS", "MPQ"]
         self._active_tab  = "NEWS"
         self._nav_pos     = {}
@@ -3627,8 +3739,8 @@ class EqUpdaterApp(tk.Tk):
         cv = self._hdr_canvas
         cv.delete("logo")
         cv.create_text(self._px(24), self._logo_y, text=branding.APP_TITLE,
-                       font=("Segoe UI", 24, "bold"),
-                       fill="#b478d9" if hover else "#9a5cbf",
+                       font=self._font(24, bold=True),
+                       fill=C_GOLD_LT if hover else C_TEXT,
                        anchor="w", tags="logo")
 
     def _draw_update_label(self, hover: bool = False):
@@ -3639,7 +3751,7 @@ class EqUpdaterApp(tk.Tk):
             return
         cv.create_text(self._logo_cx, self._logo_y + self._px(26),
                        text="Update available!",
-                       font=("Segoe UI", 10, "bold"),
+                       font=self._font(10, bold=True),
                        fill=C_GOLD_LT if hover else C_GOLD,
                        anchor="n", tags="upd_label")
         lb = cv.bbox("upd_label")
@@ -3651,7 +3763,7 @@ class EqUpdaterApp(tk.Tk):
         cv = self._hdr_canvas
         cv.delete("gear_icon")
         cv.create_text(WIN_W - self._px(10), self._px(8), text="⚙",
-                       font=("Segoe UI", 13),
+                       font=self._font(13),
                        fill=C_GOLD if hover else C_TEXT_DIM,
                        anchor="ne", tags="gear_icon")
 
@@ -3712,27 +3824,28 @@ class EqUpdaterApp(tk.Tk):
                     width=WIN_W - PAD * 2,
                     height=PANEL_H - self._px(20))
         self._news_panel = panel
-        self._active_panel = panel   # NEWS is the initial tab
+        self._active_panel = panel
 
         inner_w = WIN_W - PAD * 2
         self._news_left_w  = int(inner_w * 0.60)
         self._news_right_w = inner_w - self._news_left_w - self._px(12)
 
-        # Latest announcement — parchment panel (left)
-        feat = tk.Frame(panel, bg=C_PARCH)
+        feat = tk.Frame(panel, bg=C_PANEL,
+                        highlightthickness=1,
+                        highlightbackground=C_PANEL_BDR)
         feat.place(x=0, y=0, width=self._news_left_w, relheight=1.0)
         self._feat_frame = feat
 
-        # Patch-notes list (right)
-        ann = tk.Frame(panel, bg=C_PANEL,
-                       highlightthickness=1,
-                       highlightbackground=C_PANEL_BDR)
-        ann.place(x=self._news_left_w + self._px(12), y=0,
-                  width=self._news_right_w, relheight=1.0)
-        self._patch_frame = ann
+        changelog = tk.Frame(panel, bg=C_PANEL,
+                             highlightthickness=1,
+                             highlightbackground=C_PANEL_BDR)
+        changelog.place(x=self._news_left_w + self._px(12), y=0,
+                        width=self._news_right_w, relheight=1.0)
+        self._patch_frame = changelog
 
-        self._render_featured(None, loading=True)
-        self._render_patch_notes(None, loading=True)
+        self._render_featured(self._featured, loading=self._featured is None)
+        self._render_patch_notes(self._patch_items,
+                                 loading=self._patch_items is None)
 
         self._log_line(f"{branding.APP_TITLE}  v{UPDATER_VERSION}\n", "acct")
         self._log_line("─" * 60 + "\n", "dim")
@@ -3743,6 +3856,15 @@ class EqUpdaterApp(tk.Tk):
 
     # ── news panel ───────────────────────────────────────────────────────────
 
+    def _save_news_cache(self, section: str, payload_key: str, payload):
+        stamp = time.time()
+        def mutate(c):
+            entry = c.setdefault("news_cache", {}).setdefault(section, {})
+            entry["timestamp"] = stamp
+            entry[payload_key] = payload
+        self._cfg = update_config(mutate)
+        return stamp
+
     def _load_news(self, force=False):
         self._load_featured(force)
         self._load_patch_notes(force)
@@ -3752,19 +3874,23 @@ class EqUpdaterApp(tk.Tk):
         if (not force and self._featured is not None
                 and (now - self._feat_ts) < NEWS_CACHE_TTL):
             return
-        self._render_featured(None, loading=True)
+        self._render_featured(self._featured, loading=True)
 
         def worker():
             feat, err = None, ""
             try:
                 feat = fetch_featured_post()
-            except Exception:
-                err = "Couldn't reach the news feed."
+            except Exception as exc:
+                err = f"Announcements unavailable ({exc})"
 
             def apply():
-                self._feat_ts  = time.time()
-                self._featured = feat
-                self._render_featured(feat, error=err)
+                if feat is not None:
+                    self._featured = feat
+                    self._feat_ts = self._save_news_cache(
+                        "announcements", "item", feat)
+                    self._render_featured(feat)
+                else:
+                    self._render_featured(self._featured, error=err)
             self.after(0, apply)
         threading.Thread(target=worker, daemon=True).start()
 
@@ -3773,137 +3899,143 @@ class EqUpdaterApp(tk.Tk):
         if (not force and self._patch_items is not None
                 and (now - self._patch_ts) < NEWS_CACHE_TTL):
             return
-        self._render_patch_notes(None, loading=True)
+        self._render_patch_notes(self._patch_items, loading=True)
 
         def worker():
             items, err = None, ""
             try:
                 items = fetch_patch_notes()
-            except Exception:
-                err = "Couldn't reach the news feed."
+            except Exception as exc:
+                err = f"Changelog unavailable ({exc})"
 
             def apply():
-                self._patch_ts    = time.time()
-                self._patch_items = items
-                self._render_patch_notes(items, error=err)
+                if items is not None:
+                    self._patch_items = items
+                    self._patch_ts = self._save_news_cache(
+                        "changelog", "items", items)
+                    self._render_patch_notes(items)
+                else:
+                    self._render_patch_notes(self._patch_items, error=err)
             self.after(0, apply)
         threading.Thread(target=worker, daemon=True).start()
+
+    def _news_header(self, parent, title, refresh_command, loading=False):
+        hdr = tk.Frame(parent, bg=C_PANEL_ALT)
+        hdr.pack(fill="x")
+        inner = tk.Frame(hdr, bg=C_PANEL_ALT)
+        inner.pack(fill="x", padx=self._px(16),
+                   pady=(self._px(13), self._px(11)))
+        tk.Label(inner, text=title,
+                 font=self._font(12, bold=True),
+                 fg=C_GOLD_LT, bg=C_PANEL_ALT).pack(side="left")
+        if loading:
+            tk.Label(inner, text="Refreshing…", font=self._font(8),
+                     fg=C_TEXT_DIM, bg=C_PANEL_ALT).pack(
+                         side="right", padx=(0, self._px(8)))
+        rf = tk.Label(inner, text="⟳", font=("Segoe UI Symbol", 14),
+                      fg=C_TEXT_DIM, bg=C_PANEL_ALT, cursor="hand2")
+        rf.pack(side="right")
+        rf.bind("<Button-1>", lambda e: refresh_command())
+        rf.bind("<Enter>", lambda e: rf.configure(fg=C_GOLD_LT))
+        rf.bind("<Leave>", lambda e: rf.configure(fg=C_TEXT_DIM))
+        tk.Frame(parent, bg=C_DIVIDER, height=self._px(1)).pack(fill="x")
 
     def _render_featured(self, post, loading=False, error=""):
         f = self._feat_frame
         for w in f.winfo_children():
             w.destroy()
-        f.configure(highlightthickness=1, highlightbackground=C_PARCH_EDGE)
-
-        title = (post or {}).get("title", "")
-
-        # Title band — slightly darker parchment strip
-        band = tk.Frame(f, bg=C_PARCH_BAND)
-        band.pack(fill="x")
-        hdr = tk.Frame(band, bg=C_PARCH_BAND)
-        hdr.pack(fill="x", padx=self._px(20), pady=(self._px(16), self._px(12)))
-        tk.Label(hdr,
-                 text=title.upper() if title else "NEWS",
-                 font=("Segoe UI", 13, "bold"),
-                 fg=C_PARCH_TITLE, bg=C_PARCH_BAND,
-                 wraplength=self._news_left_w - self._px(100),
-                 justify="left", anchor="w").pack(side="left",
-                                                  fill="x", expand=True)
-        rf = tk.Label(hdr, text="⟳", font=("Segoe UI", 14),
-                      fg=C_PARCH_DIM, bg=C_PARCH_BAND, cursor="hand2")
-        rf.pack(side="right")
-        rf.bind("<Button-1>", lambda e: self._load_featured(force=True))
-        rf.bind("<Enter>",    lambda e: rf.configure(fg=C_PARCH_LINK))
-        rf.bind("<Leave>",    lambda e: rf.configure(fg=C_PARCH_DIM))
+        f.configure(bg=C_PANEL, highlightthickness=1,
+                    highlightbackground=C_PANEL_BDR)
+        self._news_header(
+            f, "ANNOUNCEMENTS",
+            lambda: self._load_featured(force=True), loading=loading)
 
         if not post:
-            msg = error or ("Loading…" if loading
-                            else "No news yet — check back later.")
-            tk.Label(f, text=msg, font=("Segoe UI", 10),
-                     fg=C_PARCH_DIM, bg=C_PARCH).pack(padx=self._px(20),
-                                                      pady=self._px(16),
-                                                      anchor="w")
+            msg = error or ("Loading announcements…" if loading
+                            else "No announcements available.")
+            tk.Label(f, text=msg, font=self._font(10),
+                     fg=C_TEXT_DIM, bg=C_PANEL, wraplength=self._news_left_w - self._px(40),
+                     justify="left").pack(padx=self._px(20),
+                                          pady=self._px(18), anchor="w")
             return
+
+        title = post.get("title", "")
+        tk.Label(f, text=title,
+                 font=self._font(15, bold=True),
+                 fg=C_TEXT, bg=C_PANEL,
+                 wraplength=self._news_left_w - self._px(40),
+                 justify="left", anchor="w").pack(
+                     fill="x", padx=self._px(20),
+                     pady=(self._px(16), self._px(3)))
 
         byline = []
         if post.get("author"):
             byline.append(f"by {post['author']}")
-        byline.append(_format_news_date(post.get("date", "")))
-        bl = tk.Frame(f, bg=C_PARCH_BAND)
-        bl.pack(fill="x")
-        tk.Label(bl, text=" · ".join(byline),
-                 font=("Segoe UI", 10, "italic"),
-                 fg=C_PARCH_DIM, bg=C_PARCH_BAND,
-                 anchor="w").pack(fill="x", padx=self._px(20), pady=self._px(10))
-        tk.Frame(f, bg=C_PARCH_LINE, height=self._px(1)).pack(fill="x")
+        date = _format_news_date(post.get("date", ""))
+        if date:
+            byline.append(date)
+        if byline:
+            tk.Label(f, text=" · ".join(byline),
+                     font=self._font(9, italic=True),
+                     fg=C_TEXT_DIM, bg=C_PANEL, anchor="w").pack(
+                         fill="x", padx=self._px(20), pady=(0, self._px(10)))
+        tk.Frame(f, bg=C_DIVIDER, height=self._px(1)).pack(
+            fill="x", padx=self._px(20))
 
-        # Pack the link first with side="bottom" so it's always reserved its
-        # space; the body Text (which defaults to 24 lines tall) then fills
-        # only the remaining area instead of clipping the link off the panel.
         if post.get("url"):
-            link = tk.Label(f, text="⧉  Read full post on the forum",
-                            font=("Segoe UI", 11),
-                            fg=C_PARCH_LINK, bg=C_PARCH,
+            link = tk.Label(f, text="⧉  Read full announcement",
+                            font=self._font(10, bold=True),
+                            fg=C_GOLD, bg=C_PANEL,
                             cursor="hand2", anchor="w")
             link.pack(side="bottom", fill="x", padx=self._px(20),
-                      pady=(self._px(4), self._px(16)))
-            link.bind("<Button-1>",
-                      lambda e, u=post["url"]: self._open_url(u))
-            link.bind("<Enter>", lambda e: link.configure(fg=C_PARCH_TITLE))
-            link.bind("<Leave>", lambda e: link.configure(fg=C_PARCH_LINK))
+                      pady=(self._px(5), self._px(14)))
+            link.bind("<Button-1>", lambda e, u=post["url"]: self._open_url(u))
+            link.bind("<Enter>", lambda e: link.configure(fg=C_GOLD_LT))
+            link.bind("<Leave>", lambda e: link.configure(fg=C_GOLD))
 
-        body = _strip_html(post.get("html", ""))
-        txt = tk.Text(f, bg=C_PARCH, fg=C_PARCH_TEXT, relief="flat",
-                      font=("Segoe UI", 11), wrap="word", height=1,
+        body = post.get("body") or _strip_html(post.get("html", ""))
+        txt = tk.Text(f, bg=C_PANEL, fg=C_TEXT, relief="flat",
+                      font=self._font(10), wrap="word", height=1,
                       padx=self._px(2), pady=self._px(8),
-                      spacing2=self._px(4), spacing3=self._px(4),
+                      spacing2=self._px(3), spacing3=self._px(4),
                       highlightthickness=0, cursor="arrow")
         txt.insert("1.0", body)
         txt.configure(state="disabled")
-        txt.pack(fill="both", expand=True, padx=self._px(20),
-                 pady=(self._px(8), self._px(2)))
+        txt.pack(fill="both", expand=True, padx=self._px(18),
+                 pady=(self._px(6), self._px(2)))
+
+        if error:
+            tk.Label(f, text=error + " · showing cached content",
+                     font=self._font(8), fg=C_TEXT_DIM, bg=C_PANEL).pack(
+                         side="bottom", fill="x", padx=self._px(20),
+                         pady=(0, self._px(4)))
 
     def _render_patch_notes(self, items, loading=False, error=""):
         f = self._patch_frame
         for w in f.winfo_children():
             w.destroy()
+        f.configure(bg=C_PANEL, highlightthickness=1,
+                    highlightbackground=C_PANEL_BDR)
+        self._news_header(
+            f, "CHANGELOG", lambda: self._load_patch_notes(force=True),
+            loading=loading)
 
-        hdr = tk.Frame(f, bg=C_PANEL)
-        hdr.pack(fill="x", padx=self._px(14), pady=(self._px(16), self._px(10)))
-        tk.Label(hdr, text="PATCH NOTES",
-                 font=("Segoe UI", 12, "bold"),
-                 fg=C_GOLD, bg=C_PANEL).pack(side="left")
-        rf = tk.Label(hdr, text="⟳", font=("Segoe UI", 14),
-                      fg=C_TEXT_DIM, bg=C_PANEL, cursor="hand2")
-        rf.pack(side="right")
-        rf.bind("<Button-1>", lambda e: self._load_patch_notes(force=True))
-        rf.bind("<Enter>",    lambda e: rf.configure(fg=C_GOLD))
-        rf.bind("<Leave>",    lambda e: rf.configure(fg=C_TEXT_DIM))
-
-        tk.Frame(f, bg=C_DIVIDER, height=self._px(1)).pack(
-            fill="x", padx=self._px(14))
-
-        if items is None or error:
-            msg = error or ("Loading…" if loading
-                            else "Couldn't reach the news feed.")
-            tk.Label(f, text=msg, font=FONT_BODY,
-                     fg=C_TEXT_DIM, bg=C_PANEL).pack(padx=self._px(14),
-                                                     pady=self._px(12),
-                                                     anchor="w")
-            return
         if not items:
-            tk.Label(f, text="No news yet — check back later.",
-                     font=FONT_BODY, fg=C_TEXT_DIM,
-                     bg=C_PANEL).pack(padx=self._px(14), pady=self._px(12),
-                                      anchor="w")
+            msg = error or ("Loading changelog…" if loading
+                            else "No changelog entries available.")
+            tk.Label(f, text=msg, font=self._font(10),
+                     fg=C_TEXT_DIM, bg=C_PANEL, wraplength=self._news_right_w - self._px(30),
+                     justify="left").pack(padx=self._px(14),
+                                          pady=self._px(16), anchor="w")
             return
 
         list_frame = tk.Frame(f, bg=C_PANEL)
-        list_frame.pack(fill="both", expand=True, padx=(self._px(14), self._px(4)),
+        list_frame.pack(fill="both", expand=True,
+                        padx=(self._px(14), self._px(4)),
                         pady=(0, self._px(10)))
         canvas = tk.Canvas(list_frame, bg=C_PANEL, highlightthickness=0)
         sb = SlimScrollbar(list_frame, command=canvas.yview, bg=C_PANEL,
-                           width=self._px(10))
+                           width=self._px(10), thumb="#31547e")
         self._wheel_canvases.append(canvas)
         inner = tk.Frame(canvas, bg=C_PANEL)
         inner.bind("<Configure>",
@@ -3916,35 +4048,37 @@ class EqUpdaterApp(tk.Tk):
 
         wrap_w = self._news_right_w - self._px(50)
         for item in items:
-            top = tk.Frame(inner, bg=C_PANEL)
-            top.pack(fill="x", pady=(self._px(12), 0))
-            tk.Label(top, text=_format_news_date(item.get("date", "")),
-                     font=("Segoe UI", 9), fg=C_TEXT_DIM,
-                     bg=C_PANEL).pack(side="right", anchor="n")
-            tk.Label(top, text=item.get("title", ""),
-                     font=("Segoe UI", 11, "bold"),
-                     fg=C_GOLD, bg=C_PANEL,
-                     wraplength=wrap_w - self._px(85), justify="left",
-                     anchor="w").pack(side="left", fill="x", expand=True)
+            card = tk.Frame(inner, bg=C_PANEL)
+            card.pack(fill="x", pady=(self._px(11), 0))
+            tk.Label(card, text=item.get("title", ""),
+                     font=self._font(10, bold=True),
+                     fg=C_GOLD_LT, bg=C_PANEL,
+                     wraplength=wrap_w, justify="left",
+                     anchor="w").pack(fill="x")
 
+            meta = []
+            date = _format_news_date(item.get("date", ""))
+            if date:
+                meta.append(date)
             if item.get("author"):
-                tk.Label(inner, text=f"by {item['author']}",
-                         font=("Segoe UI", 10, "italic"),
-                         fg=C_TEXT_DIM, bg=C_PANEL,
-                         anchor="w").pack(fill="x", pady=(self._px(2), 0))
+                meta.append(item["author"])
+            if meta:
+                tk.Label(card, text=" · ".join(meta),
+                         font=self._font(8), fg=C_TEXT_DIM,
+                         bg=C_PANEL, anchor="w").pack(fill="x", pady=(self._px(2), 0))
 
-            body = item.get("body", "").strip()
-            if len(body) > 260:
-                body = body[:260].rstrip() + "…"
+            body = (item.get("body") or "").strip()
+            if len(body) > 220:
+                body = body[:220].rstrip() + "…"
             if body:
-                tk.Label(inner, text=body, font=("Segoe UI", 10),
+                tk.Label(card, text=body, font=self._font(9),
                          fg=C_TEXT, bg=C_PANEL,
                          wraplength=wrap_w, justify="left",
                          anchor="w").pack(fill="x", pady=(self._px(5), 0))
 
             if item.get("url"):
-                lnk = tk.Label(inner, text="⧉ Read more",
-                               font=("Segoe UI", 10),
+                lnk = tk.Label(card, text="Read more",
+                               font=self._font(9, bold=True),
                                fg=C_GOLD, bg=C_PANEL,
                                cursor="hand2", anchor="w")
                 lnk.pack(fill="x", pady=(self._px(5), 0))
@@ -3954,7 +4088,12 @@ class EqUpdaterApp(tk.Tk):
                 lnk.bind("<Leave>", lambda e, w=lnk: w.configure(fg=C_GOLD))
 
             tk.Frame(inner, bg=C_DIVIDER, height=self._px(1)).pack(
-                fill="x", pady=(self._px(12), 0))
+                fill="x", pady=(self._px(11), 0))
+
+        if error:
+            tk.Label(f, text=error + " · showing cached content",
+                     font=self._font(8), fg=C_TEXT_DIM, bg=C_PANEL).pack(
+                         side="bottom", fill="x", padx=self._px(14), pady=(0, self._px(4)))
 
     # ── tweaks panel ─────────────────────────────────────────────────────────────
 
@@ -3971,7 +4110,7 @@ class EqUpdaterApp(tk.Tk):
         bar = tk.Frame(outer, bg=C_PANEL)
         bar.place(relx=1.0, x=-self._px(16), y=self._px(3), anchor="ne")
 
-        apl = tk.Label(bar, text="Apply", font=("Segoe UI", 11),
+        apl = tk.Label(bar, text="Apply", font=self._font(11),
                        fg=C_TEXT, bg=C_PANEL_BDR, cursor="hand2",
                        padx=self._px(16), pady=self._px(4))
         apl.bind("<Button-1>", lambda e: self._apply_tweaks())
@@ -3979,7 +4118,7 @@ class EqUpdaterApp(tk.Tk):
         apl.bind("<Leave>",    lambda e: apl.configure(bg=C_PANEL_BDR, fg=C_TEXT))
         self._tweaks_apply_btn = apl
 
-        rst = tk.Label(bar, text="Reset", font=("Segoe UI", 11),
+        rst = tk.Label(bar, text="Reset", font=self._font(11),
                        fg=C_TEXT, bg=C_PANEL_BDR, cursor="hand2",
                        padx=self._px(16), pady=self._px(4))
         rst.bind("<Button-1>", lambda e: self._reset_tweaks())
@@ -4011,7 +4150,7 @@ class EqUpdaterApp(tk.Tk):
                     pass
             if kind == "section":
                 tk.Label(self._tweaks_inner, text=label,
-                         font=("Segoe UI", 11, "bold"),
+                         font=self._font(11, bold=True),
                          fg=C_GOLD, bg=C_PANEL,
                          anchor="w").pack(fill="x", padx=PAD_X,
                                           pady=(self._px(10), self._px(2)))
@@ -4023,7 +4162,7 @@ class EqUpdaterApp(tk.Tk):
             row.pack(fill="x", padx=PAD_X, pady=self._px(3))
 
             tk.Label(row, text=label,
-                     font=("Segoe UI", 10, "bold"),
+                     font=self._font(10, bold=True),
                      fg=C_TEXT, bg=C_PANEL,
                      width=22, anchor="w").pack(side="left")
 
@@ -4074,7 +4213,7 @@ class EqUpdaterApp(tk.Tk):
                 var = tk.StringVar(value=cur)           # holds the locale code
                 var.trace_add("write", self._refresh_tweaks_buttons)
                 mb = tk.Menubutton(
-                    row, text=LOCALES[cur][1], font=("Segoe UI", 10),
+                    row, text=LOCALES[cur][1], font=self._font(10),
                     fg=C_TEXT, bg="#18181e", activebackground=C_PANEL_BDR,
                     activeforeground=C_TEXT, relief="flat", cursor="hand2",
                     width=15, anchor="w", padx=self._px(8), pady=self._px(2),
@@ -4095,7 +4234,7 @@ class EqUpdaterApp(tk.Tk):
 
             if desc:
                 tk.Label(row, text=desc,
-                         font=("Segoe UI", 10), fg=C_TEXT_DIM, bg=C_PANEL,
+                         font=self._font(10), fg=C_TEXT_DIM, bg=C_PANEL,
                          wraplength=self._px(520), justify="left", anchor="w"
                          ).pack(side="left", fill="x", expand=True)
 
@@ -4386,12 +4525,12 @@ class EqUpdaterApp(tk.Tk):
         note.pack(fill="x", padx=self._px(16), pady=(self._px(14), self._px(8)),
                   anchor="w")
         tk.Label(note, text="Mods marked with ",
-                 font=("Segoe UI", 10), fg=C_TEXT_DIM,
+                 font=self._font(10), fg=C_TEXT_DIM,
                  bg=C_PANEL).pack(side="left")
-        tk.Label(note, text="★", font=("Segoe UI", 10),
+        tk.Label(note, text="★", font=self._font(10),
                  fg=C_GOLD, bg=C_PANEL).pack(side="left")
         tk.Label(note, text=" are essential",
-                 font=("Segoe UI", 10), fg=C_TEXT_DIM,
+                 font=self._font(10), fg=C_TEXT_DIM,
                  bg=C_PANEL).pack(side="left")
 
         tk.Frame(outer, bg=C_DIVIDER, height=self._px(1)).pack(
@@ -4426,7 +4565,7 @@ class EqUpdaterApp(tk.Tk):
         # Packed on demand by _refresh_apply_btn_visibility(): shown only
         # when there are unapplied checkbox changes or a mod is in error.
         self._apply_btn = tk.Label(foot, text="Apply",
-                                   font=("Segoe UI", 11),
+                                   font=self._font(11),
                                    fg=C_TEXT, bg=C_PANEL_BDR,
                                    cursor="hand2", padx=self._px(16),
                                    pady=self._px(4))
@@ -4526,17 +4665,17 @@ class EqUpdaterApp(tk.Tk):
             # Essential mods get a gold star badge; a fixed-width slot keeps
             # the names aligned whether or not the star is present.
             star = tk.Label(name_f, text="★" if essential else "",
-                            font=("Segoe UI", 9), fg=C_GOLD, bg=C_PANEL,
+                            font=self._font(9), fg=C_GOLD, bg=C_PANEL,
                             width=2, anchor="w")
             star.pack(side="left")
             if essential:
                 self._add_tooltip(star, "Essential mod")
             name_label = tk.Label(name_f, text=mod["name"],
-                                  font=("Segoe UI", 10, "bold"),
+                                  font=self._font(10, bold=True),
                                   fg=name_col, bg=C_PANEL, anchor="w")
             name_label.pack(side="left")
             ver_label = tk.Label(name_f, text=f"  {latest_ver}",
-                                 font=("Segoe UI", 9), fg=C_TEXT_DIM, bg=C_PANEL)
+                                 font=self._font(9), fg=C_TEXT_DIM, bg=C_PANEL)
             ver_label.pack(side="left")
 
             enabled_var = tk.BooleanVar(value=enabled)
@@ -4561,10 +4700,10 @@ class EqUpdaterApp(tk.Tk):
                            command=lambda m=mid, v=ignore_var: self._set_ignore(m, v)
                            ).pack(side="left")
             tk.Label(ig_f, text="Ignore updates",
-                     font=("Segoe UI", 9), fg=C_TEXT_DIM, bg=C_PANEL).pack(side="left")
+                     font=self._font(9), fg=C_TEXT_DIM, bg=C_PANEL).pack(side="left")
 
             link = tk.Label(row, text="⧉",
-                            font=("Segoe UI", 12), fg=C_TEXT_DIM,
+                            font=self._font(12), fg=C_TEXT_DIM,
                             bg=C_PANEL, cursor="hand2")
             link.pack(side="right", padx=self._px(4))
             link.bind("<Button-1>", lambda e, u=mod["repo_url"]: self._open_url(u))
@@ -4572,7 +4711,7 @@ class EqUpdaterApp(tk.Tk):
             link.bind("<Leave>",    lambda e, l=link: l.configure(fg=C_TEXT_DIM))
 
             update_label = tk.Label(row, text="update",
-                                    font=("Segoe UI", 10, "bold"),
+                                    font=self._font(10, bold=True),
                                     fg=C_GOLD, bg=C_PANEL, cursor="hand2")
             update_label.bind("<Button-1>",
                               lambda e, m=mid: self._mod_action_click(m))
@@ -4589,7 +4728,7 @@ class EqUpdaterApp(tk.Tk):
             self._style_mod_action_label(update_label, mod, state, live)
 
             desc_label = tk.Label(row, text=mod["description"],
-                                  font=("Segoe UI", 10),
+                                  font=self._font(10),
                                   fg=(C_TEXT if enabled else C_TEXT_DIM),
                                   bg=C_PANEL, wraplength=self._px(400),
                                   justify="left", anchor="w")
@@ -4597,7 +4736,7 @@ class EqUpdaterApp(tk.Tk):
 
             existing_err = state.get("error")
             error_label = tk.Label(container, text="",
-                                   font=("Segoe UI", 9), fg=C_ERR,
+                                   font=self._font(9), fg=C_ERR,
                                    bg=C_PANEL, anchor="w", padx=self._px(16))
             if existing_err:
                 name_label.configure(fg=C_ERR)
@@ -5379,23 +5518,23 @@ class EqUpdaterApp(tk.Tk):
             "write", self._on_addon_filter_changed)
         ent = tk.Entry(top, textvariable=self._addon_filter_var,
                        bg="#2b2244", fg=C_TEXT, insertbackground=C_GOLD,
-                       relief="flat", font=("Segoe UI", 10), width=24,
+                       relief="flat", font=self._font(10), width=24,
                        highlightthickness=1,
                        highlightbackground="#4a3c6e",
                        highlightcolor=C_GOLD)
-        tk.Label(top, text="⌕", font=("Segoe UI", 18),
+        tk.Label(top, text="⌕", font=self._font(18),
                  fg=C_TEXT, bg=C_PANEL).pack(side="right")
         ent.pack(side="right", ipady=self._px(4), padx=(0, self._px(6)))
 
         legend = tk.Frame(top, bg=C_PANEL)
         legend.pack(side="left")
         tk.Label(legend, text="Addons marked with ",
-                 font=("Segoe UI", 10), fg=C_TEXT_DIM,
+                 font=self._font(10), fg=C_TEXT_DIM,
                  bg=C_PANEL).pack(side="left")
-        tk.Label(legend, text="★", font=("Segoe UI", 10),
+        tk.Label(legend, text="★", font=self._font(10),
                  fg=C_GOLD, bg=C_PANEL).pack(side="left")
         tk.Label(legend, text=" are recommended",
-                 font=("Segoe UI", 10), fg=C_TEXT_DIM,
+                 font=self._font(10), fg=C_TEXT_DIM,
                  bg=C_PANEL).pack(side="left")
 
         list_frame = tk.Frame(outer, bg=C_PANEL)
@@ -5423,7 +5562,7 @@ class EqUpdaterApp(tk.Tk):
         foot.columnconfigure(2, weight=1)
 
         chk = tk.Label(foot, text="⟳  Check for updates",
-                       font=("Segoe UI", 10), fg=C_TEXT_DIM, bg=C_PANEL,
+                       font=self._font(10), fg=C_TEXT_DIM, bg=C_PANEL,
                        cursor="hand2")
         chk.grid(row=0, column=0, sticky="w")
         chk.bind("<Button-1>", lambda e: self._addons_verify(force=True))
@@ -5431,7 +5570,7 @@ class EqUpdaterApp(tk.Tk):
         chk.bind("<Leave>", lambda e: chk.configure(fg=C_TEXT_DIM))
 
         add = tk.Label(foot, text="+  Add custom git addon",
-                       font=("Segoe UI", 10, "bold"), fg="#d76f9e",
+                       font=self._font(10, bold=True), fg="#d76f9e",
                        bg=C_PANEL, cursor="hand2")
         add.grid(row=0, column=1)
         add.bind("<Button-1>", lambda e: self._open_custom_addon_dialog())
@@ -5439,7 +5578,7 @@ class EqUpdaterApp(tk.Tk):
         add.bind("<Leave>", lambda e: add.configure(fg="#d76f9e"))
 
         self._addons_right_lbl = tk.Label(foot, text="",
-                                          font=("Segoe UI", 10, "bold"),
+                                          font=self._font(10, bold=True),
                                           bg=C_PANEL, cursor="hand2")
         self._addons_right_lbl.grid(row=0, column=2, sticky="e")
         self._addons_right_lbl.bind("<Button-1>",
@@ -5608,13 +5747,13 @@ class EqUpdaterApp(tk.Tk):
         hdr = tk.Frame(f, bg=C_PANEL)
         hdr.pack(fill="x", pady=(self._px(10), self._px(2)))
         arrow = tk.Label(hdr, text="▾" if is_open else "▸",
-                         font=("Segoe UI", 14, "bold"),
+                         font=self._font(14, bold=True),
                          fg=C_GOLD, bg=C_PANEL, cursor="hand2", width=2)
         arrow.pack(side="left")
-        lbl = tk.Label(hdr, text=title, font=("Segoe UI", 12, "bold"),
+        lbl = tk.Label(hdr, text=title, font=self._font(12, bold=True),
                        fg=C_GOLD, bg=C_PANEL, cursor="hand2")
         lbl.pack(side="left")
-        tk.Label(hdr, text=f"  {len(rows)}", font=("Segoe UI", 10),
+        tk.Label(hdr, text=f"  {len(rows)}", font=self._font(10),
                  fg=C_TEXT_DIM, bg=C_PANEL).pack(side="left")
 
         def toggle(_e=None, t=title):
@@ -5625,7 +5764,7 @@ class EqUpdaterApp(tk.Tk):
         lbl.bind("<Button-1>", toggle)
 
         if is_open and not rows:
-            tk.Label(f, text="Nothing here.", font=("Segoe UI", 10),
+            tk.Label(f, text="Nothing here.", font=self._font(10),
                      fg=C_TEXT_DIM, bg=C_PANEL).pack(anchor="w",
                                                      padx=self._px(8))
 
@@ -5658,19 +5797,19 @@ class EqUpdaterApp(tk.Tk):
         box.pack(fill="x", pady=self._px(4))
         top = tk.Frame(box, bg=C_PANEL)
         top.pack(fill="x")
-        tk.Label(top, text=name, font=("Segoe UI", 11, "bold"),
+        tk.Label(top, text=name, font=self._font(11, bold=True),
                  fg=C_TEXT, bg=C_PANEL, anchor="w").pack(side="left",
                                                          padx=self._px(8))
         if filename and filename.lower() != name.lower():
-            tk.Label(top, text=f"  {filename}", font=("Segoe UI", 9),
+            tk.Label(top, text=f"  {filename}", font=self._font(9),
                      fg=C_TEXT_DIM, bg=C_PANEL).pack(side="left")
         if busy:
-            tk.Label(top, text="Downloading…", font=("Segoe UI", 10),
+            tk.Label(top, text="Downloading…", font=self._font(10),
                      fg=C_TEXT_DIM, bg=C_PANEL).pack(side="right",
                                                      padx=self._px(8))
         elif action:
             label, entry = action
-            btn = tk.Label(top, text=label, font=("Segoe UI", 10, "bold"),
+            btn = tk.Label(top, text=label, font=self._font(10, bold=True),
                            fg="#000", bg=C_GOLD, cursor="hand2",
                            padx=self._px(12), pady=self._px(2))
             btn.pack(side="right", padx=self._px(8))
@@ -5679,12 +5818,12 @@ class EqUpdaterApp(tk.Tk):
             btn.bind("<Leave>", lambda e: btn.configure(bg=C_GOLD))
         elif state in self._MPQ_STATES:
             text, colour, tip = self._MPQ_STATES[state]
-            lbl = tk.Label(top, text=text, font=("Segoe UI", 10),
+            lbl = tk.Label(top, text=text, font=self._font(10),
                            fg=colour or C_TEXT_DIM, bg=C_PANEL)
             lbl.pack(side="right", padx=self._px(8))
             self._set_tooltip(lbl, tip)
         if description:
-            tk.Label(box, text=description, font=("Segoe UI", 10),
+            tk.Label(box, text=description, font=self._font(10),
                      fg=C_TEXT_DIM, bg=C_PANEL, anchor="w",
                      wraplength=self._px(620), justify="left").pack(
                      fill="x", padx=self._px(8), pady=(self._px(2), 0))
@@ -6082,9 +6221,9 @@ class EqUpdaterApp(tk.Tk):
         hdr.pack(fill="x")
         hdr.pack_propagate(False)
         tk.Label(hdr, text="ADD CUSTOM GIT ADDON",
-                 font=("Segoe UI", 13, "bold"),
+                 font=self._font(13, bold=True),
                  fg=C_PURPLE, bg=P_HDR).pack(side="left", padx=self._px(18))
-        x_btn = tk.Label(hdr, text="✕", font=("Segoe UI", 12),
+        x_btn = tk.Label(hdr, text="✕", font=self._font(12),
                          fg=C_TEXT_DIM, bg=P_HDR, cursor="hand2")
         x_btn.pack(side="right", padx=self._px(16))
         x_btn.bind("<Button-1>", lambda e: self._close_settings())
@@ -6096,7 +6235,7 @@ class EqUpdaterApp(tk.Tk):
         body.pack(fill="both", expand=True, padx=self._px(22),
                   pady=(self._px(16), self._px(12)))
         tk.Label(body, text="REPOSITORY URL",
-                 font=("Segoe UI", 10, "bold"),
+                 font=self._font(10, bold=True),
                  fg=C_GOLD, bg=P_BG).pack(anchor="w")
         url_var = tk.StringVar()
         tk.Entry(body, textvariable=url_var, bg=P_INP, fg=C_TEXT,
@@ -6106,8 +6245,8 @@ class EqUpdaterApp(tk.Tk):
                                              pady=(self._px(6), self._px(6)))
         tk.Label(body,
                  text="Allowed hosts: " + ", ".join(ADDON_GIT_HOSTS),
-                 font=("Segoe UI", 9), fg=C_TEXT_DIM, bg=P_BG).pack(anchor="w")
-        err = tk.Label(body, text="", font=("Segoe UI", 9),
+                 font=self._font(9), fg=C_TEXT_DIM, bg=P_BG).pack(anchor="w")
+        err = tk.Label(body, text="", font=self._font(9),
                        fg=C_ERR, bg=P_BG)
         err.pack(anchor="w")
 
@@ -6129,7 +6268,7 @@ class EqUpdaterApp(tk.Tk):
                                 "toc": {}, "description": None,
                                 "error": None, "custom": True}])
 
-        btn = tk.Label(body, text="Install", font=("Segoe UI", 11, "bold"),
+        btn = tk.Label(body, text="Install", font=self._font(11, bold=True),
                        fg=C_TEXT, bg=P_BDR, cursor="hand2",
                        padx=self._px(16), pady=self._px(7))
         btn.pack(anchor="e", pady=(self._px(8), 0))
@@ -6246,14 +6385,14 @@ class EqUpdaterApp(tk.Tk):
         hdr = tk.Frame(f, bg=C_PANEL)
         hdr.pack(fill="x", pady=(self._px(10), self._px(2)))
         arrow = tk.Label(hdr, text="▾" if is_open else "▸",
-                         font=("Segoe UI", 14, "bold"),
+                         font=self._font(14, bold=True),
                          fg=C_GOLD, bg=C_PANEL, cursor="hand2", width=2)
         arrow.pack(side="left")
         lbl = tk.Label(hdr, text=title,
-                       font=("Segoe UI", 12, "bold"),
+                       font=self._font(12, bold=True),
                        fg=C_GOLD, bg=C_PANEL, cursor="hand2")
         lbl.pack(side="left")
-        tk.Label(hdr, text=f"  {len(rows)}", font=("Segoe UI", 10),
+        tk.Label(hdr, text=f"  {len(rows)}", font=self._font(10),
                  fg=C_TEXT_DIM, bg=C_PANEL).pack(side="left")
 
         def toggle(_e=None, t=title):
@@ -6266,7 +6405,7 @@ class EqUpdaterApp(tk.Tk):
         if is_open and not rows:
             msg = ("Verifying…" if self._addons_status["state"] == "verifying"
                    else "Nothing here.")
-            tk.Label(f, text=msg, font=("Segoe UI", 10), fg=C_TEXT_DIM,
+            tk.Label(f, text=msg, font=self._font(10), fg=C_TEXT_DIM,
                      bg=C_PANEL).pack(anchor="w", padx=self._px(8))
 
     def _addon_row(self, rec: dict):
@@ -6319,7 +6458,7 @@ class EqUpdaterApp(tk.Tk):
             # on addons EqUpdater actually owns - there is nothing to release
             # on one it never claimed.
             if rec.get("status") not in ("unmanaged", "available", None):
-                rel = tk.Label(row, text="↩", font=("Segoe UI", 11),
+                rel = tk.Label(row, text="↩", font=self._font(11),
                                fg=C_TEXT_DIM, bg=C_PANEL, cursor="hand2")
                 rel.pack(side="right", padx=(self._px(2), 0))
                 rel.bind("<Button-1>",
@@ -6338,7 +6477,7 @@ class EqUpdaterApp(tk.Tk):
             if (suggested and rec.get("git")
                     and not rec.get("custom")
                     and not same_repo(suggested, rec["git"])):
-                sw = tk.Label(row, text="⇄", font=("Segoe UI", 11),
+                sw = tk.Label(row, text="⇄", font=self._font(11),
                               fg="#d4b43c", bg=C_PANEL, cursor="hand2")
                 sw.pack(side="right", padx=(self._px(2), 0))
                 sw.bind("<Button-1>",
@@ -6371,7 +6510,7 @@ class EqUpdaterApp(tk.Tk):
         if rec.get("git"):
             repo_url = rec["git"][:-4] if rec["git"].endswith(".git") \
                 else rec["git"]
-            lnk = tk.Label(row, text="⧉", font=("Segoe UI", 10),
+            lnk = tk.Label(row, text="⧉", font=self._font(10),
                            fg=C_TEXT_DIM, bg=C_PANEL, cursor="hand2")
             lnk.pack(side="right", padx=(self._px(4), self._px(2)))
             lnk.bind("<Button-1>", lambda e, u=repo_url: self._open_url(u))
@@ -6388,25 +6527,25 @@ class EqUpdaterApp(tk.Tk):
         # titles aligned whether or not the star is present.
         is_recommended = rec["folder"] in RECOMMENDED_ADDONS
         star = tk.Label(name_f, text="★" if is_recommended else "",
-                        font=("Segoe UI", 9), fg=C_GOLD, bg=C_PANEL,
+                        font=self._font(9), fg=C_GOLD, bg=C_PANEL,
                         width=2, anchor="w")
         star.pack(side="left")
         if is_recommended:
             self._add_tooltip(star, "Recommended addon")
         title = toc.get("Title") or rec["folder"]
         for seg, col in parse_wow_colored(title)[:6]:
-            tk.Label(name_f, text=seg, font=("Segoe UI", 10, "bold"),
+            tk.Label(name_f, text=seg, font=self._font(10, bold=True),
                      fg=col or C_TEXT, bg=C_PANEL).pack(side="left")
 
         desc = strip_wow_colors(toc.get("Notes")
                                 or rec.get("description") or "")
-        tk.Label(row, text=desc, font=("Segoe UI", 10), fg=C_TEXT_DIM,
+        tk.Label(row, text=desc, font=self._font(10), fg=C_TEXT_DIM,
                  bg=C_PANEL, wraplength=self._px(430), justify="left",
                  anchor="w").pack(side="left", fill="x", expand=True)
 
         if rec.get("error"):
             tk.Label(f, text=f"  ⚠  {rec['error']}",
-                     font=("Segoe UI", 9), fg=C_ERR, bg=C_PANEL,
+                     font=self._font(9), fg=C_ERR, bg=C_PANEL,
                      wraplength=self._px(840), justify="left",
                      anchor="w").pack(fill="x", pady=(0, self._px(3)))
 
@@ -6452,7 +6591,7 @@ class EqUpdaterApp(tk.Tk):
         status = rec.get("status")
 
         if status == "downloading":
-            tk.Label(row, text="downloading…", font=("Segoe UI", 10),
+            tk.Label(row, text="downloading…", font=self._font(10),
                      fg=C_TEXT_DIM, bg=C_PANEL).pack(side="right",
                                                      padx=self._px(4))
             return
@@ -6460,7 +6599,7 @@ class EqUpdaterApp(tk.Tk):
         if status == "invalid" or rec.get("error"):
             # Short marker on the right; the full reason gets its own line
             # under the row (long messages would squeeze the description).
-            tk.Label(row, text="⛔ Addon error", font=("Segoe UI", 10),
+            tk.Label(row, text="⛔ Addon error", font=self._font(10),
                      fg=C_ERR, bg=C_PANEL).pack(side="right", padx=self._px(4))
             return
 
@@ -6471,7 +6610,7 @@ class EqUpdaterApp(tk.Tk):
             # same addon.
             if rec.get("suggested_git"):
                 btn = tk.Label(row, text="Manage",
-                               font=("Segoe UI", 10, "bold"),
+                               font=self._font(10, bold=True),
                                fg=C_MOD_HL, bg=C_PANEL, cursor="hand2")
                 btn.pack(side="right", padx=self._px(4))
                 btn.bind("<Button-1>", lambda e, r=rec: self._addon_adopt(r))
@@ -6482,7 +6621,7 @@ class EqUpdaterApp(tk.Tk):
                          "files are not changed now."
                          % (branding.APP_NAME, rec["suggested_git"]))
             lbl = tk.Label(row, text="Installed manually",
-                           font=("Segoe UI", 10), fg=C_TEXT_DIM, bg=C_PANEL)
+                           font=self._font(10), fg=C_TEXT_DIM, bg=C_PANEL)
             lbl.pack(side="right", padx=self._px(4))
             self._set_tooltip(
                 lbl, "%s did not install this and will not change it."
@@ -6490,7 +6629,7 @@ class EqUpdaterApp(tk.Tk):
             return
 
         if status == "updateAvailable" and installed:
-            upd = tk.Label(row, text="Update", font=("Segoe UI", 10, "bold"),
+            upd = tk.Label(row, text="Update", font=self._font(10, bold=True),
                            fg=C_GOLD, bg=C_PANEL, cursor="hand2")
             upd.pack(side="right", padx=self._px(4))
             upd.bind("<Button-1>", lambda e, r=rec: self._addon_apply([r]))
@@ -6504,7 +6643,7 @@ class EqUpdaterApp(tk.Tk):
 
         if warnings:
             tk.Label(row, text="⚠ %s" % warnings[0],
-                     font=("Segoe UI", 10), fg="#d4b43c",
+                     font=self._font(10), fg="#d4b43c",
                      bg=C_PANEL).pack(side="right", padx=self._px(4))
             return
 
@@ -6517,7 +6656,7 @@ class EqUpdaterApp(tk.Tk):
             # again before it does anything.
             if status in ("modified", "localNewer", "diverged"):
                 rep = tk.Label(row, text="Replace…",
-                               font=("Segoe UI", 10), fg=C_TEXT_DIM,
+                               font=self._font(10), fg=C_TEXT_DIM,
                                bg=C_PANEL, cursor="hand2")
                 rep.pack(side="right", padx=self._px(4))
                 rep.bind("<Button-1>",
@@ -6528,7 +6667,7 @@ class EqUpdaterApp(tk.Tk):
                     rep, "Overwrite this addon with the latest from its "
                          "source. A backup is taken first, and you are told "
                          "exactly what will be lost.")
-            lbl = tk.Label(row, text=text, font=("Segoe UI", 10),
+            lbl = tk.Label(row, text=text, font=self._font(10),
                            fg=colour, bg=C_PANEL)
             lbl.pack(side="right", padx=self._px(4))
             if rec.get("reason") and status not in ("upToDate", "unknown"):
@@ -6684,7 +6823,7 @@ class EqUpdaterApp(tk.Tk):
 
         self._status_var = tk.StringVar(value="Ready to update")
         tk.Label(left, textvariable=self._status_var,
-                 font=("Segoe UI", 10, "bold"),
+                 font=self._font(10, bold=True),
                  fg=C_TEXT, bg=C_BG, width=26, anchor="w").pack(anchor="w")
 
         # Thin halo frame around the button gives a soft glow that follows
@@ -6692,40 +6831,33 @@ class EqUpdaterApp(tk.Tk):
         self._btn_mode = "update"
         btn_row = tk.Frame(left, bg=C_BG)
         btn_row.pack(anchor="w", pady=(self._px(6), self._px(6)))
-        self._btn_glow = tk.Frame(btn_row, bg="#4a3812")
+        self._btn_glow = tk.Frame(btn_row, bg="#5a4828")
         self._btn_glow.pack(side="left")
-        self._upd_btn = tk.Label(self._btn_glow, text="UPDATE",
-                                 font=("Segoe UI", 11, "bold"),
-                                 fg="#ffffff", bg=C_GOLD,
-                                 cursor="hand2",
-                                 width=14, pady=self._px(7),
-                                 anchor="center")
-        self._upd_btn.pack(padx=self._px(3), pady=self._px(3))
-        self._upd_btn.bind("<Button-1>", lambda e: self._btn_click())
-        self._upd_btn.bind("<Enter>",    lambda e: self._btn_hover(True))
-        self._upd_btn.bind("<Leave>",    lambda e: self._btn_hover(False))
+        self._upd_btn = GradientButton(
+            self._btn_glow, width=self._px(132), height=self._px(38),
+            text="UPDATE", palette=UPDATE_GRADIENT,
+            command=self._btn_click, bg=C_BG,
+            font_factory=lambda: self._font(11, bold=True))
+        self._upd_btn.pack(padx=self._px(2), pady=self._px(2))
+        self._gradient_buttons.append(self._upd_btn)
 
-        # UPDATE ALL: every mod and addon with a newer version, in one click.
-        # Lit only while there is something to update; faded otherwise, and
-        # while any install is running. See _refresh_update_all_btn.
+        # UPDATE ALL: only safe, managed, provably newer components.
         self._all_glow = tk.Frame(btn_row, bg=UPDALL_GLOW_OFF)
         self._all_glow.pack(side="left", padx=(self._px(10), 0))
-        self._all_btn = tk.Label(self._all_glow, text="UPDATE ALL",
-                                 font=("Segoe UI", 11, "bold"),
-                                 fg=UPDALL_FG_OFF, bg=UPDALL_BG_OFF,
-                                 cursor="arrow",
-                                 width=14, pady=self._px(7),
-                                 anchor="center")
-        self._all_btn.pack(padx=self._px(3), pady=self._px(3))
-        self._all_btn.bind("<Button-1>", lambda e: self._update_all())
-        self._all_btn.bind("<Enter>",    lambda e: self._all_hover(True))
-        self._all_btn.bind("<Leave>",    lambda e: self._all_hover(False))
+        self._all_btn = GradientButton(
+            self._all_glow, width=self._px(132), height=self._px(38),
+            text="UPDATE ALL", palette=UPDATE_ALL_GRADIENT,
+            command=self._update_all, bg=C_BG,
+            font_factory=lambda: self._font(11, bold=True))
+        self._all_btn.pack(padx=self._px(2), pady=self._px(2))
+        self._all_btn.set_enabled(False)
+        self._gradient_buttons.append(self._all_btn)
         self._all_ready = False
         self._update_all_chain = False
 
         self._client_ver_var = tk.StringVar(value="")
         tk.Label(left, textvariable=self._client_ver_var,
-                 font=FONT_VER, fg=C_TEXT_DIM, bg=C_BG).pack(
+                 font=self._font(8), fg=C_TEXT_DIM, bg=C_BG).pack(
                  anchor="w", pady=(0, self._px(36)))
 
         pb_frame = tk.Frame(foot, bg=C_BG)
@@ -6742,7 +6874,7 @@ class EqUpdaterApp(tk.Tk):
 
         self._prog_label_var = tk.StringVar(value="")
         tk.Label(pb_frame, textvariable=self._prog_label_var,
-                 font=("Segoe UI", 10), fg=C_TEXT, bg=C_BG).pack(
+                 font=self._font(10), fg=C_TEXT, bg=C_BG).pack(
                  side="bottom", pady=(0, self._px(6)))
 
         tk.Label(foot, text=f"v{UPDATER_VERSION}",
@@ -6909,9 +7041,9 @@ class EqUpdaterApp(tk.Tk):
         hdr = tk.Frame(panel, bg=P_HDR, height=self._px(46))
         hdr.pack(fill="x")
         hdr.pack_propagate(False)
-        tk.Label(hdr, text="SETTINGS", font=("Segoe UI", 13, "bold"),
+        tk.Label(hdr, text="SETTINGS", font=self._font(13, bold=True),
                  fg=C_PURPLE, bg=P_HDR).pack(side="left", padx=self._px(18))
-        x_btn = tk.Label(hdr, text="✕", font=("Segoe UI", 12),
+        x_btn = tk.Label(hdr, text="✕", font=self._font(12),
                          fg=C_TEXT_DIM, bg=P_HDR, cursor="hand2")
         x_btn.pack(side="right", padx=self._px(16))
         x_btn.bind("<Button-1>", lambda e: self._close_settings())
@@ -6927,9 +7059,9 @@ class EqUpdaterApp(tk.Tk):
         loc_row = tk.Frame(body, bg=P_BG)
         loc_row.pack(fill="x")
         tk.Label(loc_row, text="GAME FOLDER",
-                 font=("Segoe UI", 10, "bold"),
+                 font=self._font(10, bold=True),
                  fg=C_GOLD, bg=P_BG).pack(side="left")
-        opn = tk.Label(loc_row, text="Open folder", font=FONT_BODY,
+        opn = tk.Label(loc_row, text="Open folder", font=self._font(9),
                        fg=C_TEXT_DIM, bg=P_BG, cursor="hand2")
         opn.pack(side="left", padx=(self._px(16), 0))
         opn.bind("<Button-1>", lambda e: self._open_client_folder())
@@ -6947,7 +7079,7 @@ class EqUpdaterApp(tk.Tk):
                        highlightcolor=P_BDR)
         ent.pack(side="left", fill="x", expand=True, ipady=self._px(7))
         chg = tk.Label(path_row, text="Change",
-                       font=("Segoe UI", 10, "bold"),
+                       font=self._font(10, bold=True),
                        fg=C_TEXT, bg=P_BDR, cursor="hand2",
                        padx=self._px(16), pady=self._px(7))
         chg.pack(side="left", padx=(self._px(8), 0))
@@ -6968,19 +7100,19 @@ class EqUpdaterApp(tk.Tk):
         rcol.grid(row=0, column=1, sticky="nw")
 
         tk.Label(lcol, text="DOWNLOAD MIRROR",
-                 font=("Segoe UI", 10, "bold"),
+                 font=self._font(10, bold=True),
                  fg=C_GOLD, bg=P_BG).pack(anchor="w", pady=(0, self._px(4)))
         mir = tk.Frame(lcol, bg=P_BG)
         mir.pack(anchor="w")
-        tk.Label(mir, text="●", font=("Segoe UI", 9),
+        tk.Label(mir, text="●", font=self._font(9),
                  fg=C_OK, bg=P_BG).pack(side="left")
-        tk.Label(mir, text=" Iceland", font=("Segoe UI", 10, "bold"),
+        tk.Label(mir, text=" Iceland", font=self._font(10, bold=True),
                  fg=C_TEXT, bg=P_BG).pack(side="left")
         self._mirror_status_lbl = tk.Label(mir, text="checking…",
-                                           font=("Segoe UI", 9),
+                                           font=self._font(9),
                                            fg=C_TEXT_DIM, bg=P_BG)
         self._mirror_status_lbl.pack(side="left", padx=(self._px(8), 0))
-        rf = tk.Label(mir, text="⟳", font=("Segoe UI", 11),
+        rf = tk.Label(mir, text="⟳", font=self._font(11),
                       fg=C_TEXT_DIM, bg=P_BG, cursor="hand2")
         rf.pack(side="left", padx=(self._px(6), 0))
         rf.bind("<Button-1>", lambda e: self._check_mirror_status())
@@ -6989,7 +7121,7 @@ class EqUpdaterApp(tk.Tk):
         self._check_mirror_status()
 
         tk.Label(lcol, text="TROUBLESHOOTING",
-                 font=("Segoe UI", 10, "bold"),
+                 font=self._font(10, bold=True),
                  fg=C_GOLD, bg=P_BG).pack(anchor="w", pady=(self._px(22), 0))
 
         def _titem(icon, text, cmd, icon_color=C_GOLD):
@@ -7000,7 +7132,7 @@ class EqUpdaterApp(tk.Tk):
             ic = tk.Label(r, text=icon, font=("Segoe UI Symbol", 11),
                           fg=icon_color, bg=P_BG, width=2, anchor="w")
             ic.pack(side="left")
-            tl = tk.Label(r, text=text, font=("Segoe UI", 10),
+            tl = tk.Label(r, text=text, font=self._font(10),
                           fg=C_TEXT, bg=P_BG)
             tl.pack(side="left")
             for w in (r, ic, tl):
@@ -7013,37 +7145,34 @@ class EqUpdaterApp(tk.Tk):
         _titem("⛊", "Add game folder to Defender exclusions",
                self._allow_through_antivirus)
 
-        tk.Label(lcol, text="SUPPORT THE DEVELOPER",
-                 font=("Segoe UI", 10, "bold"),
+        tk.Label(lcol, text="SUPPORT ME",
+                 font=self._font(10, bold=True),
                  fg=C_GOLD, bg=P_BG).pack(anchor="w", pady=(self._px(22), 0))
-        _titem("♥", "Ko-fi",
-               lambda: self._open_url("https://ko-fi.com/rebased"),
-               icon_color="#e8615f")
         _titem("☕", "Buy Me a Coffee",
-               lambda: self._open_url("https://buymeacoffee.com/rebased"),
-               icon_color="#b5854f")
+               lambda: self._open_url("https://ko-fi.com/equadis"),
+               icon_color="#e8615f")
 
         tk.Label(rcol, text="GENERAL",
-                 font=("Segoe UI", 10, "bold"),
+                 font=self._font(10, bold=True),
                  fg=C_GOLD, bg=P_BG).pack(anchor="w")
         tk.Checkbutton(rcol, text=" Clear WDB on game launch",
                        variable=self._clear_wdb_var,
                        command=self._toggle_clear_wdb,
-                       font=("Segoe UI", 10), fg=C_TEXT, bg=P_BG,
+                       font=self._font(10), fg=C_TEXT, bg=P_BG,
                        activebackground=P_BG, activeforeground=C_TEXT,
                        selectcolor=P_INP, highlightthickness=0, bd=0,
                        cursor="hand2").pack(anchor="w", pady=(self._px(10), 0))
         tk.Checkbutton(rcol, text=f" Minimize {branding.APP_TITLE} on game launch",
                        variable=self._close_on_launch_var,
                        command=self._toggle_close_on_launch,
-                       font=("Segoe UI", 10), fg=C_TEXT, bg=P_BG,
+                       font=self._font(10), fg=C_TEXT, bg=P_BG,
                        activebackground=P_BG, activeforeground=C_TEXT,
                        selectcolor=P_INP, highlightthickness=0, bd=0,
                        cursor="hand2").pack(anchor="w", pady=(self._px(10), 0))
         cb_auto_mods = tk.Checkbutton(
             rcol, text=" Install essential mods",
             variable=self._auto_mods_var, command=self._toggle_auto_mods,
-            font=("Segoe UI", 10), fg=C_TEXT, bg=P_BG,
+            font=self._font(10), fg=C_TEXT, bg=P_BG,
             activebackground=P_BG, activeforeground=C_TEXT,
             selectcolor=P_INP, highlightthickness=0, bd=0, cursor="hand2")
         cb_auto_mods.pack(anchor="w", pady=(self._px(10), 0))
@@ -7054,7 +7183,7 @@ class EqUpdaterApp(tk.Tk):
         tk.Checkbutton(rcol, text=" Install recommended addons",
                        variable=self._auto_addons_var,
                        command=self._toggle_auto_addons,
-                       font=("Segoe UI", 10), fg=C_TEXT, bg=P_BG,
+                       font=self._font(10), fg=C_TEXT, bg=P_BG,
                        activebackground=P_BG, activeforeground=C_TEXT,
                        selectcolor=P_INP, highlightthickness=0, bd=0,
                        cursor="hand2").pack(anchor="w", pady=(self._px(10), 0))
@@ -7062,7 +7191,7 @@ class EqUpdaterApp(tk.Tk):
             rcol, text=" Ignore speech.mpq",
             variable=self._ignore_speech_var,
             command=self._toggle_ignore_speech,
-            font=("Segoe UI", 10), fg=C_TEXT, bg=P_BG,
+            font=self._font(10), fg=C_TEXT, bg=P_BG,
             activebackground=P_BG, activeforeground=C_TEXT,
             selectcolor=P_INP, highlightthickness=0, bd=0, cursor="hand2")
         cb_ignore_speech.pack(anchor="w", pady=(self._px(10), 0))
@@ -7071,44 +7200,44 @@ class EqUpdaterApp(tk.Tk):
             "Ignores verification and updates for speech.mpq, allowing custom "
             "speech sounds")
 
-        self._build_about(panel, P_BG, PADX)
+        tk.Label(rcol, text="FONT",
+                 font=self._font(10, bold=True),
+                 fg=C_GOLD, bg=P_BG).pack(anchor="w", pady=(self._px(20), 0))
+        tk.Label(rcol, text="Friz Quadrata is the default. Switch live below.",
+                 font=self._font(9), fg=C_TEXT_DIM, bg=P_BG).pack(anchor="w", pady=(self._px(6), 0))
 
-    def _build_about(self, panel, bg, padx):
-        """Attribution, at the bottom of Settings.
+        def _font_row(value, label, note=None, available=True):
+            shown = label if available else f"{label} (not installed)"
+            rb = tk.Radiobutton(
+                rcol, text=f" {shown}", value=value,
+                variable=self._font_choice_var,
+                command=self._change_font_choice,
+                font=self._font(10), fg=C_TEXT if available else C_TEXT_DIM, bg=P_BG,
+                activebackground=P_BG, activeforeground=C_TEXT,
+                selectcolor=P_INP, highlightthickness=0, bd=0,
+                state="normal" if available else "disabled",
+                cursor="hand2" if available else "arrow")
+            rb.pack(anchor="w", pady=(self._px(8), 0))
+            if note:
+                self._add_tooltip(rb, note)
+            return rb
 
-        EqUpdater is a derivative work of Octo Updater, whose licence requires
-        the original author's name, contact and donation links to stay visible
-        and unmodified. Requiring it is one thing; it is also simply correct --
-        the client sync, the MPQ engine, the addon installer and the look of
-        this window are that author's work, and a rename does not change who
-        wrote them."""
-        wrap = tk.Frame(panel, bg=bg)
-        wrap.pack(side="bottom", fill="x", padx=padx, pady=(0, self._px(12)))
-        tk.Frame(wrap, bg=C_DIVIDER, height=self._px(1)).pack(
-            fill="x", pady=(0, self._px(8)))
+        _font_row("friz", "Friz Quadrata",
+                  "Default Warcraft-style EqUpdater font.",
+                  self._fonts.friz_available)
+        _font_row("arial", "Arial",
+                  "A simple readable sans-serif option.",
+                  self._fonts.arial_available)
+        _font_row(
+            "opendyslexic", "OpenDyslexic",
+            "Dyslexic-friendly reading option. If it is unavailable, install "
+            "OpenDyslexic or place its .otf files in "
+            "%LOCALAPPDATA%\\EqUpdater\\fonts and restart EqUpdater.",
+            self._fonts.dyslexic_available)
 
-        line1 = tk.Frame(wrap, bg=bg)
-        line1.pack(fill="x")
-        tk.Label(line1,
-                 text=f"{branding.APP_TITLE} {branding.APP_VERSION} — "
-                      f"derived from {branding.UPSTREAM_NAME} by rebasedkon",
-                 font=("Segoe UI", 9), fg=C_TEXT_DIM, bg=bg).pack(side="left")
-
-        line2 = tk.Frame(wrap, bg=bg)
-        line2.pack(fill="x", pady=(self._px(2), 0))
-        tk.Label(line2, text="Support the original author:",
-                 font=("Segoe UI", 9), fg=C_TEXT_DIM, bg=bg).pack(side="left")
-        for label, url in (("Ko-fi", "https://ko-fi.com/rebased"),
-                           ("Buy Me a Coffee",
-                            "https://buymeacoffee.com/rebased"),
-                           (branding.UPSTREAM_NAME, branding.UPSTREAM_URL)):
-            lnk = tk.Label(line2, text=label, font=("Segoe UI", 9,
-                                                    "underline"),
-                           fg=C_GOLD, bg=bg, cursor="hand2")
-            lnk.pack(side="left", padx=(self._px(8), 0))
-            lnk.bind("<Button-1>", lambda e, u=url: self._open_url(u))
-            lnk.bind("<Enter>", lambda e, w=lnk: w.configure(fg=C_GOLD_LT))
-            lnk.bind("<Leave>", lambda e, w=lnk: w.configure(fg=C_GOLD))
+        # Settings is created after the main-window font pass, so apply the
+        # current family to the newly-created overlay immediately.
+        self._fonts.apply_tree(ov)
 
     def _close_settings(self):
         self.unbind("<Escape>")
@@ -7241,6 +7370,26 @@ class EqUpdaterApp(tk.Tk):
             self.after(0, upd)
         threading.Thread(target=worker, daemon=True).start()
 
+    def _change_font_choice(self):
+        choice = (self._font_choice_var.get() or "friz").strip().lower()
+
+        def mutate(c):
+            acc = c.setdefault("accessibility", {})
+            acc["font_choice"] = choice
+            # Legacy compatibility for any code/config that still looks at the
+            # old boolean flag.
+            acc["dyslexic_font"] = (choice == "opendyslexic")
+
+        self._cfg = update_config(mutate)
+        self._fonts.set_choice(choice)
+        self._apply_app_fonts()
+
+    def _toggle_dyslexic_font(self):
+        # Backwards-compatible shim for any older UI path that still toggles
+        # the previous boolean setting.
+        self._font_choice_var.set("opendyslexic" if self._fonts.choice != "opendyslexic" else "friz")
+        self._change_font_choice()
+
     def _toggle_clear_wdb(self):
         val = self._clear_wdb_var.get()
         self._cfg = update_config(
@@ -7349,7 +7498,7 @@ class EqUpdaterApp(tk.Tk):
 
         top = tk.Frame(win, bg=C_BG)
         top.pack(fill="x", padx=self._px(12), pady=(self._px(10), self._px(4)))
-        tk.Label(top, text="SESSION LOG", font=("Segoe UI", 9, "bold"),
+        tk.Label(top, text="SESSION LOG", font=self._font(9, bold=True),
                  fg=C_GOLD, bg=C_BG).pack(side="left")
 
         outer = tk.Frame(win, bg=C_BG)
@@ -7392,28 +7541,21 @@ class EqUpdaterApp(tk.Tk):
         return int(self._mod_updates_count) + int(self._addon_updates_count)
 
     def _refresh_update_all_btn(self):
-        """Lit when at least one mod or addon has a newer version and nothing
-        is installing; faded otherwise. Called wherever either count or the
-        busy state can change."""
+        """Enable the subtle gold gradient only when safe updates exist."""
         if not hasattr(self, "_all_btn"):
-            return   # footer not built yet
+            return
         busy = (self._btn_mode == "busy" or self._addons_busy
                 or getattr(self, "_running", False))
         ready = self._update_all_count() > 0 and not busy
         self._all_ready = ready
-        if ready:
-            self._all_btn.configure(bg=UPDALL_BG_ON, fg=UPDALL_FG_ON,
-                                    cursor="hand2")
-            self._all_glow.configure(bg=UPDALL_GLOW_ON)
-        else:
-            self._all_btn.configure(bg=UPDALL_BG_OFF, fg=UPDALL_FG_OFF,
-                                    cursor="arrow")
-            self._all_glow.configure(bg=UPDALL_GLOW_OFF)
+        self._all_btn.set_enabled(ready)
+        self._all_glow.configure(
+            bg=UPDALL_GLOW_ON if ready else UPDALL_GLOW_OFF)
 
     def _all_hover(self, entering: bool):
-        if not self._all_ready:
-            return
-        self._all_btn.configure(bg=UPDALL_BG_HOV if entering else UPDALL_BG_ON)
+        # GradientButton owns hover rendering; retained for compatibility with
+        # any old call sites that may still invoke this helper.
+        return
 
     def _addon_plans(self) -> list:
         """The addons' decisions, taken from the last verify.
@@ -7608,31 +7750,29 @@ class EqUpdaterApp(tk.Tk):
 
     def _set_btn_play(self):
         self._btn_mode = "play"
-        self._upd_btn.configure(text="PLAY", bg=C_GREEN_BTN, fg="#ffffff")
-        self._btn_glow.configure(bg="#2b511d")
+        self._upd_btn.set_text("PLAY")
+        self._upd_btn.set_palette(PLAY_GRADIENT)
+        self._upd_btn.set_enabled(True)
+        self._btn_glow.configure(bg="#29472c")
 
     def _set_btn_update(self):
         self._btn_mode = "update"
-        self._upd_btn.configure(text="UPDATE", bg=C_GOLD, fg="#ffffff")
-        self._btn_glow.configure(bg="#4a3812")
+        self._upd_btn.set_text("UPDATE")
+        self._upd_btn.set_palette(UPDATE_GRADIENT)
+        self._upd_btn.set_enabled(True)
+        self._btn_glow.configure(bg="#5a4828")
 
     def _set_btn_busy(self, label="…"):
         self._btn_mode = "busy"
-        self._upd_btn.configure(text=label, bg="#2a2434", fg=C_TEXT_DIM)
-        self._btn_glow.configure(bg="#211c2c")
+        self._upd_btn.set_text(label)
+        self._upd_btn.set_palette(BUSY_GRADIENT)
+        self._upd_btn.set_enabled(False)
+        self._btn_glow.configure(bg="#1b2c43")
         self._refresh_update_all_btn()
 
     def _btn_hover(self, entering: bool):
-        if self._btn_mode == "busy":
-            return
-        if entering:
-            col  = C_GREEN_HOV if self._btn_mode == "play" else C_GOLD_LT
-            glow = "#397024"   if self._btn_mode == "play" else "#5c4a16"
-        else:
-            col  = C_GREEN_BTN if self._btn_mode == "play" else C_GOLD
-            glow = "#2b511d"   if self._btn_mode == "play" else "#4a3812"
-        self._upd_btn.configure(bg=col)
-        self._btn_glow.configure(bg=glow)
+        # GradientButton owns hover rendering.
+        return
 
     def _mods_have_errors(self) -> bool:
         return any(bool(s.get("error"))
@@ -7889,7 +8029,11 @@ class EqUpdaterApp(tk.Tk):
                 self._set_btn_busy("Verifying…" if status.startswith("Verifying")
                                    else "Updating…")
 
-        self.after(80, self._poll)
+        if not getattr(self, "_destroying", False):
+            try:
+                self._poll_job = self.after(80, self._poll)
+            except (tk.TclError, RuntimeError):
+                self._poll_job = None
 
 
 # ──────────────────────────────────────────────────────────────────────────────
