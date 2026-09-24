@@ -58,7 +58,7 @@ from .news import (ANNOUNCEMENTS_FORUM_ID, CHANGELOG_FORUM_ID,
                    fetch_latest_post, fetch_topic_list)
 from .ui import (AnimatedBackground, FontManager, GradientButton,
                  GradientPalette, apply_edge_fades, cover_background,
-                 edge_fade_layers, photo_image, style_title_bar)
+                 blend, edge_fade_layers, photo_image, style_title_bar)
 
 # ──────────────────────────────────────────────────────────────────────────────
 #  Constants
@@ -116,10 +116,11 @@ C_OK         = "#79bf73"
 C_ERR        = "#d17a7a"
 C_MOD_HL     = "#a8b83c"
 
-UPDALL_FG_ON    = "#ffffff"
-UPDALL_FG_OFF   = "#728198"
+# With nothing to update, UPDATE ALL is the same gold button faded 70%
+# towards the background -- still recognisably itself, not a grey slab.
+UPDALL_FADE     = 0.70
 UPDALL_GLOW_ON  = "#6d5524"
-UPDALL_GLOW_OFF = "#13223a"
+UPDALL_GLOW_OFF = blend(UPDALL_GLOW_ON, C_BG, UPDALL_FADE)
 
 PLAY_GRADIENT = GradientPalette(
     top="#4d8049", bottom="#396637",
@@ -136,7 +137,7 @@ UPDATE_ALL_GRADIENT = GradientPalette(
     hover_top="#dfb95f", hover_bottom="#c29036",
     disabled_top="#26344a", disabled_bottom="#19273a",
     border="#d6b160", hover_border="#eed185",
-    disabled_fg=UPDALL_FG_OFF)
+    disabled_fade=UPDALL_FADE)
 BUSY_GRADIENT = GradientPalette(
     top="#293a53", bottom="#1b2a40",
     hover_top="#293a53", hover_bottom="#1b2a40",

@@ -614,6 +614,11 @@ def _hex_rgb(value: str) -> tuple[int, int, int]:
     return tuple(int(value[i:i + 2], 16) for i in (0, 2, 4))
 
 
+def blend(a: str, b: str, t: float) -> str:
+    """Colour ``a`` moved ``t`` (0..1) of the way towards colour ``b``."""
+    return _mix(a, b, t)
+
+
 def _mix(a: str, b: str, t: float) -> str:
     ar, ag, ab = _hex_rgb(a)
     br, bg, bb = _hex_rgb(b)
@@ -635,6 +640,10 @@ class GradientPalette:
     disabled_fg: str = "#738199"
     border: str = "#243b59"
     hover_border: str = "#54739b"
+    #: When set, a disabled button is drawn in its normal colours faded this
+    #: far (0..1) towards the canvas background, instead of in the
+    #: ``disabled_*`` colours: the same button, dimmed, not a grey one.
+    disabled_fade: float | None = None
 
 
 class GradientButton(tk.Canvas):
@@ -713,7 +722,11 @@ class GradientButton(tk.Canvas):
     def _paint(self) -> None:
         self.delete("all")
         p = self._palette
-        if not self._enabled:
+        if not self._enabled and p.disabled_fade is not None:
+            under, f = self.cget("bg"), p.disabled_fade
+            top, bottom = _mix(p.top, under, f), _mix(p.bottom, under, f)
+            fg, border = _mix(p.fg, under, f), _mix(p.border, under, f)
+        elif not self._enabled:
             top, bottom, fg, border = p.disabled_top, p.disabled_bottom, p.disabled_fg, p.border
         elif self._hover:
             top, bottom, fg, border = p.hover_top, p.hover_bottom, p.fg, p.hover_border
