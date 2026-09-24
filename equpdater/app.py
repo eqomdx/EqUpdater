@@ -43,7 +43,7 @@ import tkinter as tk
 from tkinter import filedialog
 from pathlib import Path
 
-from . import branding
+from . import branding, mpq
 from .config import (APP_DATA_DIR, BACKUP_DIR, CONFIG_FILE, SCHEMA_VERSION,
                      backup_file, bootstrap_config, ensure_dir, load_config,
                      new_addon_record, new_mod_record, save_config,
@@ -687,16 +687,65 @@ def fetch_mpq_sha256(url: str) -> str:
         return r.read().decode("ascii", "ignore").strip().split()[0].lower()
 
 
-def download_mpq_patch(entry: dict, data_dir: str, on_progress=None):
-    """Download the patch into <data_dir>/<file>, verifying its published
-    SHA256. Writes to a .part file and renames on success. on_progress(done,
-    total) is called as bytes arrive."""
-    url = entry["url"]
-    want = fetch_mpq_sha256(url)
+#: Latest-release lookups for linked texture packs, per repository, so that
+#: switching to the MPQ tab does not spend GitHub's unauthenticated rate
+#: limit (60 an hour) on every visit.
+_MPQ_RELEASE_CACHE: dict = {}
+_MPQ_RELEASE_TTL = 600
+
+
+def resolve_mpq_source(src: dict, local_file: str) -> mpq.Remote:
+    """Ask a texture-pack source what it publishes now. Raises on any
+    failure -- the caller treats that as "unable to verify", never as news."""
+    kind = src.get("kind")
+    if kind == "catalogue":
+        entry = mpq_patch_for(src.get("file") or "")
+        if entry is None:
+            raise RuntimeError("no longer in the %s list" % branding.APP_NAME)
+        return mpq.Remote(sha=fetch_mpq_sha256(entry["url"]), marker=None,
+                          url=entry["url"])
+    if kind == "url":
+        return mpq.Remote(sha=fetch_mpq_sha256(src["url"]), marker=None,
+                          url=src["url"])
+    if kind in ("github_release", "codeberg_release"):
+        key = (kind, src["owner"].lower(), src["repo"].lower())
+        hit = _MPQ_RELEASE_CACHE.get(key)
+        if hit and time.time() - hit[0] < _MPQ_RELEASE_TTL:
+            release = hit[1]
+        else:
+            latest = (_github_latest if kind == "github_release"
+                      else _codeberg_latest)
+            release = latest(src["owner"], src["repo"], raise_errors=True)
+            if not release:
+                raise RuntimeError("the repository has no releases")
+            _MPQ_RELEASE_CACHE[key] = (time.time(), release)
+        try:
+            asset = mpq.pick_asset(release.get("assets") or [],
+                                   src.get("asset"), local_file)
+        except ValueError as e:
+            raise RuntimeError(str(e)) from e
+        return mpq.asset_remote(asset)
+    raise RuntimeError("unknown source kind %r" % kind)
+
+
+def download_mpq(remote: mpq.Remote, data_dir: str, filename: str,
+                 keep_existing: bool = False, on_progress=None) -> str:
+    """Fetch `remote` into <data_dir>/<filename> and return its SHA-256.
+
+    Verified against the published checksum whenever the source publishes
+    one; a release asset without a digest is protected by TLS alone, which
+    is exactly what a browser download of it would have been.
+
+    `keep_existing` renames the current file to `<filename>.<stamp>.bak`
+    in the same folder before the new one goes in -- a rename, not a copy,
+    because packs run to hundreds of megabytes. The game only loads
+    patch-?.mpq, so the kept copy is inert until renamed back."""
+    if not remote.url:
+        raise RuntimeError("the source gave no download link")
     ensure_dir(data_dir)
-    tmp = os.path.join(data_dir, entry["file"] + ".part")
+    tmp = os.path.join(data_dir, filename + ".part")
     h = hashlib.sha256()
-    req = urllib.request.Request(url, headers={"User-Agent": UA})
+    req = urllib.request.Request(remote.url, headers={"User-Agent": UA})
     with secure_urlopen(req, timeout=DOWNLOAD_TIMEOUT,
                         allowed_hosts=ALLOWED_DOWNLOAD_HOSTS) as r:
         total = int(r.headers.get("Content-Length") or 0)
@@ -711,13 +760,20 @@ def download_mpq_patch(entry: dict, data_dir: str, on_progress=None):
                 done += len(chunk)
                 if on_progress:
                     on_progress(done, total)
-    if h.hexdigest().lower() != want:
+    got = h.hexdigest().lower()
+    if remote.sha and got != remote.sha:
         try:
             os.remove(tmp)
         except OSError:
             pass
         raise RuntimeError("checksum verification failed")
-    os.replace(tmp, os.path.join(data_dir, entry["file"]))
+    dest = os.path.join(data_dir, filename)
+    if keep_existing and os.path.exists(dest):
+        kept = "%s.%s.bak" % (dest, time.strftime("%Y%m%d-%H%M%S"))
+        os.replace(dest, kept)
+        log("  Kept your previous copy as %s" % os.path.basename(kept), "dim")
+    os.replace(tmp, dest)
+    return got
 
 
 def clear_torrent_resume_state():
@@ -3721,7 +3777,7 @@ class EqUpdaterApp(tk.Tk):
         self._close_on_launch_var = tk.BooleanVar(
             value=bool(self._cfg.get("close_on_launch", False)))
         self._auto_mods_var = tk.BooleanVar(
-            value=bool(self._cfg.get("auto_install_mods", True)))
+            value=bool(self._cfg.get("auto_install_mods", False)))
         # Off by default. Recommended addons are a taste call, not a fix, and
         # silently dropping a dozen of them into a hand-curated AddOns folder
         # on first run is not something to do without being asked. The ADDONS
@@ -5172,22 +5228,21 @@ class EqUpdaterApp(tk.Tk):
 
         discovered = self._discover_existing_mods(out)
 
-        # "Install essential mods" (Settings → General) gates the
-        # full essential set. VanillaFixes is exempt — it's the loader the other
-        # mods depend on, so it's always auto-installed.
-        #
-        # VanillaFixes being exempt does *not* make it exempt from discovery:
-        # an existing VanillaFixes -- possibly a custom build -- is left
-        # exactly where it is like everything else.
-        auto_mods = cfg.get("auto_install_mods", True)
-        wanted = []
-        for mod in MODS_REGISTRY:
-            if mod["id"] in discovered:
-                continue
-            if mod.get("essential", False) and (auto_mods
-                                                or mod["id"] == "VanillaFixes"):
-                wanted.append(mod["id"])
-                self._mod_pending_state.setdefault(mod["id"], {})["enabled"] = True
+        # **DLLs go into the client only with consent.** The inherited
+        # default installed the whole essential set -- VanillaFixes always,
+        # even with the option off -- the moment a folder became usable.
+        # Every one of these is code the game loads, so the first run asks,
+        # once, and "Install essential mods" (Settings → General) remembers
+        # the answer. VanillaFixes is asked about with the rest: it is the
+        # loader that injects them, which makes it the one that matters most.
+        missing = [m for m in MODS_REGISTRY
+                   if m.get("essential", False) and m["id"] not in discovered]
+        auto_mods = bool(cfg.get("auto_install_mods", False))
+        if missing and not auto_mods and not cfg.get("essential_mods_asked"):
+            auto_mods = self._ask_essential_mods(missing)
+        wanted = [m["id"] for m in missing] if auto_mods else []
+        for mid in wanted:
+            self._mod_pending_state.setdefault(mid, {})["enabled"] = True
 
         if discovered:
             self._log_line(
@@ -5205,6 +5260,28 @@ class EqUpdaterApp(tk.Tk):
         self._status_var.set("Downloading mods…")
         threading.Thread(target=self._apply_mods_worker,
                          args=(out,), daemon=True).start()
+
+    def _ask_essential_mods(self, mods: list) -> bool:
+        """The one-time first-run question. Records that it was asked, and
+        the answer, so it is never asked again; Settings changes it later."""
+        from tkinter import messagebox
+        names = "\n".join("    • %s" % m["name"] for m in mods)
+        yes = messagebox.askyesno(
+            "Install essential mods?",
+            "%s can install these client mods:\n\n%s\n\n"
+            "They are DLLs the game loads at start-up, downloaded from each "
+            "mod's own release page. Nothing is installed unless you say "
+            "yes.\n\nYou can change this later in Settings → Install "
+            "essential mods, or pick mods one at a time on the MODS tab.\n\n"
+            "Install them now?" % (branding.APP_NAME, names),
+            parent=self)
+
+        def _merge(c):
+            c["essential_mods_asked"] = True
+            c["auto_install_mods"] = bool(yes)
+        self._cfg = update_config(_merge)
+        self._auto_mods_var.set(bool(yes))
+        return bool(yes)
 
     def _discover_existing_mods(self, client_dir: str) -> set:
         """Record every registry mod whose files are already in the client.
@@ -5285,6 +5362,19 @@ class EqUpdaterApp(tk.Tk):
 
             needs_install   = enabled and not is_installed
             needs_uninstall = not enabled and is_installed
+
+            # **Never install over files nobody gave us.** A discovered mod is
+            # recorded unmanaged, enabled, and with no version -- which reads
+            # as "wanted and not installed" above, so any Apply (the first-run
+            # install included) would have written EqUpdater's build over the
+            # user's own DLL. Adoption is the way in, not this. A record that
+            # carries an error was ours when the install failed, so a retry
+            # may still finish the job.
+            owned = bool(state.get("managed", bool(installed_ver)))
+            if (needs_install and not force and not owned
+                    and not state.get("error")
+                    and mod_files_on_disk(mod, client_dir)):
+                needs_install = False
 
             needs_version_lookup = needs_install or (enabled and is_installed and not ignore_upd)
             latest_ver  = None
@@ -5370,13 +5460,16 @@ class EqUpdaterApp(tk.Tk):
                     if mod.get("register_dll"):
                         add_dll(client_dir, mod["register_dll"])
                     resolved_ver = mod.pop("_resolved_version", None) or latest_ver or "unknown"
-                    mods_cfg[mid] = {
-                        "enabled":           True,
-                        "installed_version": resolved_ver,
-                        "installed_files":   written,
-                        "ignore_updates":    ignore_upd,
-                        "error":             None,
-                    }
+                    # A full provenance record, fingerprint included: without
+                    # one a first install could never be told apart from one
+                    # the user has since edited.
+                    mods_cfg[mid] = new_mod_record(
+                        managed=True, enabled=True,
+                        installed_version=resolved_ver,
+                        installed_files=written,
+                        content_hash=files_hash(client_dir, written),
+                        source_url=mod.get("repo_url"))
+                    mods_cfg[mid]["ignore_updates"] = ignore_upd
                     if mid == "dxvk":
                         set_dxvk_notice = True
                     log(f"  \u2713 {mod['name']} installed.")
@@ -5647,61 +5740,79 @@ class EqUpdaterApp(tk.Tk):
         found.sort(key=str.lower)
         return found
 
+    @staticmethod
+    def _mpq_record(records: dict, filename: str):
+        """A pack's record, matched case-insensitively: Windows does not care
+        whether the file is patch-O.mpq or Patch-O.MPQ, so neither may this."""
+        lc = filename.lower()
+        return next((r for k, r in (records or {}).items()
+                     if k.lower() == lc and isinstance(r, dict)), None)
+
+    @staticmethod
+    def _mpq_save_record(filename: str, record):
+        """Write (or, with None, drop) one pack's record. Safe from a worker
+        thread: update_config holds the config lock."""
+        def _merge(c):
+            recs = c.setdefault("mpq", {})
+            for k in [k for k in recs if k.lower() == filename.lower()]:
+                del recs[k]
+            if record is not None:
+                recs[filename] = record
+        update_config(_merge)
+
     def _mpq_check(self):
-        """Scan Data/ for lettered patches; for the ones we know (registry),
-        compare the on-disk SHA256 to the server's to flag updates. Feeds the
-        INSTALLED/AVAILABLE lists and the tab badge; the sha check runs in the
-        background so the list appears immediately."""
+        """Scan Data/ for lettered patches and ask each *linked* pack's source
+        what it publishes now. Feeds the INSTALLED/AVAILABLE lists and the
+        tab badge; the source checks run in the background so the list
+        appears immediately.
+
+        A pack nobody linked is not checked at all. Its file name matching
+        one of ours is not evidence of where it came from, and comparing it
+        with a source it may have nothing to do with would produce exactly
+        the confident wrong answer this updater exists to avoid."""
         installed_files = self._scan_mpq_patches()
         installed_lc    = {f.lower() for f in installed_files}
-        self._mpq_installed_rows = [
-            {"file": f, "entry": mpq_patch_for(f), "update": False}
-            for f in installed_files]
+        records = load_config().get("mpq", {}) or {}
+        rows = []
+        for f in installed_files:
+            rec = self._mpq_record(records, f)
+            src = mpq.source_of(rec, f)
+            rows.append({"file": f, "entry": mpq_patch_for(f), "record": rec,
+                         "source": src,
+                         "state": None if src else "unmanaged",
+                         "update": False})
+        self._mpq_installed_rows = rows
         self._mpq_available_rows = [
             e for e in MPQ_PATCHES if e["file"].lower() not in installed_lc]
         self._render_mpq()
 
         out = self._game_path.get().strip()
         data_dir = os.path.join(out, "Data") if out else ""
-        known = [r for r in self._mpq_installed_rows if r["entry"]]
-        if not (known and data_dir):
+        linked = [r for r in rows if r["source"]]
+        if not (linked and data_dir):
             self._mpq_updates_count = 0
             self._draw_nav_tab("MPQ")
             return
 
-        records = load_config().get("mpq", {})
-
         def worker():
             results = {}
-            for row in known:
-                name = row["file"]
-                saved = records.get(name) or {}
+            for row in linked:
+                name, rec = row["file"], row["record"]
                 try:
-                    server = fetch_mpq_sha256(row["entry"]["url"])
                     local = sha256_file(os.path.join(data_dir, name))
+                except OSError:
+                    results[name] = ("unverifiable", False)
+                    continue
+                try:
+                    remote, failed = resolve_mpq_source(row["source"], name), False
                 except Exception:
                     # Could not ask. Not an update, not an error the user has
                     # to clear - just an unknown, and unknowns are left alone.
-                    results[name] = ("unverifiable", False)
-                    continue
-
-                if not saved.get("managed"):
-                    # **A texture pack EqUpdater did not install.** A patch
-                    # MPQ carries no version, so the only comparison possible
-                    # is "these bytes differ from the ones the server ships
-                    # today" - which is equally true of an older build, a
-                    # newer one, and one the user made themselves. Replacing
-                    # somebody's custom textures on the strength of that is
-                    # not an update, it is a deletion with a progress bar.
-                    results[name] = ("unmanaged", False)
-                elif saved.get("sha") and local != saved["sha"]:
-                    # Ours, but not as we left it: edited, or replaced by
-                    # something else since.
-                    results[name] = ("modified", False)
-                elif server != local:
-                    results[name] = ("updateAvailable", True)
-                else:
-                    results[name] = ("upToDate", False)
+                    remote, failed = None, True
+                results[name] = mpq.judge(rec, local, remote, failed)
+                settled = mpq.settle(rec, local, remote)
+                if settled:
+                    self._mpq_save_record(name, settled)
 
             def apply():
                 count = 0
@@ -5723,23 +5834,43 @@ class EqUpdaterApp(tk.Tk):
         installed = getattr(self, "_mpq_installed_rows", [])
         available = getattr(self, "_mpq_available_rows", [])
         busy = getattr(self, "_mpq_busy", None)
+        busy_text = getattr(self, "_mpq_busy_text", "Downloading…")
 
         self._mpq_section_header("INSTALLED", installed)
         if self._mpq_sections_open.get("INSTALLED", True):
             for row in installed:
                 entry  = row["entry"]
-                name   = entry["name"] if entry else row["file"]
+                src    = row["source"]
+                fname  = row["file"]
+                name   = entry["name"] if entry else fname
                 desc   = entry["description"] if entry else ""
-                action = ("Update", entry) if (row["update"] and entry) else None
-                self._mpq_row(name, row["file"], desc, action,
-                              busy == row["file"], row.get("state"))
+                state  = row.get("state")
+                button = None
+                if row["update"] and src:
+                    button = ("Update", lambda r=row, n=name: self._mpq_fetch(
+                        r["file"], r["source"], n))
+                if src:
+                    source_line = ("Source: " + mpq.describe_source(src),
+                                   "Unlink", lambda f=fname: self._mpq_unlink(f))
+                else:
+                    source_line = ("Source: not linked", "Link source…",
+                                   lambda f=fname: self._open_mpq_link_dialog(f))
+                self._mpq_row(name, fname, desc,
+                              busy=busy_text if busy == fname else None,
+                              button=button, state=state,
+                              replace=(lambda r=row: self._mpq_replace(r))
+                              if src and state in mpq.REPLACEABLE else None,
+                              source_line=source_line)
 
         self._mpq_section_header("AVAILABLE", available)
         if self._mpq_sections_open.get("AVAILABLE", True):
             for entry in available:
                 self._mpq_row(entry["name"], entry["file"],
-                              entry["description"], ("Install", entry),
-                              busy == entry["file"])
+                              entry["description"],
+                              busy=busy_text if busy == entry["file"] else None,
+                              button=("Install", lambda en=entry: self._mpq_fetch(
+                                  en["file"], mpq.catalogue_source(en["file"]),
+                                  en["name"])))
 
     def _mpq_section_header(self, title: str, rows: list):
         f = self._mpq_inner
@@ -5769,29 +5900,47 @@ class EqUpdaterApp(tk.Tk):
                                                      padx=self._px(8))
 
     #: MPQ state -> (label, colour, tooltip). A patch MPQ carries no version,
-    #: so "differs from what the server ships today" is the only comparison
+    #: so "differs from what the source ships today" is the only comparison
     #: available -- and it is equally true of an older pack, a newer one, and
     #: one somebody made themselves. These say which is which instead of
     #: calling all three out of date and offering to replace them.
     _MPQ_STATES = {
-        "upToDate":     ("Up to date", None,
-                         "Matches the pack on the server."),
-        "unmanaged":    ("Installed · version not tracked", None,
-                         "EqUpdater did not install this pack. A patch MPQ "
-                         "has no version to compare, so it is left alone "
-                         "rather than replaced with the server's copy."),
-        "modified":     ("Modified locally", "#d4b43c",
-                         "This file is not the one EqUpdater installed. "
-                         "Automatic updates are held back."),
-        "unverifiable": ("Unable to verify", None,
-                         "The server copy could not be checked, so nothing "
-                         "is replaced."),
+        "upToDate":      ("Up to date", None,
+                          "Matches the pack its source publishes."),
+        "unmanaged":     ("Not linked", None,
+                          "EqUpdater did not install this pack and does not "
+                          "know where it came from, so it cannot check it "
+                          "for updates. Link its source below; linking "
+                          "changes no files."),
+        "modified":      ("Modified locally", "#d4b43c",
+                          "This file has changed since EqUpdater installed "
+                          "or linked it. Automatic updates are held back."),
+        "unverifiable":  ("Unable to verify", None,
+                          "The source could not be checked, so nothing is "
+                          "replaced."),
+        "sourceDiffers": ("Differs from source", "#d4b43c",
+                          "This is not the file its source publishes now. An "
+                          "MPQ carries no version, so it could be older, "
+                          "newer or edited - it is left alone. Replace "
+                          "installs the source's copy and keeps yours as a "
+                          ".bak file."),
+        "unconfirmed":   ("Source not confirmed", None,
+                          "The source publishes no checksum, so EqUpdater "
+                          "cannot prove this file is its copy. Replace "
+                          "installs the source's copy, keeps yours as a "
+                          ".bak file, and tracks updates from then on."),
     }
 
-    def _mpq_row(self, name, filename, description, action, busy, state=None):
-        """One patch row: name (and filename), an Install/Update button or a
-        'Downloading…' label, and the description underneath. `action` is
-        (label, registry_entry) or None."""
+    def _mpq_row(self, name, filename, description, busy=None, button=None,
+                 state=None, replace=None, source_line=None):
+        """One patch row: name (and filename), then on the right either a
+        busy label, a button, or the state with its explanation; the
+        description underneath; and for installed packs, where the pack
+        comes from and the way to change that.
+
+        `button` is (label, callback). `replace` is a callback offered as a
+        quiet "Replace…" beside a held-back state. `source_line` is (text,
+        link label, callback)."""
         f = self._mpq_inner
         box = tk.Frame(f, bg=C_PANEL)
         box.pack(fill="x", pady=self._px(4))
@@ -5804,20 +5953,30 @@ class EqUpdaterApp(tk.Tk):
             tk.Label(top, text=f"  {filename}", font=self._font(9),
                      fg=C_TEXT_DIM, bg=C_PANEL).pack(side="left")
         if busy:
-            tk.Label(top, text="Downloading…", font=self._font(10),
+            tk.Label(top, text=busy, font=self._font(10),
                      fg=C_TEXT_DIM, bg=C_PANEL).pack(side="right",
                                                      padx=self._px(8))
-        elif action:
-            label, entry = action
+        elif button:
+            label, callback = button
             btn = tk.Label(top, text=label, font=self._font(10, bold=True),
                            fg="#000", bg=C_GOLD, cursor="hand2",
                            padx=self._px(12), pady=self._px(2))
             btn.pack(side="right", padx=self._px(8))
-            btn.bind("<Button-1>", lambda e, en=entry: self._mpq_install(en))
+            btn.bind("<Button-1>", lambda e, cb=callback: cb())
             btn.bind("<Enter>", lambda e: btn.configure(bg=C_GOLD_LT))
             btn.bind("<Leave>", lambda e: btn.configure(bg=C_GOLD))
         elif state in self._MPQ_STATES:
             text, colour, tip = self._MPQ_STATES[state]
+            if replace:
+                rep = tk.Label(top, text="Replace…", font=self._font(10),
+                               fg=C_TEXT_DIM, bg=C_PANEL, cursor="hand2")
+                rep.pack(side="right", padx=self._px(8))
+                rep.bind("<Button-1>", lambda e, cb=replace: cb())
+                rep.bind("<Enter>", lambda e, w=rep: w.configure(fg=C_ERR))
+                rep.bind("<Leave>", lambda e, w=rep: w.configure(fg=C_TEXT_DIM))
+                self._set_tooltip(
+                    rep, "Install the source's copy over this one. You are "
+                         "asked first, and your file is kept.")
             lbl = tk.Label(top, text=text, font=self._font(10),
                            fg=colour or C_TEXT_DIM, bg=C_PANEL)
             lbl.pack(side="right", padx=self._px(8))
@@ -5827,45 +5986,239 @@ class EqUpdaterApp(tk.Tk):
                      fg=C_TEXT_DIM, bg=C_PANEL, anchor="w",
                      wraplength=self._px(620), justify="left").pack(
                      fill="x", padx=self._px(8), pady=(self._px(2), 0))
+        if source_line:
+            text, link_text, callback = source_line
+            line = tk.Frame(box, bg=C_PANEL)
+            line.pack(fill="x", padx=self._px(8), pady=(self._px(2), 0))
+            tk.Label(line, text=text, font=self._font(9), fg=C_TEXT_DIM,
+                     bg=C_PANEL, anchor="w").pack(side="left")
+            if not busy:
+                link = tk.Label(line, text="  ·  " + link_text,
+                                font=self._font(9, bold=True), fg=C_MOD_HL,
+                                bg=C_PANEL, cursor="hand2")
+                link.pack(side="left")
+                link.bind("<Button-1>", lambda e, cb=callback: cb())
+                link.bind("<Enter>", lambda e, w=link: w.configure(fg=C_GOLD_LT))
+                link.bind("<Leave>", lambda e, w=link: w.configure(fg=C_MOD_HL))
 
-    def _mpq_install(self, entry):
+    def _mpq_start(self, filename: str, text: str) -> str | None:
+        """Mark one pack busy and return the Data folder, or None if another
+        pack is busy or there is no game folder."""
         if getattr(self, "_mpq_busy", None):
-            return                                   # one download at a time
+            return None                              # one at a time
         out = self._game_path.get().strip()
         if not out:
             self._log_line("Set the game folder first.\n", "err")
-            return
-        data_dir = os.path.join(out, "Data")
-        self._mpq_busy = entry["file"]
+            return None
+        self._mpq_busy, self._mpq_busy_text = filename, text
         self._render_mpq()
-        self._log_line(f"\nDownloading {entry['name']}…\n", "acct")
+        return os.path.join(out, "Data")
+
+    def _mpq_finish(self):
+        self._mpq_busy = None
+        self._mpq_check()                            # re-scan + re-check + badge
+
+    def _mpq_fetch(self, filename: str, source: dict, label: str,
+                   replace: bool = False):
+        """Install, update or replace one pack from `source`.
+
+        An ordinary update only goes ahead if the file is still exactly what
+        was recorded -- it may have changed since the row was drawn -- and
+        then overwrites it, because it is the source's own older copy. A
+        replace is the user overruling a held-back state after a warning,
+        and keeps their file beside the new one."""
+        data_dir = self._mpq_start(filename, "Downloading…")
+        if data_dir is None:
+            return
+        self._log_line(f"\nDownloading {label}…\n", "acct")
+        path = os.path.join(data_dir, filename)
 
         def worker():
             err = None
             try:
-                download_mpq_patch(entry, data_dir)
+                if not replace and os.path.exists(path):
+                    rec = self._mpq_record(load_config().get("mpq", {}), filename)
+                    if not (rec and rec.get("sha")
+                            and sha256_file(path) == rec["sha"]):
+                        raise RuntimeError(
+                            "the file changed since it was checked; "
+                            "nothing was replaced")
+                remote = resolve_mpq_source(source, filename)
+                sha = download_mpq(remote, data_dir, filename,
+                                   keep_existing=replace)
                 # Ours now, and this is the fingerprint of what we wrote -
                 # which is what lets a later run tell an edited pack from an
                 # untouched one, instead of calling both "out of date".
-                sha = sha256_file(os.path.join(data_dir, entry["file"]))
-                update_config(lambda c, f=entry["file"], h=sha:
-                              c.setdefault("mpq", {}).__setitem__(
-                                  f, {"managed": True,
-                                      "installed_by": branding.APP_NAME,
-                                      "sha": h,
-                                      "url": entry.get("url")}))
+                self._mpq_save_record(filename, mpq.installed_record(
+                    sha=sha, source=source, remote=remote,
+                    installed_by=branding.APP_NAME))
             except Exception as e:
                 err = str(e)
 
             def done():
-                self._mpq_busy = None
                 if err:
-                    self._log_line(f"✗  {entry['name']} failed: {err}\n", "err")
+                    self._log_line(f"✗  {label} failed: {err}\n", "err")
                 else:
-                    self._log_line(f"✓  {entry['name']} installed.\n", "ok")
-                self._mpq_check()                    # re-scan + re-check + badge
+                    self._log_line(f"✓  {label} installed.\n", "ok")
+                self._mpq_finish()
             self.after(0, done)
         threading.Thread(target=worker, daemon=True).start()
+
+    def _mpq_replace(self, row):
+        from tkinter import messagebox
+        fname = row["file"]
+        if not messagebox.askyesno(
+                "Replace %s?" % fname,
+                "%s will be replaced with the copy from:\n    %s\n\n"
+                "Your current file is not deleted. It is renamed to\n"
+                "    %s.<date>.bak\n"
+                "in the Data folder, where the game ignores it. Rename it "
+                "back to undo.\n\nReplace it?"
+                % (fname, mpq.describe_source(row["source"]), fname),
+                parent=self):
+            return
+        entry = row.get("entry")
+        self._mpq_fetch(fname, row["source"],
+                        entry["name"] if entry else fname, replace=True)
+
+    def _mpq_unlink(self, filename: str):
+        """Forget where a pack came from. The file stays exactly where it is;
+        it simply stops being checked, as if it had been installed by hand."""
+        self._mpq_save_record(filename, None)
+        self._log_line("\n%s is no longer linked to a source; the file is "
+                       "untouched.\n" % filename, "acct")
+        self._mpq_check()
+
+    def _mpq_link(self, filename: str, source: dict):
+        """Record that `filename` comes from `source`. **Changes no file.**
+
+        The source is asked what it publishes now and the pack is
+        fingerprinted as it is. If the two agree, the pack is tracked from
+        here like one EqUpdater installed; if they do not, the link is kept
+        and the pack is held as differing from its source. If the source
+        cannot be reached, nothing is recorded: a link that was never
+        checked would read as one that was."""
+        data_dir = self._mpq_start(filename, "Checking…")
+        if data_dir is None:
+            return
+        where = mpq.describe_source(source)
+
+        def worker():
+            err, rec = None, None
+            try:
+                local = sha256_file(os.path.join(data_dir, filename))
+                remote = resolve_mpq_source(source, filename)
+                rec = mpq.linked_record(sha=local, source=source, remote=remote)
+                self._mpq_save_record(filename, rec)
+            except Exception as e:
+                err = str(e)
+
+            def done():
+                if err:
+                    self._log_line("\n✗  Could not link %s to %s: %s\n"
+                                   "Nothing was changed.\n"
+                                   % (filename, where, err), "err")
+                else:
+                    self._log_line("\n%s is now linked to %s. Its file was "
+                                   "not changed.\n%s\n"
+                                   % (filename, where, mpq.link_outcome(rec)),
+                                   "acct")
+                self._mpq_finish()
+            self.after(0, done)
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _open_mpq_link_dialog(self, filename: str):
+        """Ask where a manually installed pack comes from: one of the packs
+        EqUpdater lists, or a link the user pastes."""
+        if self._settings_overlay is not None:
+            return
+        ov = tk.Frame(self, bg="#0a0a0e")
+        ov.place(x=0, y=0, width=WIN_W, height=WIN_H)
+        ov.bind("<Button-1>", lambda e: self._close_settings())
+        self._settings_overlay = ov
+        self.bind("<Escape>", lambda e: self._close_settings())
+
+        P_BG, P_HDR, P_BDR, P_INP = C_PANEL, C_HDR, C_PANEL_BDR, "#0f0b16"
+        MW = self._px(600)
+        MH = self._px(260 + 28 * len(MPQ_PATCHES))
+        panel = tk.Frame(ov, bg=P_BG, highlightthickness=1,
+                         highlightbackground=P_BDR, highlightcolor=P_BDR)
+        panel.place(x=(WIN_W - MW) // 2, y=(WIN_H - MH) // 2 - self._px(20),
+                    width=MW, height=MH)
+
+        hdr = tk.Frame(panel, bg=P_HDR, height=self._px(46))
+        hdr.pack(fill="x")
+        hdr.pack_propagate(False)
+        tk.Label(hdr, text="LINK TEXTURE PACK SOURCE",
+                 font=self._font(13, bold=True),
+                 fg=C_PURPLE, bg=P_HDR).pack(side="left", padx=self._px(18))
+        x_btn = tk.Label(hdr, text="✕", font=self._font(12),
+                         fg=C_TEXT_DIM, bg=P_HDR, cursor="hand2")
+        x_btn.pack(side="right", padx=self._px(16))
+        x_btn.bind("<Button-1>", lambda e: self._close_settings())
+        x_btn.bind("<Enter>",    lambda e: x_btn.configure(fg=C_TEXT))
+        x_btn.bind("<Leave>",    lambda e: x_btn.configure(fg=C_TEXT_DIM))
+        tk.Frame(panel, bg=P_BDR, height=self._px(1)).pack(fill="x")
+
+        body = tk.Frame(panel, bg=P_BG)
+        body.pack(fill="both", expand=True, padx=self._px(22),
+                  pady=(self._px(14), self._px(12)))
+        tk.Label(body, text="Where does %s come from?" % filename,
+                 font=self._font(10, bold=True), fg=C_GOLD,
+                 bg=P_BG).pack(anchor="w")
+
+        match = mpq_patch_for(filename)
+        choice = tk.StringVar(value=("cat:" + match["file"]) if match else "url")
+
+        def radio(text, value):
+            tk.Radiobutton(body, text=" " + text, variable=choice, value=value,
+                           font=self._font(10), fg=C_TEXT, bg=P_BG,
+                           activebackground=P_BG, activeforeground=C_TEXT,
+                           selectcolor=P_INP, highlightthickness=0, bd=0,
+                           cursor="hand2").pack(anchor="w",
+                                                pady=(self._px(6), 0))
+        for entry in MPQ_PATCHES:
+            radio("%s (%s) from the %s list"
+                  % (entry["name"], entry["file"], branding.APP_NAME),
+                  "cat:" + entry["file"])
+        radio("Somewhere else:", "url")
+
+        url_var = tk.StringVar()
+        ent = tk.Entry(body, textvariable=url_var, bg=P_INP, fg=C_TEXT,
+                       insertbackground=C_GOLD, relief="flat", font=FONT_MONO,
+                       highlightthickness=1, highlightbackground=P_BDR,
+                       highlightcolor=C_GOLD)
+        ent.pack(fill="x", ipady=self._px(6), pady=(self._px(4), self._px(4)))
+        ent.bind("<FocusIn>", lambda e: choice.set("url"))
+        tk.Label(body,
+                 text="A GitHub or Codeberg repository or release download, "
+                      "or a dl.octowow.st link. Linking changes no files.",
+                 font=self._font(9), fg=C_TEXT_DIM, bg=P_BG,
+                 wraplength=MW - self._px(50), justify="left").pack(anchor="w")
+        err = tk.Label(body, text="", font=self._font(9), fg=C_ERR, bg=P_BG,
+                       wraplength=MW - self._px(50), justify="left")
+        err.pack(anchor="w")
+
+        def submit():
+            value = choice.get()
+            if value.startswith("cat:"):
+                source = mpq.catalogue_source(value[4:])
+            else:
+                try:
+                    source = mpq.parse_source(url_var.get())
+                except ValueError as e:
+                    err.configure(text=str(e))
+                    return
+            self._close_settings()
+            self._mpq_link(filename, source)
+
+        btn = tk.Label(body, text="Link", font=self._font(11, bold=True),
+                       fg=C_TEXT, bg=P_BDR, cursor="hand2",
+                       padx=self._px(16), pady=self._px(7))
+        btn.pack(anchor="e", pady=(self._px(6), 0))
+        btn.bind("<Button-1>", lambda e: submit())
+        btn.bind("<Enter>", lambda e: btn.configure(bg=C_GOLD, fg="#000"))
+        btn.bind("<Leave>", lambda e: btn.configure(bg=P_BDR, fg=C_TEXT))
 
     # ── addons engine (app side) ─────────────────────────────────────────────
 
@@ -7178,8 +7531,9 @@ class EqUpdaterApp(tk.Tk):
         cb_auto_mods.pack(anchor="w", pady=(self._px(10), 0))
         self._add_tooltip(
             cb_auto_mods,
-            "VanillaFixes will always be installed, even when this "
-            "option is turned off")
+            "Off by default. When on, the essential mods (VanillaFixes "
+            "and the DLLs it loads) are installed wherever they are "
+            "missing. Mods already in the client are never replaced.")
         tk.Checkbutton(rcol, text=" Install recommended addons",
                        variable=self._auto_addons_var,
                        command=self._toggle_auto_addons,
@@ -7402,8 +7756,11 @@ class EqUpdaterApp(tk.Tk):
 
     def _toggle_auto_mods(self):
         val = self._auto_mods_var.get()
-        self._cfg = update_config(
-            lambda c: c.__setitem__("auto_install_mods", val))
+
+        def _merge(c):
+            c["auto_install_mods"] = val
+            c["essential_mods_asked"] = True   # a choice made here is an answer
+        self._cfg = update_config(_merge)
         # Install the missing essential mods only when Settings is closed;
         # turning it back off cancels the pending install.
         self._auto_mods_retrigger = val
@@ -7436,6 +7793,8 @@ class EqUpdaterApp(tk.Tk):
             if (state.get("installed_version")
                     and mod_installed_files_present(mod, out)):
                 continue  # already installed
+            if mod_files_on_disk(mod, out):
+                continue  # somebody else's copy: shown for adoption, not replaced
             self._mod_pending_state.setdefault(mod["id"], {})["enabled"] = True
             pending = True
         if not pending:

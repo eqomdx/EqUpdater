@@ -278,9 +278,25 @@ selection, and client tweaks patched into `WoW.exe`. Unchanged from Octo
 Updater, which did it well.
 
 **Texture packs (MPQ)** — same ownership rules. A patch MPQ has no version,
-so a pack EqUpdater did not install reads *Installed · version not tracked*
-rather than pretending to know whether it is current. Your custom textures
-are not "out of date".
+so a pack EqUpdater did not install reads *Not linked* rather than pretending
+to know whether it is current. Your custom textures are not "out of date".
+
+To have one checked, **Link source…** on its row and say where it came from:
+a pack from EqUpdater's list, a GitHub or Codeberg repository (its latest
+release), a release download link, or a `dl.octowow.st` link. Linking
+changes no file. EqUpdater fingerprints the pack and asks the source what it
+publishes now:
+
+- **Same bytes** — tracked from then on, exactly like a pack EqUpdater
+  installed. When the source publishes a new file, *Update* is offered.
+- **Different bytes** — *Differs from source*. It could be older, newer or
+  edited, and nothing in an MPQ says which, so it is left alone.
+- **No checksum published** (older GitHub assets, Codeberg) — *Source not
+  confirmed*, for the same reason.
+
+Either of the last two offers **Replace…**, which asks first, installs the
+source's copy and keeps yours beside it as `patch-X.mpq.<date>.bak`, which
+the game ignores. **Unlink** forgets the source and leaves the file alone.
 
 **DLL mods** — `dlls.txt` is written in a defined load order, its cache is
 invalidated on every rewrite, and every enabled mod is re-registered at the
@@ -288,9 +304,17 @@ end of an apply and again on PLAY. The official launcher keeps its own mod
 list and can drop entries it does not know about; this repairs that, which is
 configuration repair and not replacement of anybody's DLL.
 
+**No DLL without consent** — *Install essential mods* is off by default. The
+first time a client is ready, EqUpdater asks once whether to install the
+essential set, VanillaFixes included; the answer is remembered and can be
+changed in Settings. Octo Updater's own "on" is not carried across, because
+it was on by default rather than by anybody's choice.
+
 **First run against an existing client** — EqUpdater looks before it touches.
 Mods already installed are recorded as found, shown on the MODS page and left
-alone; only genuinely missing essentials are installed.
+alone. Only genuinely missing essentials are installed, and only with consent.
+Nothing — not the first-run install, not turning the setting on later, not an
+Apply — installs over a DLL that EqUpdater found rather than installed.
 
 **Windows and Linux.** **Custom repositories** for any addon. **Per-component
 install and remove.** **Update badges** that count only what can actually be

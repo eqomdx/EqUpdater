@@ -185,8 +185,11 @@ def backup_file(path: str, label: str = "migration") -> str | None:
 
 #: Keys carried across verbatim. Anything not listed is either regenerated
 #: (caches, timestamps) or belongs to a product that no longer exists.
+#: `auto_install_mods` is deliberately not carried: Octo Updater turned it on
+#: by default, so a stored "yes" there is not a choice anybody made, and
+#: installing DLLs is something EqUpdater asks about itself.
 _CARRY_KEYS = (
-    "out_dir", "locale", "tweaks", "minimize_on_play", "auto_install_mods",
+    "out_dir", "locale", "tweaks", "minimize_on_play",
     "ignore_speech", "pending_reconcile", "dxvk_notice_pending",
     "addons_catalog_cache", "chat_commands_seeded", "recommended_addons_seeded",
 )

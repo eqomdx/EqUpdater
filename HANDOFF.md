@@ -118,13 +118,42 @@ Important: the hosted endpoint could not be directly fetched from the developmen
 
 Latest validation:
 
-`Ran 118 tests ... OK`
+`Ran 157 tests ... OK` (Windows, 2026-09-24, after the consent and texture-pack pass)
 
 Command used in a virtual display:
 
 `xvfb-run -a python -m unittest discover -s tests -t .`
 
 The Windows installer also runs the suite before building. It intentionally decides success from Python's exit code rather than treating unittest's stderr output as a PowerShell error.
+
+## Consent and texture-pack sources (2026-09-24, second pass)
+
+Closes the two remaining points of the "manage only what you were given"
+feedback.
+
+**DLLs are opt-in.** `auto_install_mods` defaults to `False` everywhere. The
+first time a client is usable, `_ask_essential_mods` asks once (VanillaFixes
+included, no exemption), stores `essential_mods_asked` and the answer; the
+Settings toggle also counts as an answer. `config._CARRY_KEYS` no longer
+carries Octo Updater's `auto_install_mods`.
+
+**Fixed on the way: discovered DLLs were overwritten.** Discovery recorded
+existing mods as unmanaged, enabled, no version; `_apply_mods_worker` read
+that as "wanted, not installed" and installed over them on any Apply,
+including the first-run one. The worker now refuses to install over files on
+disk it does not own (unless `force`, or the record carries a failed-install
+error), and `_install_missing_essential_mods` skips them. Fresh installs now
+write a full `new_mod_record` with a fingerprint.
+
+**Texture packs can be linked to a source.** `equpdater/mpq.py` is the pure
+logic (parse, pick release asset, judge, settle), tested in
+`tests/test_mpq.py`. Sources: catalogue entry, GitHub/Codeberg latest release
+(optionally a named asset), or a `dl.octowow.st` URL with a `.sha256`
+sidecar. Only linked packs are checked. A link whose bytes match the source
+is tracked like an install; one that differs is `sourceDiffers` and never
+updated; a release with no digest is `unconfirmed`. **Replace…** renames the
+old file to `<file>.<stamp>.bak` in Data. Old `mpq` records (managed + sha +
+url) read as catalogue installs.
 
 ## Historical bugs already fixed
 
@@ -140,6 +169,9 @@ Do not reintroduce these:
 - PLAY gradient leaving a narrow unpainted strip at its right edge.
 - OpenDyslexic at 0.82 scale being too small.
 - Settings bottom attribution/support strip taking space and becoming unreadably small.
+- Essential mods (and VanillaFixes unconditionally) installed without asking.
+- Apply installing over a discovered, unmanaged DLL.
+- Unlinked texture packs compared with the catalogue by file name.
 
 ## Next recommended checks
 

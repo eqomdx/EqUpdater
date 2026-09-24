@@ -96,6 +96,12 @@ class TestMigrateConfig(unittest.TestCase):
         setting; it is stale data that would be believed."""
         self.assertNotIn("updater_release_cache", self.out)
 
+    def test_dll_consent_is_not_inherited(self):
+        """Octo Updater installed essential mods by default. Its stored "yes"
+        was nobody's decision, so EqUpdater asks for itself."""
+        out = config.migrate_config(dict(LEGACY, auto_install_mods=True))
+        self.assertNotIn("auto_install_mods", out)
+
     def test_schema_is_stamped(self):
         self.assertEqual(self.out["schema"], config.SCHEMA_VERSION)
 
