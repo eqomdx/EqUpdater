@@ -160,6 +160,23 @@ class TestPlannerReachesTheUI(unittest.TestCase):
                 self.assertTrue(state == "updateAvailable"
                                 or state in self.m.EqUpdaterApp._MPQ_STATES)
 
+    def test_reset_tweaks_asks_first(self):
+        """Reset throws away the user's values; it must not happen on one
+        click without a yes."""
+        from tkinter import messagebox
+        saved = []
+        real_ask, real_save = messagebox.askyesno, self.m.save_tweaks_config
+        self.m.save_tweaks_config = saved.append
+        try:
+            messagebox.askyesno = lambda *a, **k: False
+            self.app._reset_tweaks()
+            self.assertEqual(saved, [])
+            messagebox.askyesno = lambda *a, **k: True
+            self.app._reset_tweaks()
+            self.assertEqual(saved, [dict(self.m.TWEAKS_DEFAULTS)])
+        finally:
+            messagebox.askyesno, self.m.save_tweaks_config = real_ask, real_save
+
     def test_essential_mods_are_off_by_default(self):
         self.assertFalse(self.app._auto_mods_var.get())
 

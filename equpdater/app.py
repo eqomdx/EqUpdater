@@ -4524,11 +4524,24 @@ class EqUpdaterApp(tk.Tk):
         return result
 
     def _reset_tweaks(self):
+        """Put every tweak back to its default -- after asking. It throws
+        away the user's values and, with a client installed, patches
+        WoW.exe straight away, so one stray click must not do it."""
+        from tkinter import messagebox
+        out = self._game_path.get().strip()
+        patch_now = bool(out and os.path.exists(os.path.join(out, "WoW.exe")))
+        if not messagebox.askyesno(
+                "Reset tweaks?",
+                "Every tweak goes back to its default value"
+                + (", and WoW.exe is patched with the defaults now."
+                   if patch_now else ".")
+                + "\n\nYour current values are not kept.\n\nReset tweaks?",
+                icon="warning", default="no", parent=self):
+            return
         defaults = dict(TWEAKS_DEFAULTS)
         save_tweaks_config(defaults)
         self._refresh_tweaks_panel()
-        out = self._game_path.get().strip()
-        if out and os.path.exists(os.path.join(out, "WoW.exe")):
+        if patch_now:
             self._set_btn_busy("Patching…")
             self._status_var.set("Applying tweaks…")
             # Pass the same defaults that were saved
