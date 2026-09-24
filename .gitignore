@@ -1,0 +1,14 @@
+# Build output
+build/
+dist/
+*.spec.bak
+__pycache__/
+*.py[cod]
+
+# Never commit the built executable: it is large, it is per-platform, and it
+# is reproducible from source by the installer.
+EqUpdater.exe
+
+# Per-user runtime state, if anything ever writes beside the app
+config.json
+*.tmp
