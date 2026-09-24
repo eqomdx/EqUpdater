@@ -173,13 +173,10 @@ def _register_private_fonts() -> None:
         import ctypes
         from ctypes import wintypes
         gdi32 = ctypes.WinDLL("gdi32", use_last_error=True)
-        user32 = ctypes.WinDLL("user32", use_last_error=True)
         add_font = gdi32.AddFontResourceExW
         add_font.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.LPVOID]
         add_font.restype = wintypes.INT
         FR_PRIVATE = 0x10
-        WM_FONTCHANGE = 0x001D
-        HWND_BROADCAST = 0xFFFF
         for path in _bundled_font_paths():
             norm = os.path.normpath(path)
             if norm in _REGISTERED_PRIVATE_FONTS or not os.path.isfile(norm):
@@ -187,11 +184,13 @@ def _register_private_fonts() -> None:
             added = add_font(norm, FR_PRIVATE, None)
             if added:
                 _REGISTERED_PRIVATE_FONTS.add(norm)
-        if _REGISTERED_PRIVATE_FONTS:
-            try:
-                user32.SendMessageW(HWND_BROADCAST, WM_FONTCHANGE, 0, 0)
-            except Exception:
-                pass
+        # **No WM_FONTCHANGE broadcast.** Private fonts are invisible to
+        # other programs, so there is nothing to tell them -- and
+        # SendMessage(HWND_BROADCAST) waits for *every* top-level window on
+        # the desktop to answer. One that is not pumping messages (a game
+        # mid-load, or an earlier EqUpdater stuck here) blocked this call
+        # forever, before EqUpdater's window existed: a process in Task
+        # Manager with nothing on screen.
     except Exception:
         pass
 

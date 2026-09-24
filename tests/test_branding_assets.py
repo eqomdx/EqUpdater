@@ -38,6 +38,40 @@ class TestBrandingAssets(unittest.TestCase):
         self.assertGreaterEqual(FONT_SIZE_SCALE["opendyslexic"], 0.90)
         self.assertLessEqual(FONT_SIZE_SCALE["opendyslexic"], 0.95)
 
+    def test_font_registration_never_broadcasts(self):
+        """A WM_FONTCHANGE broadcast waits on every window on the desktop;
+        one busy game window hung EqUpdater before its window appeared."""
+        import ctypes
+        import tempfile
+        from unittest import mock
+        from equpdater import ui
+        calls = []
+
+        class FakeDLL:
+            def __init__(self, name, **kw):
+                self.name = name
+
+            def __getattr__(self, fn):
+                def call(*args):
+                    calls.append((self.name, fn))
+                    return 1
+                return call
+
+        with tempfile.NamedTemporaryFile(suffix=".ttf", delete=False) as f:
+            font = f.name
+        try:
+            with mock.patch.object(ui.os, "name", "nt"), \
+                 mock.patch.object(ctypes, "WinDLL", FakeDLL, create=True), \
+                 mock.patch.object(ui, "_extract_local_font_archives", lambda: None), \
+                 mock.patch.object(ui, "_bundled_font_paths", lambda: [font]), \
+                 mock.patch.object(ui, "_REGISTERED_PRIVATE_FONTS", set()):
+                ui._register_private_fonts()
+        finally:
+            os.remove(font)
+        self.assertIn(("gdi32", "AddFontResourceExW"), calls)
+        self.assertFalse([c for c in calls if c[1].startswith(("SendMessage",
+                                                                "PostMessage"))])
+
     def test_mac_metadata_stubs_are_not_imported_as_fonts(self):
         """The supplied OpenDyslexic archive carries __MACOSX/._*.otf stubs."""
         import shutil
