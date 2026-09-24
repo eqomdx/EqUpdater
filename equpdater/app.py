@@ -665,6 +665,12 @@ MPQ_PATCHES = [
         "name": "Octo Raid Visuals",
         "description": "Adds ground markers and sounds for boss abilities in raids.",
         "url":  "https://dl.octowow.st/client/latest/Data/patch-O.mpq",
+        # Where the pack is made. Shown as a credit and a link for the user's
+        # browser; downloads still come from OctoWoW's own copy above, which
+        # publishes a checksum and is reachable by an app (octowow.st/git,
+        # like the forum, answers apps with its DDoS check).
+        "author":   "Rook",
+        "homepage": "https://octowow.st/git/Rook/RaidVisuals-OctoWoW",
     },
 ]
 
@@ -6012,18 +6018,22 @@ class EqUpdaterApp(tk.Tk):
                 else:
                     source_line = ("Source: not linked", "Link source…",
                                    lambda f=fname: self._open_mpq_link_dialog(f))
+                # Credit only a pack known to be the listed one; a file that
+                # merely shares its name is not evidence of who made it.
+                listed = bool(entry and src and src.get("kind") == "catalogue")
                 self._mpq_row(name, fname, desc,
                               busy=busy_text if busy == fname else None,
                               button=button, state=state,
                               replace=(lambda r=row: self._mpq_replace(r))
                               if src and state in mpq.REPLACEABLE else None,
-                              source_line=source_line)
+                              source_line=source_line,
+                              credit=entry if listed else None)
 
         self._mpq_section_header("AVAILABLE", available)
         if self._mpq_sections_open.get("AVAILABLE", True):
             for entry in available:
                 self._mpq_row(entry["name"], entry["file"],
-                              entry["description"],
+                              entry["description"], credit=entry,
                               busy=busy_text if busy == entry["file"] else None,
                               button=("Install", lambda en=entry: self._mpq_fetch(
                                   en["file"], mpq.catalogue_source(en["file"]),
@@ -6089,7 +6099,7 @@ class EqUpdaterApp(tk.Tk):
     }
 
     def _mpq_row(self, name, filename, description, busy=None, button=None,
-                 state=None, replace=None, source_line=None):
+                 state=None, replace=None, source_line=None, credit=None):
         """One patch row: name (and filename), then on the right either a
         busy label, a button, or the state with its explanation; the
         description underneath; and for installed packs, where the pack
@@ -6143,6 +6153,25 @@ class EqUpdaterApp(tk.Tk):
                      fg=C_TEXT_DIM, bg=C_PANEL, anchor="w",
                      wraplength=self._px(620), justify="left").pack(
                      fill="x", padx=self._px(8), pady=(self._px(2), 0))
+        if credit and (credit.get("author") or credit.get("homepage")):
+            # "By <author> · Project page": who makes the pack, and where.
+            line = tk.Frame(box, bg=C_PANEL)
+            line.pack(fill="x", padx=self._px(8), pady=(self._px(2), 0))
+            if credit.get("author"):
+                tk.Label(line, text="By " + credit["author"],
+                         font=self._font(9), fg=C_TEXT_DIM,
+                         bg=C_PANEL).pack(side="left")
+            if credit.get("homepage"):
+                sep = "  ·  " if credit.get("author") else ""
+                page = tk.Label(line, text=sep + "Project page",
+                                font=self._font(9, bold=True), fg=C_MOD_HL,
+                                bg=C_PANEL, cursor="hand2")
+                page.pack(side="left")
+                page.bind("<Button-1>",
+                          lambda e, u=credit["homepage"]: self._open_url(u))
+                page.bind("<Enter>", lambda e, w=page: w.configure(fg=C_GOLD_LT))
+                page.bind("<Leave>", lambda e, w=page: w.configure(fg=C_MOD_HL))
+                self._set_tooltip(page, credit["homepage"])
         if source_line:
             text, link_text, callback = source_line
             line = tk.Frame(box, bg=C_PANEL)
