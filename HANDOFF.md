@@ -88,13 +88,28 @@ Do not silently present OpenDyslexic while rendering a fallback family.
 
 `equpdater/news.py` owns News fetching/parsing; `app.py` only renders.
 
-Primary source is the phpBB forum itself (forum 2 Announcements, forum 4
-Changelog): `fetch_forum_topics` reads the listing (`sk=tt&sd=d`), takes every
-`li.row`, and sorts by each topic's **start** date (never row order, never the
-last-post column); `fetch_topic_first_post` opens the canonical
-`viewtopic.php?t=<id>` and reads only the first `div.post#p<N>`. Announcements
-shows 1 topic, Changelog 8. `octonews.php` (the official launcher's JSON feed)
-is the fallback.
+The only source is the phpBB forum, read by the user's PC through
+`secure_urlopen` with the app's User-Agent. No `octonews.php`, no `news.json`
+(OctoBot's fallback, which is stale: two posts from April 2026).
+
+- `fetch_forum_topics(forum_id)` reads the listing (`sk=tt&sd=d`), takes every
+  `li.row`, and sorts by each topic's **start** date -- never row order, never
+  the last-post column or its hidden mobile copy.
+- `fetch_first_post(topic)` opens the canonical `viewtopic.php?t=<id>` and
+  reads only the first `div.post#p<N>`, dropping quotes and signatures.
+- Announcements = `fetch_latest_post(2)`: listing + one topic (2 requests).
+- Changelog = `fetch_topic_list(4, 8)`: listing only (1 request); entries have
+  title, start date, author and topic link, no body.
+
+Adapted from OctoBot `octotracker/announcements.py` (selectors, verification
+detection, first-post cleanup), except its listing parser, which takes the
+first `<time>`/username in `.list-inner` -- on phpBB 3.3 that is the last
+reply's.
+
+**Cadence:** `_load_news()` once at launch (unconditionally), and each
+refresh button calls `_load_featured()` / `_load_patch_notes()`. Switching to
+the NEWS tab does not fetch; there is no TTL and no timer. A refresh while one
+is in flight is ignored. Tested in `TestNewsCadence`.
 
 **Why News was blank (diagnosed 2026-09-24):** octowow.st is behind
 BlazingFast DDoS protection, which answers every non-browser client --
@@ -105,8 +120,7 @@ forum and `octonews.php`. The old code parsed it as JSON (error) and HTML
 `ForumBlockedError` naming the stage; the panel keeps cached content. EqUpdater
 does **not** try to solve the challenge -- that is circumventing the site's
 anti-bot protection. It works again as soon as OctoWoW lifts the check or
-exempts `/forum/octonews.php` or the forum pages for launchers (their own
-launcher reads `octonews.php` and is blocked the same way).
+exempts `viewforum.php`/`viewtopic.php` for launchers.
 
 Every failure is logged to the session log as `<stage> failed: <why> [<url>]`.
 

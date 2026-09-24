@@ -54,7 +54,8 @@ from .planner import (Component, plan, plan_all, skipped_notably, summarise,
                       updatable)
 from .states import Action, Plan, Status
 from .versions import Ordering, compare as compare_versions, is_newer
-from .news import ANNOUNCEMENTS_FORUM_ID, CHANGELOG_FORUM_ID, fetch_news
+from .news import (ANNOUNCEMENTS_FORUM_ID, CHANGELOG_FORUM_ID,
+                   fetch_latest_post, fetch_topic_list)
 from .ui import (FontManager, GradientButton, GradientPalette,
                  cover_background, photo_image)
 
@@ -80,10 +81,11 @@ APP_DIR = branding.app_dir()
 # varies with how the app was launched).
 DEFAULT_GAME_DIR = os.path.join(APP_DIR, "OctoWoW")
 
-# News is read from the public OctoWoW forum (equpdater/news.py): forum 2 is
-# Announcements, forum 4 is Patch Notes and Changelog.
+# News is read straight from the public OctoWoW forum by this PC
+# (equpdater/news.py): forum 2 is Announcements, forum 4 is Patch Notes and
+# Changelog. Fetched once at launch and whenever a refresh button is pressed;
+# never polled.
 NEWS_TIMEOUT      = 8
-NEWS_CACHE_TTL    = 300
 NEWS_CHANGELOG_COUNT = 8
 
 # Design dimensions, authored at 96 DPI (100% scaling). At startup the app
@@ -3100,19 +3102,20 @@ def _news_open(req, timeout):
 
 
 def fetch_patch_notes() -> list:
-    """The newest Patch Notes and Changelog topics, each with its opening
-    post. Raises news.ForumError, naming the stage that failed."""
-    return fetch_news(CHANGELOG_FORUM_ID, NEWS_CHANGELOG_COUNT,
-                      opener=_news_open, user_agent=UA,
-                      timeout=NEWS_TIMEOUT, log=log)
+    """The newest Patch Notes and Changelog topics: title, start date,
+    author and topic link, from one request for the forum listing.
+    Raises news.ForumError, naming the stage that failed."""
+    return [row.to_item() for row in fetch_topic_list(
+        CHANGELOG_FORUM_ID, NEWS_CHANGELOG_COUNT,
+        opener=_news_open, user_agent=UA, timeout=NEWS_TIMEOUT)]
 
 
 def fetch_featured_post() -> dict:
     """The newest announcement, by the date it was posted -- not the pinned
-    topic at the top of the forum, and not the latest reply."""
-    return fetch_news(ANNOUNCEMENTS_FORUM_ID, 1,
-                      opener=_news_open, user_agent=UA,
-                      timeout=NEWS_TIMEOUT, log=log)[0]
+    topic at the top of the forum, and not the latest reply -- with its
+    opening post. Two requests: the listing and that topic."""
+    return fetch_latest_post(ANNOUNCEMENTS_FORUM_ID, opener=_news_open,
+                             user_agent=UA, timeout=NEWS_TIMEOUT).to_item()
 
 
 def _news_error(section: str, exc: Exception) -> str:
@@ -3638,8 +3641,7 @@ class EqUpdaterApp(tk.Tk):
             self._addons_verify()
         elif tab == "MPQ":
             self._mpq_check()
-        else:
-            self._load_news()
+        # NEWS: nothing. The forum is read at launch and on refresh only.
 
     def _font(self, size: int, *, bold=False, italic=False, underline=False):
         return self._fonts.spec(size, bold=bold, italic=italic, underline=underline)
@@ -3923,15 +3925,17 @@ class EqUpdaterApp(tk.Tk):
         self._cfg = update_config(mutate)
         return stamp
 
-    def _load_news(self, force=False):
-        self._load_featured(force)
-        self._load_patch_notes(force)
+    def _load_news(self):
+        """The launch fetch: one request cycle per panel."""
+        self._load_featured()
+        self._load_patch_notes()
 
-    def _load_featured(self, force=False):
-        now = time.time()
-        if (not force and self._featured is not None
-                and (now - self._feat_ts) < NEWS_CACHE_TTL):
+    def _load_featured(self):
+        """Read the Announcements forum once, in the background. A click on
+        refresh while a read is already running does not start a second."""
+        if getattr(self, "_feat_loading", False):
             return
+        self._feat_loading = True
         self._render_featured(self._featured, loading=True)
 
         def worker():
@@ -3942,6 +3946,7 @@ class EqUpdaterApp(tk.Tk):
                 err = _news_error("Announcements", exc)
 
             def apply():
+                self._feat_loading = False
                 if feat is not None:
                     self._featured = feat
                     self._feat_ts = self._save_news_cache(
@@ -3952,11 +3957,11 @@ class EqUpdaterApp(tk.Tk):
             self.after(0, apply)
         threading.Thread(target=worker, daemon=True).start()
 
-    def _load_patch_notes(self, force=False):
-        now = time.time()
-        if (not force and self._patch_items is not None
-                and (now - self._patch_ts) < NEWS_CACHE_TTL):
+    def _load_patch_notes(self):
+        """Read the Patch Notes forum listing once, in the background."""
+        if getattr(self, "_patch_loading", False):
             return
+        self._patch_loading = True
         self._render_patch_notes(self._patch_items, loading=True)
 
         def worker():
@@ -3967,6 +3972,7 @@ class EqUpdaterApp(tk.Tk):
                 err = _news_error("Changelog", exc)
 
             def apply():
+                self._patch_loading = False
                 if items is not None:
                     self._patch_items = items
                     self._patch_ts = self._save_news_cache(
@@ -4006,7 +4012,7 @@ class EqUpdaterApp(tk.Tk):
                     highlightbackground=C_PANEL_BDR)
         self._news_header(
             f, "ANNOUNCEMENTS",
-            lambda: self._load_featured(force=True), loading=loading)
+            self._load_featured, loading=loading)
 
         if not post:
             msg = error or ("Loading announcements…" if loading
@@ -4077,7 +4083,7 @@ class EqUpdaterApp(tk.Tk):
         f.configure(bg=C_PANEL, highlightthickness=1,
                     highlightbackground=C_PANEL_BDR)
         self._news_header(
-            f, "CHANGELOG", lambda: self._load_patch_notes(force=True),
+            f, "CHANGELOG", self._load_patch_notes,
             loading=loading)
 
         if not items:

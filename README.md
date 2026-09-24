@@ -79,11 +79,13 @@ by this project: EqUpdater uses installed fonts, `.ttf`/`.otf` files placed in
 `%LOCALAPPDATA%\EqUpdater\fonts`, or supported font archives the user places
 beside EqUpdater.
 
-The News page uses OctoWoW's public `octonews.php` JSON feed first, matching
-the mechanism used by the official launcher, for **Announcements** (forum 2)
-and **Patch Notes and Changelog** (forum 4). Direct phpBB parsing remains a
-fallback. The last successful result is cached, so a temporary forum outage
-does not blank the page or interfere with updating/launching the client.
+The News page reads the OctoWoW forum directly from your PC:
+**Announcements** (forum 2) shows the newest topic by the date it was posted,
+with its opening post; **Patch Notes and Changelog** (forum 4) lists the eight
+newest topics. Pinned topics and recent replies do not make an old topic look
+new. The forum is read once at launch and again only when you press a refresh
+button. The last successful result is cached, so a forum outage does not blank
+the page or interfere with updating or launching the client.
 
 ### Coming from Octo Updater
 

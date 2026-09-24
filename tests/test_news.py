@@ -234,9 +234,8 @@ class FakeSite:
         raise OSError("404 " + url)
 
 
-def fetch(site, forum, limit, **kw):
-    return news.fetch_news(forum, limit, opener=site.opener,
-                           user_agent="EqUpdater/test", timeout=1, **kw)
+def kw(site):
+    return {"opener": site.opener, "user_agent": "EqUpdater/test", "timeout": 1}
 
 
 CHANGELOG = ("<ul>" + row("sticky", 3, "How to report bugs", "Kestrel",
@@ -253,72 +252,86 @@ class TestFetch(unittest.TestCase):
                          "viewtopic.php?t=2595": topic_page(
                              2595, "DDoS Updates", "Mitigation is live.",
                              created="2026-09-24T07:06:00+00:00")})
-        (item,) = fetch(site, 2, 1)
+        item = news.fetch_latest_post(2, **kw(site)).to_item()
         self.assertEqual(item["title"], "DDoS Updates")
         self.assertEqual(item["body"], "Mitigation is live.")
         self.assertEqual(item["url"], "https://octowow.st/forum/viewtopic.php?t=2595")
         self.assertEqual(item["date"], "2026-09-24T07:06:00+00:00")
-        # Only the newest topic's page was opened: nothing is crawled needlessly.
-        self.assertEqual([u for u in site.asked if "viewtopic" in u],
-                         ["https://octowow.st/forum/viewtopic.php?t=2595"])
+        # Two requests: the listing and that one topic. Nothing else.
+        self.assertEqual(site.asked, [news.forum_url(2), news.topic_url(2595)])
 
-    def test_changelog_entry_is_post_one(self):
-        site = FakeSite({"viewforum.php?f=4": CHANGELOG,
-                         "t=2600": topic_page(2600, "2026-09-23", PATCH_BODY),
-                         "t=2580": topic_page(2580, "2026-09-16", "Older notes."),
-                         "t=3": topic_page(3, "How to report bugs", "Use the tracker.")})
-        items = fetch(site, 4, 8)
+    def test_patch_notes_are_one_listing_request(self):
+        site = FakeSite({"viewforum.php?f=4": CHANGELOG})
+        rows = news.fetch_topic_list(4, 8, **kw(site))
+        self.assertEqual(site.asked, [news.forum_url(4)])
+        items = [r.to_item() for r in rows]
         self.assertEqual([i["title"] for i in items],
                          ["2026-09-23", "2026-09-16", "How to report bugs"])
-        self.assertIn("Fixed Onyxia breath.", items[0]["body"])
-        self.assertNotIn("reply", items[0]["body"])
-        self.assertEqual(items[0]["author"], "Kestrel")
+        self.assertEqual(items[0]["author"], "Kestrel")          # not the replier
+        self.assertEqual(items[0]["date"], "2026-09-23T16:00:00+00:00")
+        self.assertEqual(items[0]["url"],
+                         "https://octowow.st/forum/viewtopic.php?t=2600")
+
+    def test_patch_note_limit(self):
+        site = FakeSite({"viewforum.php?f=4": CHANGELOG})
+        self.assertEqual(len(news.fetch_topic_list(4, 2, **kw(site))), 2)
+
+    def test_first_post_of_a_patch_note_is_post_one(self):
+        site = FakeSite({"t=2600": topic_page(2600, "2026-09-23", PATCH_BODY)})
+        (row2600,) = [r for r in news.parse_forum_topics(CHANGELOG)
+                      if r.topic_id == 2600]
+        post = news.fetch_first_post(row2600, **kw(site))
+        self.assertIn("Fixed Onyxia breath.", post.content)
+        self.assertNotIn("reply", post.content)
+        self.assertNotIn("quoted bit", post.content)             # quotes dropped
+        self.assertEqual(post.author, "Kestrel")
 
     def test_listing_asks_for_creation_order(self):
-        site = FakeSite({"viewforum.php?f=4": CHANGELOG,
-                         "viewtopic": topic_page(1, "t", "b")})
-        fetch(site, 4, 1)
+        site = FakeSite({"viewforum.php?f=4": CHANGELOG})
+        news.fetch_topic_list(4, 1, **kw(site))
         self.assertIn("sk=tt", site.asked[0])
 
-    def test_one_broken_topic_does_not_empty_the_feed(self):
-        logged = []
-        site = FakeSite({"viewforum.php?f=4": CHANGELOG,
-                         "t=2600": OSError("connection reset"),
-                         "viewtopic": topic_page(1, "t", "fine")})
-        items = fetch(site, 4, 3, log=logged.append)
-        self.assertEqual(len(items), 2)
-        self.assertTrue(any("topic 2600 failed" in m for m in logged), logged)
-
     def test_challenge_is_named_not_reported_as_empty(self):
-        logged = []
-        site = FakeSite({"viewforum.php": (CHALLENGE, {"X-BF-Challenge": "pending"}),
-                         "octonews.php": (CHALLENGE, {"X-BF-Challenge": "pending"})})
+        site = FakeSite({"viewforum.php": (CHALLENGE, {"X-BF-Challenge": "pending"})})
         with self.assertRaises(news.ForumBlockedError) as cm:
-            fetch(site, 2, 1, log=logged.append)
+            news.fetch_latest_post(2, **kw(site))
         self.assertEqual(cm.exception.stage, "forum 2 listing")
         self.assertIn("DDoS-protection", cm.exception.short)
-        self.assertTrue(any("fallback" in m for m in logged), logged)
+        self.assertEqual(len(site.asked), 1)                     # no retry storm
+
+    def test_challenge_on_the_topic_page(self):
+        site = FakeSite({"viewforum.php?f=2": ANNOUNCEMENTS,
+                         "viewtopic": CHALLENGE})
+        with self.assertRaises(news.ForumBlockedError) as cm:
+            news.fetch_latest_post(2, **kw(site))
+        self.assertEqual(cm.exception.stage, "topic 2595")
 
     def test_a_page_with_no_topics_is_an_error(self):
-        site = FakeSite({"viewforum.php": "<html><body>maintenance</body></html>",
-                         "octonews.php": OSError("down")})
+        site = FakeSite({"viewforum.php": "<html><body>maintenance</body></html>"})
         with self.assertRaises(news.ForumError) as cm:
-            fetch(site, 4, 8)
+            news.fetch_topic_list(4, 8, **kw(site))
         self.assertEqual(cm.exception.stage, "forum 4 listing parse")
+
+    def test_a_topic_page_with_no_post_is_an_error(self):
+        site = FakeSite({"viewforum.php?f=2": ANNOUNCEMENTS,
+                         "viewtopic": "<html><body>gone</body></html>"})
+        with self.assertRaises(news.ForumError) as cm:
+            news.fetch_latest_post(2, **kw(site))
+        self.assertEqual(cm.exception.stage, "topic 2595 parse")
 
     def test_network_errors_name_the_stage(self):
         site = FakeSite({})
         with self.assertRaises(news.ForumError) as cm:
-            fetch(site, 2, 1)
+            news.fetch_latest_post(2, **kw(site))
         self.assertEqual(cm.exception.stage, "forum 2 listing")
         self.assertIn("forum 2 listing failed", str(cm.exception))
 
-    def test_octonews_is_the_fallback(self):
-        feed = ('{"items": [{"id": "2595", "title": "DDoS Updates", '
-                '"date": "2026-09-24T07:06:00+00:00", "body": "b", "author": null}]}')
-        site = FakeSite({"viewforum.php": OSError("down"), "octonews.php": feed})
-        (item,) = fetch(site, 2, 1)
-        self.assertEqual(item["url"], "https://octowow.st/forum/viewtopic.php?t=2595")
+    def test_no_json_feed_is_consulted(self):
+        site = FakeSite({"viewforum.php?f=4": CHANGELOG})
+        news.fetch_topic_list(4, 8, **kw(site))
+        self.assertFalse([u for u in site.asked
+                          if "octonews" in u or u.endswith(".json")])
+        self.assertFalse(hasattr(news, "OCTONEWS_URL"))
 
 
 if __name__ == "__main__":

@@ -173,6 +173,74 @@ class TestPlannerReachesTheUI(unittest.TestCase):
                     f"{status} would draw nothing and read as healthy")
 
 
+@unittest.skipUnless(HAVE_TK, "no display")
+class TestNewsCadence(unittest.TestCase):
+    """The forum is read once at launch and once per refresh click. Never on
+    a tab switch, never on a timer, never twice at once."""
+
+    def test_launch_and_refresh_only(self):
+        tmp = tempfile.mkdtemp(prefix="equ-news-")
+        os.environ["LOCALAPPDATA"] = tmp
+        os.environ["XDG_DATA_HOME"] = tmp
+        for mod in [m for m in list(sys.modules) if m.startswith("equpdater")]:
+            del sys.modules[mod]
+        from equpdater import app as m
+        calls = {"announcements": 0, "patch": 0}
+        item = {"id": "1", "title": "t", "author": None, "date": "",
+                "body": "b", "html": "b", "url": "https://octowow.st/forum/viewtopic.php?t=1"}
+
+        def featured():
+            calls["announcements"] += 1
+            return item
+
+        def patch():
+            calls["patch"] += 1
+            return [item]
+        m.fetch_featured_post, m.fetch_patch_notes = featured, patch
+
+        a = m.EqUpdaterApp()
+        seen = {}
+
+        def after_launch():
+            seen["launch"] = dict(calls)
+            for tab in ("NEWS", "TWEAKS", "NEWS"):
+                a._switch_tab(tab)
+            a.after(400, after_tabs)
+
+        def after_tabs():
+            seen["tabs"] = dict(calls)
+            a._load_featured()                 # the Announcements refresh button
+            a._load_patch_notes()              # the Changelog refresh button
+            a.after(400, after_refresh)
+
+        def after_refresh():
+            seen["refresh"] = dict(calls)
+            a._feat_loading = True             # a read still in flight
+            a._load_featured()
+            seen["overlap"] = dict(calls)
+            a._feat_loading = False
+            a.after(3500, done)                # nothing polls in the meantime
+
+        def done():
+            seen["idle"] = dict(calls)
+            a.quit()
+
+        a.after(1500, after_launch)
+        a.mainloop()
+        try:
+            a.destroy()
+        except Exception:
+            pass
+        shutil.rmtree(tmp, ignore_errors=True)
+
+        one, two = {"announcements": 1, "patch": 1}, {"announcements": 2, "patch": 2}
+        self.assertEqual(seen["launch"], one)
+        self.assertEqual(seen["tabs"], one)
+        self.assertEqual(seen["refresh"], two)
+        self.assertEqual(seen["overlap"], two)
+        self.assertEqual(seen["idle"], two)
+
+
 class TestTexturePackDownload(unittest.TestCase):
     """Replacing a pack keeps the user's copy; a bad checksum keeps nothing
     new and touches nothing old."""

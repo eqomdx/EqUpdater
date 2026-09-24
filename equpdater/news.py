@@ -13,31 +13,37 @@ Two steps, as a person reading the forum would take them:
    the "Last post" column moves an old topic up whenever someone replies, so
    neither the row order nor the last-post date says which topic is newest.
    Only the date the topic was started does.
-2. ``fetch_topic_first_post`` opens a topic and returns its first post -- the
-   announcement or the patch notes -- never the replies beneath it.
+2. ``fetch_first_post`` opens a topic and returns its first post -- the
+   announcement itself -- never the replies beneath it.
 
-``fetch_forum_posts`` joins the two for the UI.
+The Announcements panel is ``fetch_latest_post(2)``: one listing, one topic
+page. The Changelog list is ``fetch_topic_list(4)``: one listing, nothing else.
 
-OctoWoW's launcher-facing ``octonews.php`` JSON feed is kept as a fallback. It
-is the endpoint OctoWoW's own launcher reads, so it is the one most likely to
-be kept reachable for launchers when the forum itself is locked down.
+The approach follows OctoBot's ``octotracker/announcements.py``: ``a.topictitle``
+links, the topic id from ``t=``, the first ``.post``'s ``.content`` with quotes
+and signatures dropped, and browser-verification detection. It differs where
+OctoBot reads the first ``<time>`` and username in a row's ``.list-inner``:
+on phpBB 3.3 that is the hidden mobile "Last post by ..." line, i.e. the
+latest *reply*. Here the last-post parts of a row are skipped.
+
+There is no JSON feed behind this. ``octonews.php`` is not used, and
+``news.json`` (OctoBot's fallback) is not either: it holds two posts from
+April 2026, which is exactly the stale content this must not show.
 
 **Every failure says which stage failed.** A listing with no topics is an
 error, not an empty news feed: the forum always has topics, so zero means the
-page was not the forum. That is exactly what happens while the site's DDoS
-protection (BlazingFast) answers non-browser clients with a JavaScript
-"Just a moment please..." check -- HTTP 200, no forum in it -- which is named
-as such rather than reported as "no topics".
+page was not the forum. That is what happens while the site's DDoS protection
+(BlazingFast) answers non-browser clients with a JavaScript "Just a moment
+please..." check -- HTTP 200, no forum in it -- which is named as such rather
+than reported as "no topics". It is detected, never solved or evaded.
 
 Pure parsing is separate from fetching so it is tested without a network.
 """
 
 from __future__ import annotations
 
-import json
 import re
 import urllib.request
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from html import unescape
@@ -45,7 +51,6 @@ from html.parser import HTMLParser
 from urllib.parse import parse_qs, urljoin, urlparse
 
 BASE = "https://octowow.st/forum/"
-OCTONEWS_URL = urljoin(BASE, "octonews.php")
 ANNOUNCEMENTS_FORUM_ID = 2
 CHANGELOG_FORUM_ID = 4
 
@@ -65,6 +70,12 @@ class TopicRow:
     created_at: datetime | None     # when the topic was started, UTC
     url: str                        # canonical, no session id
     kind: str = "normal"            # normal | sticky | announce
+
+    def to_item(self) -> dict:
+        """A list entry: no body, because a list needs none."""
+        return {"id": str(self.topic_id), "title": self.title,
+                "author": self.author, "date": _iso(self.created_at),
+                "body": "", "html": "", "url": self.url}
 
 
 @dataclass(frozen=True)
@@ -191,9 +202,13 @@ def is_challenge_page(body: str, headers=None) -> bool:
             return True
     except Exception:
         pass
-    head = (body or "")[:4000].lower()
-    return ("<title>just a moment" in head or "bf.jquery" in head
-            or "cf-browser-verification" in head or "challenge-platform" in head)
+    head = (body or "")[:4000].casefold()
+    return any(marker in head for marker in (
+        "<title>just a moment",           # BlazingFast, Cloudflare
+        "verifying your browser",         # OctoBot's list
+        "cf-chl-", "challenge-platform",  # Cloudflare
+        "bf.jquery",                      # BlazingFast's challenge script
+    ))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -254,7 +269,8 @@ class _ForumListParser(HTMLParser):
         if tag == "a" and "topictitle" in cls and not self._row["href"]:
             self._row["href"] = a.get("href") or ""
             self._in_title = True
-        elif (tag == "a" and self._row["href"] and self._row["author"] is None
+        elif (tag in ("a", "span") and self._row["href"]
+              and self._row["author"] is None
               and any(c.startswith("username") for c in cls)):
             self._in_user = True
             self._row["author"] = ""
@@ -276,7 +292,7 @@ class _ForumListParser(HTMLParser):
             return
         if self._ignore_depth and tag == self._ignore_tag:
             self._ignore_depth -= 1
-        if tag == "a":
+        if tag in ("a", "span"):
             self._in_title = self._in_user = False
         if tag == "li":
             self._row_depth -= 1
@@ -334,6 +350,11 @@ class _FirstPostParser(HTMLParser):
     Anchored on the post container (``id="p<N>"``), so nothing outside it --
     forum rules, notices, the replies after it -- can be mistaken for it."""
 
+    #: Not the author's own words: quoted text, signatures, post buttons,
+    #: scripts. OctoBot drops the same set.
+    _DROP_TAGS = {"script", "style", "blockquote"}
+    _DROP_CLASSES = {"quote", "signature", "post-buttons"}
+
     def __init__(self):
         super().__init__(convert_charrefs=True)
         self.author: str | None = None
@@ -345,7 +366,8 @@ class _FirstPostParser(HTMLParser):
         self._author_depth = 0     # inside p.author
         self._in_user = False
         self._content_depth = 0    # div depth inside div.content
-        self._skip = 0             # inside script/style
+        self._drop_tag = None      # inside something that is not the post's
+        self._drop_depth = 0       # own words: script, quote, signature
 
     def handle_starttag(self, tag, attrs):
         if self._done:
@@ -360,8 +382,12 @@ class _FirstPostParser(HTMLParser):
             return
         if tag == "div":
             self._post_depth += 1
-        if tag in ("script", "style"):
-            self._skip += 1
+        if self._drop_depth:
+            if tag == self._drop_tag:
+                self._drop_depth += 1
+            return
+        if tag in self._DROP_TAGS or cls & self._DROP_CLASSES:
+            self._drop_tag, self._drop_depth = tag, 1
             return
 
         if self._content_depth:
@@ -397,7 +423,7 @@ class _FirstPostParser(HTMLParser):
             self.handle_endtag(tag)
 
     def handle_data(self, data):
-        if self._done or self._skip or not self._post_depth:
+        if self._done or self._drop_depth or not self._post_depth:
             return
         if self._content_depth:
             self.parts.append(data)
@@ -407,8 +433,11 @@ class _FirstPostParser(HTMLParser):
     def handle_endtag(self, tag):
         if self._done or not self._post_depth:
             return
-        if tag in ("script", "style") and self._skip:
-            self._skip -= 1
+        if self._drop_depth:
+            if tag == "div":
+                self._post_depth -= 1
+            if tag == self._drop_tag:
+                self._drop_depth -= 1
             return
         if self._content_depth:
             if tag in _BLOCK_TAGS:
@@ -496,9 +525,9 @@ def fetch_forum_topics(forum_id: int, *, opener, user_agent: str,
     return newest_first(rows)
 
 
-def fetch_topic_first_post(topic: TopicRow, *, opener, user_agent: str,
-                           timeout: int = 8, base: str = BASE) -> ForumPost:
-    """The opening post of ``topic``."""
+def fetch_first_post(topic: TopicRow, *, opener, user_agent: str,
+                     timeout: int = 8, base: str = BASE) -> ForumPost:
+    """The opening post of ``topic``: one request."""
     url = topic_url(topic.topic_id, base)
     html = _get(url, f"topic {topic.topic_id}", opener=opener,
                 user_agent=user_agent, timeout=timeout)
@@ -506,107 +535,24 @@ def fetch_topic_first_post(topic: TopicRow, *, opener, user_agent: str,
     if parsed is None:
         raise ForumError(f"topic {topic.topic_id} parse", url,
                          "no post found on the topic page",
-                         short="a forum topic could not be read")
+                         short="the forum topic could not be read")
     author, created, content = parsed
     return ForumPost(topic.topic_id, topic.title, topic.author or author,
                      _iso(topic.created_at or created), topic.url, content)
 
 
-def fetch_forum_posts(forum_id: int, limit: int, *, opener, user_agent: str,
-                      timeout: int = 8, log=None) -> list[ForumPost]:
-    """The ``limit`` newest topics of a forum with their opening posts.
-
-    A topic whose page fails is logged and left out; the call fails only if
-    none of them could be read."""
-    rows = fetch_forum_topics(forum_id, opener=opener,
-                              user_agent=user_agent, timeout=timeout)
-    rows = rows[:max(1, int(limit))]
-
-    def one(row):
-        try:
-            return fetch_topic_first_post(row, opener=opener,
-                                          user_agent=user_agent,
-                                          timeout=timeout)
-        except ForumError as exc:
-            return exc
-
-    with ThreadPoolExecutor(max_workers=min(4, len(rows))) as pool:
-        results = list(pool.map(one, rows))
-    posts = [r for r in results if isinstance(r, ForumPost)]
-    errors = [r for r in results if isinstance(r, ForumError)]
-    for exc in errors:
-        if log:
-            log(f"News: {exc}")
-    if not posts:
-        raise errors[0]
-    return posts
+def fetch_latest_post(forum_id: int, *, opener, user_agent: str,
+                      timeout: int = 8) -> ForumPost:
+    """The newest-started topic of a forum, with its opening post: the
+    listing, then that one topic page. Two requests."""
+    newest = fetch_forum_topics(forum_id, opener=opener,
+                                user_agent=user_agent, timeout=timeout)[0]
+    return fetch_first_post(newest, opener=opener, user_agent=user_agent,
+                            timeout=timeout)
 
 
-# ── octonews.php (fallback) ──────────────────────────────────────────────────
-
-def parse_news_feed_json(text: str, base_url: str = BASE) -> list[dict]:
-    """``octonews.php?mode=list``: ``{"items": [{id, title, date, body, ...}]}``."""
-    payload = json.loads(text)
-    rows = payload.get("items") if isinstance(payload, dict) else None
-    if not isinstance(rows, list):
-        raise ValueError("no 'items' list")
-    out = []
-    for raw in rows:
-        if not isinstance(raw, dict):
-            continue
-        item_id = str(raw.get("id") or "").strip()
-        title = str(raw.get("title") or "").strip()
-        if not item_id or not title:
-            continue
-        body = str(raw.get("body") or raw.get("html") or "").strip()
-        author = str(raw.get("author") or "").strip() or None
-        url = urljoin(base_url, str(raw["url"])) if raw.get("url") else (
-            topic_url(int(item_id)) if item_id.isdigit() else "")
-        out.append({"id": item_id, "title": title, "author": author,
-                    "date": str(raw.get("date") or "").strip(),
-                    "body": body, "html": str(raw.get("html") or body),
-                    "url": url})
-    return out
-
-
-def fetch_octonews(forum_id: int, limit: int, *, opener, user_agent: str,
-                   timeout: int = 8) -> list[dict]:
-    url = f"{OCTONEWS_URL}?mode=list&forum={int(forum_id)}&limit={max(1, int(limit))}"
-    text = _get(url, f"octonews forum {forum_id}", opener=opener,
-                user_agent=user_agent, timeout=timeout,
-                accept="application/json")
-    try:
-        return parse_news_feed_json(text, url)
-    except (ValueError, TypeError) as exc:
-        raise ForumError(f"octonews forum {forum_id} parse", url, str(exc),
-                         short="the news feed could not be read") from exc
-
-
-# ── what the app calls ───────────────────────────────────────────────────────
-
-def fetch_news(forum_id: int, limit: int, *, opener, user_agent: str,
-               timeout: int = 8, log=None) -> list[dict]:
-    """News items for the UI: the forum first, OctoWoW's JSON feed if the
-    forum cannot be read. Raises the forum's error if both fail -- it is the
-    primary source and its reason is the one worth showing."""
-    try:
-        posts = fetch_forum_posts(forum_id, limit, opener=opener,
-                                  user_agent=user_agent, timeout=timeout,
-                                  log=log)
-        return [p.to_item() for p in posts]
-    except ForumError as forum_exc:
-        # Raised to the caller, who reports it; logged here only if the
-        # fallback saves the day and it would otherwise go unseen.
-        try:
-            items = fetch_octonews(forum_id, limit, opener=opener,
-                                   user_agent=user_agent, timeout=timeout)
-        except ForumError as feed_exc:
-            if log:
-                log(f"News: fallback {feed_exc}")
-            raise forum_exc
-        if not items:
-            raise forum_exc
-        if log:
-            log(f"News: {forum_exc}")
-            log(f"News: forum {forum_id} read from octonews.php instead")
-        return items
+def fetch_topic_list(forum_id: int, limit: int, *, opener, user_agent: str,
+                     timeout: int = 8) -> list[TopicRow]:
+    """The ``limit`` newest-started topics of a forum. One request."""
+    return fetch_forum_topics(forum_id, opener=opener, user_agent=user_agent,
+                              timeout=timeout)[:max(1, int(limit))]
