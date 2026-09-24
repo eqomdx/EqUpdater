@@ -160,6 +160,19 @@ class TestPlannerReachesTheUI(unittest.TestCase):
                 self.assertTrue(state == "updateAvailable"
                                 or state in self.m.EqUpdaterApp._MPQ_STATES)
 
+    def test_listed_addons_are_offered_but_not_recommended(self):
+        taken_off = {"ItemRack", "Magnify", "PallyPowerTW", "pfQuest",
+                     "pfQuest-turtle", "pfUI", "SUCC-bag"}
+        self.assertFalse(taken_off & set(self.m.RECOMMENDED_ADDONS))
+        for name in taken_off | {"Questie-Octo"}:
+            with self.subTest(name=name):
+                self.assertIn(name, self.m.LISTED_ADDONS)
+                self.assertEqual(self.m.CURATED_ADDONS[name],
+                                 self.m.LISTED_ADDONS[name])
+        self.assertEqual(self.m.LISTED_ADDONS["Questie-Octo"],
+                         "https://github.com/SandreaSub/Questie-Octo")
+        self.assertFalse(set(self.m.LISTED_ADDONS) & set(self.m.RECOMMENDED_ADDONS))
+
     def test_reset_tweaks_asks_first(self):
         """Reset throws away the user's values; it must not happen on one
         click without a yes."""

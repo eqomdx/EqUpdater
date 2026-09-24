@@ -2370,16 +2370,9 @@ RECOMMENDED_ADDONS = {
     "DoiteAuras":           "https://github.com/deceius/DoiteAuras",
     "FlightTracker":        "https://github.com/Lexxoi/FlightTracker",
     "InstanceJournal":      "https://github.com/Arthur-Helias/InstanceJournal",
-    "ItemRack":             "https://github.com/Otari98/ItemRack",
-    "Magnify":              "https://github.com/paokkerkir/Magnify",
     "ModernMapMarkers":     "https://github.com/tilare/ModernMapMarkers",
     "NampowerSettings":     "https://github.com/brues-code/NampowerSettings",
-    "PallyPowerTW":         "https://github.com/ShikawaLePaladin/PallyPowerTW",
-    "pfQuest":              "https://github.com/The-Kludge-Bureau/pfQuest",
-    "pfQuest-turtle":       "https://github.com/KameleonUK/pfQuest-turtle",
-    "pfUI":                 "https://github.com/brues-code/pfUI",
     "ShaguDPS":             "https://github.com/shagu/ShaguDPS",
-    "SUCC-bag":             "https://github.com/Otari98/SUCC-bag",
     "SuperAPI":             "https://github.com/balakethelock/SuperAPI",
     "SuperCleveRoidMacros": "https://github.com/brues-code/SuperCleveRoidMacros",
     "Tmog":                 "https://github.com/Otari98/Tmog",
@@ -2389,6 +2382,29 @@ RECOMMENDED_ADDONS = {
     "UnitXP_SP3_Addon":     "https://github.com/rebasedkon/UnitXP_SP3_Addon",
     "WhatsTraining_Turtle": "https://github.com/rebasedkon/WhatsTraining_Turtle",
 }
+
+#: Offered on the ADDONS page from these sources, but **not recommended**:
+#: no star, not sorted first, never installed by "Install recommended
+#: addons". Several are not in addons.json at all, so without an entry here
+#: they would not be offered; the others are pinned to the maintained forks
+#: rather than the catalogue's original upstreams.
+#:
+#: Taken off the recommended list 2026-09-24 at the maintainer's request:
+#: ItemRack, Magnify, PallyPowerTW, pfQuest, pfQuest-turtle, pfUI, SUCC-bag.
+#: Added the same day: Questie-Octo (folder name from its Questie-Octo.toc).
+LISTED_ADDONS = {
+    "ItemRack":             "https://github.com/Otari98/ItemRack",
+    "Magnify":              "https://github.com/paokkerkir/Magnify",
+    "PallyPowerTW":         "https://github.com/ShikawaLePaladin/PallyPowerTW",
+    "pfQuest":              "https://github.com/The-Kludge-Bureau/pfQuest",
+    "pfQuest-turtle":       "https://github.com/KameleonUK/pfQuest-turtle",
+    "pfUI":                 "https://github.com/brues-code/pfUI",
+    "Questie-Octo":         "https://github.com/SandreaSub/Questie-Octo",
+    "SUCC-bag":             "https://github.com/Otari98/SUCC-bag",
+}
+
+#: Every folder EqUpdater has a preferred source for: listed or recommended.
+CURATED_ADDONS = {**LISTED_ADDONS, **RECOMMENDED_ADDONS}
 
 # Never *offered* by the updater, even when present in addons.json. Blocking
 # hides an entry from the AVAILABLE list; it has no effect on one already
@@ -6452,7 +6468,7 @@ class EqUpdaterApp(tk.Tk):
             # catalog doesn't carry (or has renamed). Overridden forks may
             # use a different default branch, so branch/ref are reset.
             by_name = {a["folder"]: a for a in available}
-            for name, override in RECOMMENDED_ADDONS.items():
+            for name, override in CURATED_ADDONS.items():
                 rec = by_name.get(name)
                 if rec is None:
                     available.append(
@@ -6487,7 +6503,7 @@ class EqUpdaterApp(tk.Tk):
                     if avail:
                         rec["description"] = avail["description"]
                     saved = records.get(name)
-                    override = RECOMMENDED_ADDONS.get(name)
+                    override = CURATED_ADDONS.get(name)
 
                     # What the catalogue currently recommends for this folder
                     # name. A *suggestion*, and never more than that until
