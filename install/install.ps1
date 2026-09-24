@@ -191,7 +191,9 @@ foreach ($archive in $fontArchives) {
         New-Item -ItemType Directory -Force -Path $tmp | Out-Null
         Expand-Archive -Path $archive -DestinationPath $tmp -Force
         Get-ChildItem -Path $tmp -Recurse -File -ErrorAction SilentlyContinue |
-            Where-Object { $_.Extension -match '^\.(ttf|otf)$' } |
+            Where-Object { $_.Extension -match '^\.(ttf|otf)$' -and
+                           -not $_.Name.StartsWith('._') -and
+                           $_.FullName -notmatch '\\__MACOSX\\' } |
             ForEach-Object {
                 Copy-Item $_.FullName (Join-Path $fontDest $_.Name) -Force
                 $script:fontImported++

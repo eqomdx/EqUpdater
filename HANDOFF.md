@@ -118,7 +118,7 @@ Important: the hosted endpoint could not be directly fetched from the developmen
 
 Latest validation:
 
-`Ran 157 tests ... OK` (Windows, 2026-09-24, after the consent and texture-pack pass)
+`Ran 158 tests ... OK` (Windows, 2026-09-24, after the consent and texture-pack pass)
 
 Command used in a virtual display:
 
@@ -172,6 +172,9 @@ Do not reintroduce these:
 - Essential mods (and VanillaFixes unconditionally) installed without asking.
 - Apply installing over a discovered, unmanaged DLL.
 - Unlinked texture packs compared with the catalogue by file name.
+- OpenDyslexic overflowing Settings and hiding the FONT choice (no way back).
+  FONT is now one row under the game folder, and the panel grows to fit.
+- `__MACOSX/._*.otf` stubs from the OpenDyslexic zip imported as fonts.
 
 ## Next recommended checks
 

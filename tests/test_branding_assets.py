@@ -38,6 +38,28 @@ class TestBrandingAssets(unittest.TestCase):
         self.assertGreaterEqual(FONT_SIZE_SCALE["opendyslexic"], 0.90)
         self.assertLessEqual(FONT_SIZE_SCALE["opendyslexic"], 0.95)
 
+    def test_mac_metadata_stubs_are_not_imported_as_fonts(self):
+        """The supplied OpenDyslexic archive carries __MACOSX/._*.otf stubs."""
+        import shutil
+        import tempfile
+        import zipfile
+        from unittest import mock
+        from equpdater import ui
+        tmp = tempfile.mkdtemp(prefix="equ-fonts-")
+        try:
+            with zipfile.ZipFile(os.path.join(tmp, "opendyslexic-0.92.zip"), "w") as zf:
+                zf.writestr("OpenDyslexic-Regular.otf", b"font")
+                zf.writestr("__MACOSX/._OpenDyslexic-Regular.otf", b"stub")
+            data = os.path.join(tmp, "data")
+            with mock.patch.object(ui.branding, "app_dir", lambda: tmp), \
+                 mock.patch.object(ui.branding, "app_data_dir", lambda *a: data), \
+                 mock.patch.object(ui.os.path, "expanduser", lambda p: tmp):
+                ui._extract_local_font_archives()
+            self.assertEqual(os.listdir(os.path.join(data, "fonts")),
+                             ["OpenDyslexic-Regular.otf"])
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
 
 if __name__ == "__main__":
     unittest.main()

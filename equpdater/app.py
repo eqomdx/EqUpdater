@@ -7440,6 +7440,48 @@ class EqUpdaterApp(tk.Tk):
         chg.bind("<Enter>",    lambda e: chg.configure(bg=C_GOLD, fg="#000"))
         chg.bind("<Leave>",    lambda e: chg.configure(bg=P_BDR, fg=C_TEXT))
 
+        # **Font first, on one row, near the top.** It is the setting that
+        # changes how much everything else needs, so it must stay reachable
+        # whatever is chosen -- at the bottom of a column, OpenDyslexic
+        # pushed it out of the panel and there was no way back.
+        font_row = tk.Frame(body, bg=P_BG)
+        font_row.pack(fill="x", pady=(self._px(16), 0))
+        font_lbl = tk.Label(font_row, text="FONT",
+                            font=self._font(10, bold=True),
+                            fg=C_GOLD, bg=P_BG)
+        font_lbl.pack(side="left", padx=(0, self._px(10)))
+        self._add_tooltip(font_lbl,
+                          "Friz Quadrata is the default. Changes apply live.")
+
+        def _font_row(value, label, note=None, available=True):
+            shown = label if available else f"{label} (not installed)"
+            rb = tk.Radiobutton(
+                font_row, text=f" {shown}", value=value,
+                variable=self._font_choice_var,
+                command=self._change_font_choice,
+                font=self._font(10), fg=C_TEXT if available else C_TEXT_DIM, bg=P_BG,
+                activebackground=P_BG, activeforeground=C_TEXT,
+                selectcolor=P_INP, highlightthickness=0, bd=0,
+                state="normal" if available else "disabled",
+                cursor="hand2" if available else "arrow")
+            rb.pack(side="left", padx=(self._px(8), self._px(8)))
+            if note:
+                self._add_tooltip(rb, note)
+            return rb
+
+        _font_row("friz", "Friz Quadrata",
+                  "Default Warcraft-style EqUpdater font.",
+                  self._fonts.friz_available)
+        _font_row("arial", "Arial",
+                  "A simple readable sans-serif option.",
+                  self._fonts.arial_available)
+        _font_row(
+            "opendyslexic", "OpenDyslexic",
+            "Dyslexic-friendly reading option. If it is unavailable, install "
+            "OpenDyslexic or place its .otf files in "
+            "%LOCALAPPDATA%\\EqUpdater\\fonts and restart EqUpdater.",
+            self._fonts.dyslexic_available)
+
         # Two equal-width columns via grid, so the right column keeps a fixed
         # position and reaches toward the right edge — regardless of how wide
         # the left column's text is.
@@ -7554,44 +7596,22 @@ class EqUpdaterApp(tk.Tk):
             "Ignores verification and updates for speech.mpq, allowing custom "
             "speech sounds")
 
-        tk.Label(rcol, text="FONT",
-                 font=self._font(10, bold=True),
-                 fg=C_GOLD, bg=P_BG).pack(anchor="w", pady=(self._px(20), 0))
-        tk.Label(rcol, text="Friz Quadrata is the default. Switch live below.",
-                 font=self._font(9), fg=C_TEXT_DIM, bg=P_BG).pack(anchor="w", pady=(self._px(6), 0))
-
-        def _font_row(value, label, note=None, available=True):
-            shown = label if available else f"{label} (not installed)"
-            rb = tk.Radiobutton(
-                rcol, text=f" {shown}", value=value,
-                variable=self._font_choice_var,
-                command=self._change_font_choice,
-                font=self._font(10), fg=C_TEXT if available else C_TEXT_DIM, bg=P_BG,
-                activebackground=P_BG, activeforeground=C_TEXT,
-                selectcolor=P_INP, highlightthickness=0, bd=0,
-                state="normal" if available else "disabled",
-                cursor="hand2" if available else "arrow")
-            rb.pack(anchor="w", pady=(self._px(8), 0))
-            if note:
-                self._add_tooltip(rb, note)
-            return rb
-
-        _font_row("friz", "Friz Quadrata",
-                  "Default Warcraft-style EqUpdater font.",
-                  self._fonts.friz_available)
-        _font_row("arial", "Arial",
-                  "A simple readable sans-serif option.",
-                  self._fonts.arial_available)
-        _font_row(
-            "opendyslexic", "OpenDyslexic",
-            "Dyslexic-friendly reading option. If it is unavailable, install "
-            "OpenDyslexic or place its .otf files in "
-            "%LOCALAPPDATA%\\EqUpdater\\fonts and restart EqUpdater.",
-            self._fonts.dyslexic_available)
-
         # Settings is created after the main-window font pass, so apply the
         # current family to the newly-created overlay immediately.
         self._fonts.apply_tree(ov)
+        self._settings_panel = (panel, MW, MH)
+        self._fit_settings_panel(panel, MW, MH)
+
+    def _fit_settings_panel(self, panel, min_w: int, min_h: int):
+        """Grow the Settings panel to what its content needs, up to the
+        window. OpenDyslexic sets far wider and taller than Friz at the same
+        point size, and a fixed panel clipped its bottom rows."""
+        panel.update_idletasks()
+        margin = self._px(10)
+        w = min(max(min_w, panel.winfo_reqwidth()), WIN_W - 2 * margin)
+        h = min(max(min_h, panel.winfo_reqheight()), WIN_H - 2 * margin)
+        y = max(margin, (WIN_H - h) // 2 - (self._px(20) if h == min_h else 0))
+        panel.place_configure(x=(WIN_W - w) // 2, y=y, width=w, height=h)
 
     def _close_settings(self):
         self.unbind("<Escape>")
@@ -7737,6 +7757,13 @@ class EqUpdaterApp(tk.Tk):
         self._cfg = update_config(mutate)
         self._fonts.set_choice(choice)
         self._apply_app_fonts()
+        # Switched from inside Settings: the panel's content just changed size.
+        sp = getattr(self, "_settings_panel", None)
+        if sp and self._settings_overlay is not None:
+            try:
+                self._fit_settings_panel(*sp)
+            except tk.TclError:
+                pass
 
     def _toggle_dyslexic_font(self):
         # Backwards-compatible shim for any older UI path that still toggles

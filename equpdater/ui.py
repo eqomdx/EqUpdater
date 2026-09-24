@@ -142,6 +142,10 @@ def _extract_local_font_archives() -> None:
                     name = os.path.basename(info.filename)
                     if not name or not name.lower().endswith((".ttf", ".otf")):
                         continue
+                    # Archives zipped on a Mac carry __MACOSX/._<font> metadata
+                    # stubs. They end in .otf but are not fonts.
+                    if name.startswith("._") or "__MACOSX/" in info.filename:
+                        continue
                     target = os.path.join(dest, name)
                     if os.path.exists(target):
                         continue
