@@ -3660,8 +3660,8 @@ class EqUpdaterApp(tk.Tk):
         self._layout_footer()
         if hasattr(self, "_hdr_canvas"):
             self._draw_logo()
-            for tab in getattr(self, "_nav_pos", {}):
-                self._draw_nav_tab(tab)
+            if getattr(self, "_nav_pos", None):
+                self._layout_nav()
             self._draw_update_label()
             self._draw_gear()
         for button in getattr(self, "_gradient_buttons", []):
@@ -3822,22 +3822,12 @@ class EqUpdaterApp(tk.Tk):
         self._logo_y = HDR_H // 2 - self._px(6)
         self._draw_logo()
 
-        # Point-sized font: Tk scales it by tk-scaling, so measure() below
-        # already returns device pixels at the current DPI.
-        nav_font = tkfont.Font(family=self._fonts.active_family, size=11, weight="bold")
-        tabs = ["NEWS", "TWEAKS", "ADDONS", "MODS", "MPQ"]
         self._active_tab  = "NEWS"
         self._nav_pos     = {}
         self._nav_text_w  = {}
         self._hdr_regions = {}
-        x = self._px(240)
-        for tab in tabs:
-            w = nav_font.measure(tab) + self._px(36)
-            self._nav_pos[tab]     = x + w // 2
-            self._nav_text_w[tab]  = nav_font.measure(tab)
-            self._hdr_regions[tab] = (x, 0, x + w, HDR_H)
-            x += w
-            self._draw_nav_tab(tab)
+        self._hdr_h       = HDR_H
+        self._layout_nav()
 
         self._hdr_regions["gear"] = (WIN_W - self._px(36), self._px(2),
                                      WIN_W - self._px(2), self._px(34))
@@ -3845,10 +3835,11 @@ class EqUpdaterApp(tk.Tk):
 
         # The wordmark is a clickable header element too (opens the repo).
         lb = hdr.bbox("logo")
+        tb = hdr.bbox("logo_text") or lb
         if lb:
             self._hdr_regions["logo"] = (lb[0] - self._px(4), lb[1] - self._px(4),
                                          lb[2] + self._px(6), lb[3] + self._px(4))
-            self._logo_cx = (lb[0] + lb[2]) // 2
+            self._logo_cx = (tb[0] + tb[2]) // 2
         else:
             self._logo_cx = self._px(127)
         # "Update available!" label under the wordmark, shown once the daily
@@ -3882,13 +3873,60 @@ class EqUpdaterApp(tk.Tk):
         self._auto_mods_retrigger = False
         self._auto_addons_retrigger = False
 
+    def _logo_icon(self):
+        """The app icon at wordmark height, made once. None if unavailable."""
+        if not hasattr(self, "_logo_icon_photo"):
+            self._logo_icon_photo = None
+            path = next((p for p in branding.icon_candidates()
+                         if p.lower().endswith(".png") and os.path.exists(p)),
+                        None)
+            try:
+                from PIL import Image, ImageTk
+                with Image.open(path) as im:
+                    im = im.convert("RGBA")
+                    h = self._px(40)
+                    w = max(1, round(im.width * h / im.height))
+                    self._logo_icon_photo = ImageTk.PhotoImage(
+                        im.resize((w, h), Image.Resampling.LANCZOS),
+                        master=self)
+            except Exception:
+                pass
+        return self._logo_icon_photo
+
     def _draw_logo(self, hover: bool = False):
         cv = self._hdr_canvas
         cv.delete("logo")
-        cv.create_text(self._px(24), self._logo_y, text=branding.APP_TITLE,
+        x = self._px(24)
+        icon = self._logo_icon()
+        if icon is not None:
+            cv.create_image(x, self._logo_y, image=icon, anchor="w",
+                            tags="logo")
+            x += icon.width() + self._px(10)
+        cv.create_text(x, self._logo_y, text=branding.APP_TITLE,
                        font=self._font(24, bold=True),
                        fill=C_GOLD_LT if hover else C_TEXT,
-                       anchor="w", tags="logo")
+                       anchor="w", tags=("logo", "logo_text"))
+
+    def _layout_nav(self):
+        """Place the tabs from the right: the last tab's text ends exactly
+        on the right edge of the panels below (the Changelog border).
+        Re-run on font changes, since every face measures differently."""
+        import tkinter.font as tkfont
+        tabs = ["NEWS", "TWEAKS", "ADDONS", "MODS", "MPQ"]
+        font = tkfont.Font(font=self._font(11, bold=True))
+        pad = self._px(18)                       # clickable margin each side
+        widths = [font.measure(t) for t in tabs]
+        right = WIN_W - self._px(40)             # panels' right edge
+        x = right + pad - sum(w + 2 * pad for w in widths)
+        for tab, text_w in zip(tabs, widths):
+            w = text_w + 2 * pad
+            self._nav_pos[tab] = x + w // 2
+            self._nav_text_w[tab] = text_w
+            # Keep the last tab's hit box clear of the gear in the corner.
+            self._hdr_regions[tab] = (x, 0, min(x + w, right + self._px(4)),
+                                      self._hdr_h)
+            x += w
+            self._draw_nav_tab(tab)
 
     def _draw_update_label(self, hover: bool = False):
         cv = self._hdr_canvas
