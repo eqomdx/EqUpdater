@@ -198,20 +198,20 @@ def _register_private_fonts() -> None:
 class FontManager:
     """Resolve the EqUpdater font family in one place.
 
-    Friz Quadrata is the default face, but the user can switch to Arial or
+    Arial is the default face; the user can switch to Friz Quadrata or
     OpenDyslexic live from Settings.  When bundled font files are present they
     are registered privately for this process on Windows so the choices work
     even without a system-wide install.
     """
 
-    def __init__(self, root: tk.Misc, choice: str = "friz"):
+    def __init__(self, root: tk.Misc, choice: str = "arial"):
         _register_private_fonts()
         self.root = root
         self.friz = _first_installed(root, FRIZ_FAMILIES)
         self.arial = _first_installed(root, ARIAL_FAMILIES)
         self.open_dyslexic = _first_installed(root, OPEN_DYSLEXIC_FAMILIES)
         self.fallback = _first_installed(root, (FALLBACK_FAMILY, "Times New Roman", "TkDefaultFont")) or FALLBACK_FAMILY
-        self.choice = "friz"
+        self.choice = "arial"
         self.set_choice(choice)
 
     @property
@@ -224,7 +224,7 @@ class FontManager:
 
     @property
     def family(self) -> str:
-        families = FONT_CHOICES.get(self.choice, FRIZ_FAMILIES)
+        families = FONT_CHOICES.get(self.choice, ARIAL_FAMILIES)
         return families[0]
 
     @property

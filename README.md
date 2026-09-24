@@ -73,8 +73,8 @@ played. The animation pauses while the window is minimised. The UI is a dark
 navy designed around it. PLAY and UPDATE ALL use deliberately subtle
 vertical gradients rather than flat fills.
 
-The preferred interface typeface is **Friz Quadrata**. Settings can switch
-live between **Friz Quadrata**, **Arial**, and **OpenDyslexic**, and the choice
+The default interface typeface is **Arial**. Settings → **Font** can switch
+live between **Arial**, **Friz Quadrata** and **OpenDyslexic**, and the choice
 is remembered between runs. OpenDyslexic is rendered at a slightly smaller
 point scale so its larger glyph metrics stay inside the fixed launcher layout
 without making normal text hard to read. Font binaries are not redistributed

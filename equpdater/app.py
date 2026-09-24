@@ -3278,7 +3278,7 @@ class EqUpdaterApp(tk.Tk):
         accessibility = self._cfg.get("accessibility", {})
         font_choice = accessibility.get("font_choice")
         if not font_choice:
-            font_choice = "opendyslexic" if accessibility.get("dyslexic_font") else "friz"
+            font_choice = "opendyslexic" if accessibility.get("dyslexic_font") else "arial"
         self._fonts = FontManager(self, font_choice)
         self._font_choice_var = tk.StringVar(value=self._fonts.choice)
         self._gradient_buttons = []
@@ -7602,48 +7602,6 @@ class EqUpdaterApp(tk.Tk):
         chg.bind("<Enter>",    lambda e: chg.configure(bg=C_GOLD, fg="#000"))
         chg.bind("<Leave>",    lambda e: chg.configure(bg=P_BDR, fg=C_TEXT))
 
-        # **Font first, on one row, near the top.** It is the setting that
-        # changes how much everything else needs, so it must stay reachable
-        # whatever is chosen -- at the bottom of a column, OpenDyslexic
-        # pushed it out of the panel and there was no way back.
-        font_row = tk.Frame(body, bg=P_BG)
-        font_row.pack(fill="x", pady=(self._px(16), 0))
-        font_lbl = tk.Label(font_row, text="FONT",
-                            font=self._font(10, bold=True),
-                            fg=C_GOLD, bg=P_BG)
-        font_lbl.pack(side="left", padx=(0, self._px(10)))
-        self._add_tooltip(font_lbl,
-                          "Friz Quadrata is the default. Changes apply live.")
-
-        def _font_row(value, label, note=None, available=True):
-            shown = label if available else f"{label} (not installed)"
-            rb = tk.Radiobutton(
-                font_row, text=f" {shown}", value=value,
-                variable=self._font_choice_var,
-                command=self._change_font_choice,
-                font=self._font(10), fg=C_TEXT if available else C_TEXT_DIM, bg=P_BG,
-                activebackground=P_BG, activeforeground=C_TEXT,
-                selectcolor=P_INP, highlightthickness=0, bd=0,
-                state="normal" if available else "disabled",
-                cursor="hand2" if available else "arrow")
-            rb.pack(side="left", padx=(self._px(8), self._px(8)))
-            if note:
-                self._add_tooltip(rb, note)
-            return rb
-
-        _font_row("friz", "Friz Quadrata",
-                  "Default Warcraft-style EqUpdater font.",
-                  self._fonts.friz_available)
-        _font_row("arial", "Arial",
-                  "A simple readable sans-serif option.",
-                  self._fonts.arial_available)
-        _font_row(
-            "opendyslexic", "OpenDyslexic",
-            "Dyslexic-friendly reading option. If it is unavailable, install "
-            "OpenDyslexic or place its .otf files in "
-            "%LOCALAPPDATA%\\EqUpdater\\fonts and restart EqUpdater.",
-            self._fonts.dyslexic_available)
-
         # Two equal-width columns via grid, so the right column keeps a fixed
         # position and reaches toward the right edge — regardless of how wide
         # the left column's text is.
@@ -7769,6 +7727,45 @@ class EqUpdaterApp(tk.Tk):
             cb_animated_bg,
             "Moving bubbles behind the window. Off shows a still image and "
             "uses less CPU.")
+
+        # FONT: its own section under GENERAL. The panel grows to fit its
+        # content (_fit_settings_panel), so a larger face cannot push these
+        # rows out of reach.
+        font_lbl = tk.Label(rcol, text="FONT",
+                            font=self._font(10, bold=True),
+                            fg=C_GOLD, bg=P_BG)
+        font_lbl.pack(anchor="w", pady=(self._px(20), 0))
+        self._add_tooltip(font_lbl,
+                          "Arial is the default. Changes apply live.")
+
+        def _font_row(value, label, note=None, available=True):
+            shown = label if available else f"{label} (not installed)"
+            rb = tk.Radiobutton(
+                rcol, text=f" {shown}", value=value,
+                variable=self._font_choice_var,
+                command=self._change_font_choice,
+                font=self._font(10), fg=C_TEXT if available else C_TEXT_DIM, bg=P_BG,
+                activebackground=P_BG, activeforeground=C_TEXT,
+                selectcolor=P_INP, highlightthickness=0, bd=0,
+                state="normal" if available else "disabled",
+                cursor="hand2" if available else "arrow")
+            rb.pack(anchor="w", pady=(self._px(8), 0))
+            if note:
+                self._add_tooltip(rb, note)
+            return rb
+
+        _font_row("arial", "Arial",
+                  "The default: a simple, readable sans-serif.",
+                  self._fonts.arial_available)
+        _font_row("friz", "Friz Quadrata",
+                  "Warcraft-style font.",
+                  self._fonts.friz_available)
+        _font_row(
+            "opendyslexic", "OpenDyslexic",
+            "Dyslexic-friendly reading option. If it is unavailable, install "
+            "OpenDyslexic or place its .otf files in "
+            "%LOCALAPPDATA%\\EqUpdater\\fonts and restart EqUpdater.",
+            self._fonts.dyslexic_available)
 
         # Settings is created after the main-window font pass, so apply the
         # current family to the newly-created overlay immediately.
@@ -7919,7 +7916,7 @@ class EqUpdaterApp(tk.Tk):
         threading.Thread(target=worker, daemon=True).start()
 
     def _change_font_choice(self):
-        choice = (self._font_choice_var.get() or "friz").strip().lower()
+        choice = (self._font_choice_var.get() or "arial").strip().lower()
 
         def mutate(c):
             acc = c.setdefault("accessibility", {})
@@ -7942,7 +7939,7 @@ class EqUpdaterApp(tk.Tk):
     def _toggle_dyslexic_font(self):
         # Backwards-compatible shim for any older UI path that still toggles
         # the previous boolean setting.
-        self._font_choice_var.set("opendyslexic" if self._fonts.choice != "opendyslexic" else "friz")
+        self._font_choice_var.set("opendyslexic" if self._fonts.choice != "opendyslexic" else "arial")
         self._change_font_choice()
 
     def _toggle_clear_wdb(self):

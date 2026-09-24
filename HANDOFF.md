@@ -66,9 +66,13 @@ If a user has an old *pinned* shortcut, Windows may still show that pinned short
 
 Font choices in Settings:
 
-1. Friz Quadrata — default
-2. Arial
+1. Arial — default (a saved choice still wins)
+2. Friz Quadrata
 3. OpenDyslexic
+
+The FONT section sits under GENERAL in Settings' right column; the panel
+grows to fit (`_fit_settings_panel`), which keeps all three reachable in
+OpenDyslexic (650 of a possible 680 px at 100% scaling).
 
 OpenDyslexic currently uses a `0.92` size multiplier because 1.00 overflowed fixed-height UI and 0.82 was too small.
 
