@@ -2265,6 +2265,24 @@ ADDONS_VERIFY_TTL   = 300     # skip re-verify on tab switches within this
 # its git link explicitly, so a recommended addon always appears — even if
 # addons.json renames or drops it. Where the link differs from the catalog,
 # it's a deliberate fork preference.
+#: The curated sources: for each addon folder, the repository EqUpdater
+#: recommends when *it* installs that addon.
+#:
+#: **A recommendation, and nothing more.** It is not a claim over a folder of
+#: that name: an addon already on disk is never re-pointed at the entry here,
+#: and one installed from a different repository is offered a switch rather
+#: than given one. A user-chosen source outranks this list permanently.
+#:
+#: Audited 2026-09-24 against the GitHub API for existence and activity.
+#: Community forks are the maintained versions on a 1.12 server and are
+#: preferred deliberately over upstreams that stopped at Vanilla. Removed in
+#: that pass: LevelRange-Octo (repository deleted, no replacement exists).
+#: Re-pointed: NampowerSettings, whose repository was deleted, to
+#: brues-code's maintained mirror.
+#:
+#: Known-stale but kept, because no better source exists and the addons still
+#: work: ShaguDPS (upstream archived), TurtleMail (sica42's fork, quiet since
+#: 2025-09).
 RECOMMENDED_ADDONS = {
     "AtlasLoot":            "https://github.com/Otari98/AtlasLoot",
     "aux-addon":            "https://github.com/OldManAlpha/aux-addon",
@@ -2273,10 +2291,9 @@ RECOMMENDED_ADDONS = {
     "FlightTracker":        "https://github.com/Lexxoi/FlightTracker",
     "InstanceJournal":      "https://github.com/Arthur-Helias/InstanceJournal",
     "ItemRack":             "https://github.com/Otari98/ItemRack",
-    "LevelRange-Octo":      "https://github.com/Dusk-92/LevelRange-Octo",
     "Magnify":              "https://github.com/paokkerkir/Magnify",
     "ModernMapMarkers":     "https://github.com/tilare/ModernMapMarkers",
-    "NampowerSettings":     "https://github.com/Dusk-92/NampowerSettings",
+    "NampowerSettings":     "https://github.com/brues-code/NampowerSettings",
     "PallyPowerTW":         "https://github.com/ShikawaLePaladin/PallyPowerTW",
     "pfQuest":              "https://github.com/The-Kludge-Bureau/pfQuest",
     "pfQuest-turtle":       "https://github.com/KameleonUK/pfQuest-turtle",
@@ -2293,14 +2310,23 @@ RECOMMENDED_ADDONS = {
     "WhatsTraining_Turtle": "https://github.com/rebasedkon/WhatsTraining_Turtle",
 }
 
-# Never shown in the updater, even when present in addons.json.
+# Never *offered* by the updater, even when present in addons.json. Blocking
+# hides an entry from the AVAILABLE list; it has no effect on one already
+# installed, which is shown and left alone like everything else.
+#
+# Each entry names what replaces it, because a block whose replacement has
+# since disappeared is how somebody ends up with neither -- which is exactly
+# what happened to LevelRange below.
 BLOCKED_ADDONS = {
     "SuperMacro",        # SuperMacro - SuperWoW Support
     "Rested",            # Rested XP (hazlema)
-    "LevelRange-Turtle", # LevelRange [Turtle] — LevelRange-Octo replaces it
     "CleveRoidMacros",   # SuperCleveRoidMacros replaces it
     "BlizzPlates",       # Blizzard Plates
     "PallyPower",        # CosminPOP PallyPower — PallyPowerTW replaces it
+    # "LevelRange-Turtle" was blocked in favour of LevelRange-Octo, whose
+    # repository has since been deleted with nothing replacing it (audit,
+    # 2026-09-24). The block is lifted rather than leaving no LevelRange at
+    # all. Unblocking only makes it offerable again; no install changes.
 }
 
 
@@ -5895,11 +5921,48 @@ class EqUpdaterApp(tk.Tk):
             self.after(0, done)
         threading.Thread(target=worker, daemon=True).start()
 
-    def _addon_apply(self, recs):
-        """Install/update the given addon records sequentially."""
+    def _addon_apply(self, recs, force: bool = False):
+        """Install/update the given addon records sequentially.
+
+        **The last line of defence, and it belongs here.** Every addon
+        install in the application funnels through this one method, so this
+        is the one place that can guarantee invariant 2 no matter which
+        caller got confused: a folder that exists on disk and is not managed
+        by EqUpdater is not written over.
+
+        The guard is redundant with the planner, deliberately. The planner
+        decides correctly and every caller consults it -- but "every caller"
+        is a claim about code that will be edited by people who have not read
+        this docstring, and the cost of it being false once is somebody's
+        addon. `force` is the explicit path (see _addon_force_replace) and is
+        never set by a sweep."""
         client = self._game_path.get().strip()
         if not client or self._addons_busy or not recs:
             return
+
+        if not force:
+            managed = load_config().get("addons", {})
+            safe, refused = [], []
+            for rec in recs:
+                folder = rec.get("folder")
+                on_disk = bool(client) and os.path.isdir(
+                    os.path.join(addons_path(client), folder or ""))
+                if on_disk and not addon_is_managed(managed.get(folder)):
+                    refused.append(folder)
+                else:
+                    safe.append(rec)
+            for folder in refused:
+                log("")
+                log(f"{folder}:")
+                log(f"  Installed on disk, and not managed by "
+                    f"{branding.APP_NAME}.")
+                log("  Skipping: refusing to overwrite an addon this "
+                    "updater did not install.")
+            recs = safe
+            if not recs:
+                self._addons_verify(remote_checks=False)
+                return
+
         self._addons_busy = True
         self._addons_installing = True
         for rec in recs:
@@ -7008,6 +7071,45 @@ class EqUpdaterApp(tk.Tk):
             "Ignores verification and updates for speech.mpq, allowing custom "
             "speech sounds")
 
+        self._build_about(panel, P_BG, PADX)
+
+    def _build_about(self, panel, bg, padx):
+        """Attribution, at the bottom of Settings.
+
+        EqUpdater is a derivative work of Octo Updater, whose licence requires
+        the original author's name, contact and donation links to stay visible
+        and unmodified. Requiring it is one thing; it is also simply correct --
+        the client sync, the MPQ engine, the addon installer and the look of
+        this window are that author's work, and a rename does not change who
+        wrote them."""
+        wrap = tk.Frame(panel, bg=bg)
+        wrap.pack(side="bottom", fill="x", padx=padx, pady=(0, self._px(12)))
+        tk.Frame(wrap, bg=C_DIVIDER, height=self._px(1)).pack(
+            fill="x", pady=(0, self._px(8)))
+
+        line1 = tk.Frame(wrap, bg=bg)
+        line1.pack(fill="x")
+        tk.Label(line1,
+                 text=f"{branding.APP_TITLE} {branding.APP_VERSION} — "
+                      f"derived from {branding.UPSTREAM_NAME} by rebasedkon",
+                 font=("Segoe UI", 9), fg=C_TEXT_DIM, bg=bg).pack(side="left")
+
+        line2 = tk.Frame(wrap, bg=bg)
+        line2.pack(fill="x", pady=(self._px(2), 0))
+        tk.Label(line2, text="Support the original author:",
+                 font=("Segoe UI", 9), fg=C_TEXT_DIM, bg=bg).pack(side="left")
+        for label, url in (("Ko-fi", "https://ko-fi.com/rebased"),
+                           ("Buy Me a Coffee",
+                            "https://buymeacoffee.com/rebased"),
+                           (branding.UPSTREAM_NAME, branding.UPSTREAM_URL)):
+            lnk = tk.Label(line2, text=label, font=("Segoe UI", 9,
+                                                    "underline"),
+                           fg=C_GOLD, bg=bg, cursor="hand2")
+            lnk.pack(side="left", padx=(self._px(8), 0))
+            lnk.bind("<Button-1>", lambda e, u=url: self._open_url(u))
+            lnk.bind("<Enter>", lambda e, w=lnk: w.configure(fg=C_GOLD_LT))
+            lnk.bind("<Leave>", lambda e, w=lnk: w.configure(fg=C_GOLD))
+
     def _close_settings(self):
         self.unbind("<Escape>")
         if self._settings_overlay is not None:
@@ -7459,7 +7561,9 @@ class EqUpdaterApp(tk.Tk):
         self._log_line("Replacing %s at your request "
                        "(%s).\n" % (folder, rec.get("reason") or "forced"),
                        "acct")
-        self._addon_apply([rec])
+        # The one caller that passes force: the user has read what will be
+        # lost, agreed to it, and the backup is already taken.
+        self._addon_apply([rec], force=True)
 
     def _mod_force_replace(self, mod_id: str):
         """The same escape hatch for a DLL mod.

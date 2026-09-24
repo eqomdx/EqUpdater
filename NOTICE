@@ -1,0 +1,70 @@
+EqUpdater
+=========
+
+EqUpdater is a derivative work of **Octo Updater**.
+
+Original work
+-------------
+
+    Octo Updater
+    Copyright (c) 2026 rebasedkon
+    https://github.com/rebasedkon/octo-updater
+
+    Support the author:
+      - Ko-fi:           https://ko-fi.com/rebased
+      - Buy Me a Coffee: https://buymeacoffee.com/rebased
+
+    Contact:
+      - Email:   inskon@proton.me
+      - Discord: https://discord.com/users/287467238573867018 (rebazed)
+
+The Octo Updater licence is reproduced verbatim in LICENSE and applies to this
+work. Its attribution terms are met here, in README.md, and in the application
+itself under Settings.
+
+Carried over from Octo Updater, largely unchanged
+-------------------------------------------------
+
+Most of what EqUpdater *does* is the original author's work:
+
+  - the torrent-based client sync built on aria2c, including the file
+    selection, the protected-file shielding and the locale patching
+  - WoW.exe tweak patching and Config.wtf generation
+  - the MPQ content-patch engine
+  - the addon installer (git-archive zips pinned to a commit)
+  - the mod registry and the GitHub/Codeberg release plumbing
+  - the hardened TLS context, download-host allowlist and HTTPS-only
+    redirect handling
+  - atomic config writes and the shared config lock
+  - the news and patch-notes feeds
+  - the window: its layout, palette, navigation and the look of every page
+
+What EqUpdater changed
+----------------------
+
+  - An ownership model. Components are managed, adopted or merely found, and
+    only the first two are ever modified automatically.
+  - Real version ordering (equpdater/versions.py) in place of comparing two
+    version strings for inequality.
+  - Commit ancestry (equpdater/gitcompare.py) in place of comparing two shas
+    for inequality.
+  - Local-modification detection (equpdater/hashing.py).
+  - A single update planner (equpdater/planner.py) that every list, badge,
+    worker and sweep consults, replacing four independent implementations.
+  - Provenance in the configuration schema, and a one-time migration from
+    Octo Updater's.
+  - Explicit adopt / release / switch-source / force-replace actions, with
+    backups.
+  - The product identity, and a test suite for the safety rules.
+
+Bundled at runtime, not included here
+-------------------------------------
+
+  - aria2c (https://aria2.github.io/) is downloaded at runtime when the client
+    needs syncing; it is not redistributed in this repository.
+  - certifi is an optional dependency used to supplement the system
+    certificate store.
+
+Mods and addons installed by EqUpdater remain the property of and are licensed
+by their own authors; EqUpdater fetches them from their own repositories and
+does not redistribute them.
