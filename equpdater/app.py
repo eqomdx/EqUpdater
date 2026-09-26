@@ -5868,6 +5868,27 @@ class EqUpdaterApp(tk.Tk):
                          highlightcolor=C_PANEL_BDR)
         self._mpq_panel_frame = outer
 
+        # speech.MPQ is an MPQ too, so its setting lives on this tab rather
+        # than in Settings -> General.
+        foot = tk.Frame(outer, bg=C_PANEL)
+        foot.pack(side="bottom", fill="x", padx=self._px(16),
+                  pady=(0, self._px(10)))
+        tk.Frame(foot, bg=C_DIVIDER, height=self._px(1)).pack(
+            fill="x", pady=(0, self._px(8)))
+        cb_ignore_speech = tk.Checkbutton(
+            foot, text=" Ignore speech.mpq",
+            variable=self._ignore_speech_var,
+            command=self._toggle_ignore_speech,
+            font=self._font(10), fg=C_TEXT, bg=C_PANEL,
+            activebackground=C_PANEL, activeforeground=C_TEXT,
+            selectcolor="#0f0b16", highlightthickness=0, bd=0,
+            cursor="hand2")
+        cb_ignore_speech.pack(anchor="w")
+        self._add_tooltip(
+            cb_ignore_speech,
+            "Ignores verification and updates for speech.mpq, allowing custom "
+            "speech sounds")
+
         list_frame = tk.Frame(outer, bg=C_PANEL)
         list_frame.pack(fill="both", expand=True,
                         padx=(self._px(16), self._px(4)),
@@ -7762,18 +7783,6 @@ class EqUpdaterApp(tk.Tk):
                        activebackground=P_BG, activeforeground=C_TEXT,
                        selectcolor=P_INP, highlightthickness=0, bd=0,
                        cursor="hand2").pack(anchor="w", pady=(self._px(10), 0))
-        cb_ignore_speech = tk.Checkbutton(
-            rcol, text=" Ignore speech.mpq",
-            variable=self._ignore_speech_var,
-            command=self._toggle_ignore_speech,
-            font=self._font(10), fg=C_TEXT, bg=P_BG,
-            activebackground=P_BG, activeforeground=C_TEXT,
-            selectcolor=P_INP, highlightthickness=0, bd=0, cursor="hand2")
-        cb_ignore_speech.pack(anchor="w", pady=(self._px(10), 0))
-        self._add_tooltip(
-            cb_ignore_speech,
-            "Ignores verification and updates for speech.mpq, allowing custom "
-            "speech sounds")
         cb_animated_bg = tk.Checkbutton(
             rcol, text=" Animated background",
             variable=self._animated_bg_var,
