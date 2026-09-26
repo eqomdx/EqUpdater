@@ -5790,10 +5790,10 @@ class EqUpdaterApp(tk.Tk):
         self._addon_filter_var.trace_add(
             "write", self._on_addon_filter_changed)
         ent = tk.Entry(top, textvariable=self._addon_filter_var,
-                       bg="#2b2244", fg=C_TEXT, insertbackground=C_GOLD,
+                       bg="#070a17", fg=C_TEXT, insertbackground=C_GOLD,
                        relief="flat", font=self._font(10), width=24,
                        highlightthickness=1,
-                       highlightbackground="#4a3c6e",
+                       highlightbackground=C_PANEL_BDR,
                        highlightcolor=C_GOLD)
         tk.Label(top, text="⌕", font=self._font(18),
                  fg=C_TEXT, bg=C_PANEL).pack(side="right")
