@@ -234,11 +234,3 @@ def skipped_notably(plans) -> list:
              Action.SKIP_DISABLED}
     return [p for p in plans if p.skipped and p.action not in quiet]
 
-
-def summarise(plans) -> dict:
-    """Counts for the badges and the Update All preview."""
-    return {
-        "update": len(updatable(plans)),
-        "skipped": len(skipped_notably(plans)),
-        "total": len(plans),
-    }

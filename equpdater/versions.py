@@ -161,14 +161,3 @@ def is_newer(local, remote) -> bool:
     automatic update on."""
     return compare(local, remote) is Ordering.NEWER
 
-
-def describe(local, remote) -> str:
-    """One line for the log explaining what the comparison decided."""
-    order = compare(local, remote)
-    if order is Ordering.NEWER:
-        return f"{local} -> {remote}"
-    if order is Ordering.SAME:
-        return f"{local} is current"
-    if order is Ordering.OLDER:
-        return f"local {local} is newer than {remote}"
-    return f"cannot compare {local} with {remote}"

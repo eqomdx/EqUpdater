@@ -215,14 +215,6 @@ class FontManager:
         self.set_choice(choice)
 
     @property
-    def available_choices(self) -> dict[str, bool]:
-        return {
-            "friz": self.friz is not None,
-            "arial": self.arial is not None,
-            "opendyslexic": self.open_dyslexic is not None,
-        }
-
-    @property
     def family(self) -> str:
         families = FONT_CHOICES.get(self.choice, ARIAL_FAMILIES)
         return families[0]
@@ -257,10 +249,6 @@ class FontManager:
         return max(7, int(round(float(logical_size) * scale)))
 
     @property
-    def dyslexic(self) -> bool:
-        return self.choice == "opendyslexic"
-
-    @property
     def dyslexic_available(self) -> bool:
         return self.open_dyslexic is not None
 
@@ -277,9 +265,6 @@ class FontManager:
         if choice not in FONT_CHOICES:
             choice = "friz"
         self.choice = choice
-
-    def set_dyslexic(self, enabled: bool) -> None:
-        self.choice = "opendyslexic" if enabled else "friz"
 
     def spec(self, size: int, *, bold: bool = False, italic: bool = False,
              underline: bool = False) -> tuple:

@@ -27,8 +27,6 @@ APP_VERSION = "2.0.1"
 #: EqUpdater is a substantially reworked derivative of Octo Updater; see
 #: NOTICE.
 UPSTREAM_NAME = "Octo Updater"
-UPSTREAM_REPO = "rebasedkon/octo-updater"
-UPSTREAM_URL = f"https://github.com/{UPSTREAM_REPO}"
 PROJECT_REPO = "eqomdx/EqUpdater"
 PROJECT_URL = f"https://github.com/{PROJECT_REPO}"
 

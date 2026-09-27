@@ -41,19 +41,16 @@ import queue
 from functools import cache
 import tkinter as tk
 from tkinter import filedialog
-from pathlib import Path
 
 from . import branding, mpq
-from .config import (APP_DATA_DIR, BACKUP_DIR, CONFIG_FILE, SCHEMA_VERSION,
-                     backup_file, bootstrap_config, ensure_dir, load_config,
-                     new_addon_record, new_mod_record, save_config,
-                     update_config)
+from .config import (APP_DATA_DIR, BACKUP_DIR, CONFIG_FILE, bootstrap_config,
+                     ensure_dir, load_config, new_addon_record,
+                     new_mod_record, update_config)
 from .gitcompare import Ancestry, ancestry, same_repo, short as short_sha
 from .hashing import files_hash, folder_hash
-from .planner import (Component, plan, plan_all, skipped_notably, summarise,
+from .planner import (Component, plan, skipped_notably,
                       updatable)
 from .states import Action, Plan, Status
-from .versions import Ordering, compare as compare_versions, is_newer
 from .news import (ANNOUNCEMENTS_FORUM_ID, CHANGELOG_FORUM_ID,
                    fetch_latest_post, fetch_topic_list)
 from .ui import (AnimatedBackground, FontManager, GradientButton,
@@ -69,7 +66,6 @@ APP_NAME         = branding.APP_NAME
 UPDATER_VERSION  = branding.APP_VERSION
 SERVER           = "https://octowow.st"
 UA               = branding.USER_AGENT
-DOWNLOAD_RETRY   = 5
 DOWNLOAD_TIMEOUT = 10    # seconds without any data before a transfer aborts
 
 # Where the app lives, where its settings live, and where a fresh install
@@ -108,8 +104,6 @@ C_DIVIDER    = "#19385f"
 C_GOLD       = "#c99a3d"
 C_GOLD_LT    = "#e4bd67"
 C_PURPLE     = "#d7b56c"
-C_GREEN_BTN  = "#3f713d"
-C_GREEN_HOV  = "#4e844b"
 C_TEXT       = "#eee9dc"
 C_TEXT_DIM   = "#91a3bd"
 C_LOG_BG     = "#041027"
@@ -145,9 +139,7 @@ BUSY_GRADIENT = GradientPalette(
     disabled_top="#293a53", disabled_bottom="#1b2a40",
     border="#304966", disabled_fg=C_TEXT_DIM)
 
-FONT_BODY   = ("Segoe UI", 9)
 FONT_MONO   = ("Consolas", 9)
-FONT_VER    = ("Segoe UI", 8)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1834,22 +1826,6 @@ def _release_version(mod: dict, rel: dict) -> str | None:
     return rel.get("tag_name")
 
 
-def fetch_mod_latest_version(mod: dict) -> str | None:
-    src  = mod["source"]
-    kind = src["kind"]
-    if kind == "github_release":
-        rel = _github_latest(src["owner"], src["repo"])
-        if rel:
-            return _release_version(mod, rel)
-    elif kind == "codeberg_release":
-        rel = _codeberg_latest(src["owner"], src["repo"])
-        if rel:
-            return _release_version(mod, rel)
-    elif kind in ("direct_file", "direct_tar"):
-        return src.get("pinned_version")
-    return None
-
-
 _MOD_VERSION_CACHE_TTL = 3600
 
 
@@ -3423,8 +3399,6 @@ class EqUpdaterApp(tk.Tk):
         news_cache = self._cfg.get("news_cache", {})
         feat_cache = news_cache.get("announcements", {})
         patch_cache = news_cache.get("changelog", {})
-        self._feat_ts = float(feat_cache.get("timestamp", 0.0) or 0.0)
-        self._patch_ts = float(patch_cache.get("timestamp", 0.0) or 0.0)
         self._featured = feat_cache.get("item")
         self._patch_items = patch_cache.get("items")
 
@@ -3921,8 +3895,6 @@ class EqUpdaterApp(tk.Tk):
         hdr = self._bg_canvas
         self._hdr_canvas = hdr
 
-        import tkinter.font as tkfont
-
         self._logo_y = HDR_H // 2 - self._px(6)
         self._draw_logo()
 
@@ -4185,8 +4157,7 @@ class EqUpdaterApp(tk.Tk):
                 self._feat_loading = False
                 if feat is not None:
                     self._featured = feat
-                    self._feat_ts = self._save_news_cache(
-                        "announcements", "item", feat)
+                    self._save_news_cache("announcements", "item", feat)
                     self._render_featured(feat)
                 else:
                     self._render_featured(self._featured, error=err)
@@ -4211,8 +4182,7 @@ class EqUpdaterApp(tk.Tk):
                 self._patch_loading = False
                 if items is not None:
                     self._patch_items = items
-                    self._patch_ts = self._save_news_cache(
-                        "changelog", "items", items)
+                    self._save_news_cache("changelog", "items", items)
                     self._render_patch_notes(items)
                 else:
                     self._render_patch_notes(self._patch_items, error=err)
@@ -4829,10 +4799,6 @@ class EqUpdaterApp(tk.Tk):
     # ── mods panel ───────────────────────────────────────────────────────────────
 
     def _build_mods_panel(self):
-        PAD       = self._px(18)
-        PANEL_TOP = self._px(119)
-        PANEL_H   = WIN_H - PANEL_TOP - FOOT_H - self._px(10)
-
         outer = tk.Frame(self, bg=C_PANEL,
                          highlightthickness=1,
                          highlightbackground=C_PANEL_BDR)
@@ -5362,25 +5328,6 @@ class EqUpdaterApp(tk.Tk):
         self._cfg = update_config(_merge)
         self._log_line(f"\n{mod['name']} is now managed by "
                        f"{branding.APP_NAME}.\n", "acct")
-        self._render_mod_rows()
-        self._refresh_mods_badge()
-
-    def _release_mod(self, mod_id: str):
-        """Stop managing a mod: EqUpdater keeps showing it and stops touching
-        it. The files are not removed -- releasing ownership is not deleting
-        anything."""
-        mod = next((m for m in MODS_REGISTRY if m["id"] == mod_id), None)
-        if not mod:
-            return
-
-        def _merge(c):
-            rec = c.setdefault("mods", {}).setdefault(mod_id, {})
-            rec["managed"] = False
-            rec["installed_by"] = None
-        self._cfg = update_config(_merge)
-        self._log_line(f"\n{mod['name']} is no longer managed by "
-                       f"{branding.APP_NAME}; its files are untouched.\n",
-                       "acct")
         self._render_mod_rows()
         self._refresh_mods_badge()
 
@@ -7615,8 +7562,6 @@ class EqUpdaterApp(tk.Tk):
         self._addons_verified_ts = 0.0
         self._addons_status = {"state": "idle", "addons": {}, "available": []}
         self._addon_errors = {}
-        self._feat_ts = 0.0
-        self._patch_ts = 0.0
         self._mod_updates_count = 0
         self._addon_updates_count = 0
         self._mpq_updates_count = 0
@@ -8085,12 +8030,6 @@ class EqUpdaterApp(tk.Tk):
             except tk.TclError:
                 pass
 
-    def _toggle_dyslexic_font(self):
-        # Backwards-compatible shim for any older UI path that still toggles
-        # the previous boolean setting.
-        self._font_choice_var.set("opendyslexic" if self._fonts.choice != "opendyslexic" else "arial")
-        self._change_font_choice()
-
     def _toggle_clear_wdb(self):
         val = self._clear_wdb_var.get()
         self._cfg = update_config(
@@ -8257,11 +8196,6 @@ class EqUpdaterApp(tk.Tk):
         self._all_btn.set_enabled(ready)
         self._all_glow.configure(
             bg=UPDALL_GLOW_ON if ready else UPDALL_GLOW_OFF)
-
-    def _all_hover(self, entering: bool):
-        # GradientButton owns hover rendering; retained for compatibility with
-        # any old call sites that may still invoke this helper.
-        return
 
     def _addon_plans(self) -> list:
         """The addons' decisions, taken from the last verify.
@@ -8475,10 +8409,6 @@ class EqUpdaterApp(tk.Tk):
         self._upd_btn.set_enabled(False)
         self._btn_glow.configure(bg="#1b2c43")
         self._refresh_update_all_btn()
-
-    def _btn_hover(self, entering: bool):
-        # GradientButton owns hover rendering.
-        return
 
     def _mods_have_errors(self) -> bool:
         return any(bool(s.get("error"))
