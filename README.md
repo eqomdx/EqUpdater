@@ -68,6 +68,7 @@ confirmed, and skips the rest.
 
 ### Game client
 - Downloads and verifies the OctoWoW client, repairing only what is wrong.
+- Will not update or patch while the game is running.
 - Optional: keep a custom `speech.mpq` (MPQ tab → **Ignore speech.mpq**).
 
 ### DLL mods
