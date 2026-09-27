@@ -154,10 +154,3 @@ def compare(local, remote) -> Ordering:
         return Ordering.OLDER
     return Ordering.UNKNOWN
 
-
-def is_newer(local, remote) -> bool:
-    """True only for a proven newer remote. Every other answer -- same, older,
-    unparseable, incomparable -- is False, so this is safe to gate an
-    automatic update on."""
-    return compare(local, remote) is Ordering.NEWER
-

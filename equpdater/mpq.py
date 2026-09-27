@@ -205,11 +205,6 @@ def link_outcome(record: dict) -> str:
 #  Judgement
 # ──────────────────────────────────────────────────────────────────────────────
 
-#: States a row can show. `updateAvailable` is the only one that offers the
-#: plain Update button.
-STATES = ("unmanaged", "modified", "unverifiable", "upToDate",
-          "updateAvailable", "sourceDiffers", "unconfirmed")
-
 #: States where the user may deliberately overwrite the pack with the
 #: source's copy, after a warning and with the current file kept.
 REPLACEABLE = ("modified", "sourceDiffers", "unconfirmed")

@@ -14,7 +14,7 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from equpdater.gitcompare import Ancestry                      # noqa: E402
-from equpdater.planner import (Component, plan, plan_all,       # noqa: E402
+from equpdater.planner import (Component, plan,       # noqa: E402
                                skipped_notably, updatable)
 from equpdater.states import Action, Status                     # noqa: E402
 
@@ -192,11 +192,11 @@ class Invariant6IgnoreMeansIgnore(unittest.TestCase):
         self.assertIs(p.status, Status.IGNORED)
 
     def test_ignored_is_excluded_from_update_all(self):
-        plans = plan_all([
+        plans = [plan(c) for c in [
             mod(id="a", installed_version="1.0", remote_version="2.0"),
             mod(id="b", installed_version="1.0", remote_version="2.0",
                 ignore_updates=True),
-        ])
+        ]]
         self.assertEqual([p.component_id for p in updatable(plans)], ["a"])
 
 
@@ -290,7 +290,7 @@ class UpdateAllComposition(unittest.TestCase):
             addon(id="Rebased", remote_sha="b" * 40,
                   ancestry=Ancestry.DIVERGED),
         ]
-        self.plans = plan_all(self.components)
+        self.plans = [plan(c) for c in self.components]
 
     def test_only_safe_updates_run(self):
         self.assertEqual(

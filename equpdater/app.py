@@ -2360,17 +2360,6 @@ def mod_plan(mod: dict, state: dict, live: dict | None,
     return plan(mod_component(mod, state, live, client_dir))
 
 
-def mod_update_available(mod: dict, state: dict, live: dict | None,
-                         client_dir: str = "") -> bool:
-    """Kept as the name the UI already calls, now answering the planner's
-    question instead of `latest != installed`.
-
-    That inequality is what turned UnitXP V90 into V89: it cannot tell newer
-    from older, so a repository publishing an *older* release read as an
-    update and Update All took it."""
-    return mod_plan(mod, state, live, client_dir).will_update
-
-
 # ──────────────────────────────────────────────────────────────────────────────
 #  Addons definition & engine  (installs via git-archive zips pinned to a
 #  commit sha, so no full git client is needed)
@@ -3271,7 +3260,6 @@ class EqUpdaterApp(tk.Tk):
         # destroy(); this matters both for clean shutdown and for GUI smoke
         # tests that construct/destroy several roots in one Python process.
         self._destroying = False
-        self._poll_job = None
 
         # ── DPI scaling ────────────────────────────────────────────────────
         # With awareness declared (see _enable_dpi_awareness) Windows reports
@@ -3511,7 +3499,6 @@ class EqUpdaterApp(tk.Tk):
                     pass
         except (tk.TclError, RuntimeError):
             pass
-        self._poll_job = None
 
     def after(self, ms, func=None, *args):
         """Tk's ``after``, except that once the window is being destroyed it
@@ -3878,10 +3865,8 @@ class EqUpdaterApp(tk.Tk):
                     photo = tk.PhotoImage(file=path)
                     self.iconphoto(True, photo)
                     self._window_icon_photo = photo
-                    self._window_icon = path
                     return
                 self.iconbitmap(default=path)
-                self._window_icon = path
                 return
             except Exception:
                 continue
@@ -4414,7 +4399,7 @@ class EqUpdaterApp(tk.Tk):
         values = load_tweaks_config()
         PAD_X  = self._px(16)
 
-        for (tid, label, kind, recommended, _, desc, mn, mx, step) in TWEAKS_ITEMS:
+        for (tid, label, kind, _, _, desc, mn, mx, _) in TWEAKS_ITEMS:
             if tid == "fieldOfView":
                 # Shown, never applied on its own - see load_tweaks_config().
                 try:
@@ -8667,9 +8652,9 @@ class EqUpdaterApp(tk.Tk):
 
         if not getattr(self, "_destroying", False):
             try:
-                self._poll_job = self.after(80, self._poll)
+                self.after(80, self._poll)
             except (tk.TclError, RuntimeError):
-                self._poll_job = None
+                pass
 
 
 # ──────────────────────────────────────────────────────────────────────────────

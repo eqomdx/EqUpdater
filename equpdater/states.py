@@ -55,28 +55,10 @@ class Status(Enum):
     DISABLED = "Disabled"
     MISSING_FILES = "Missing files"
 
-    INSTALLING = "Installing…"
-    UPDATING = "Updating…"
     ERROR = "Error"
 
     def __str__(self) -> str:
         return self.value
-
-
-#: Statuses an automatic flow must never act on. Kept as a set rather than
-#: spelled out at each call site so a status added later cannot quietly become
-#: eligible for Update All by being forgotten in one `if`.
-PROTECTED = frozenset({
-    Status.LOCAL_NEWER,
-    Status.UNMANAGED,
-    Status.MODIFIED,
-    Status.DIFFERENT_SOURCE,
-    Status.DIVERGED,
-    Status.UNVERIFIABLE,
-    Status.IGNORED,
-    Status.DISABLED,
-    Status.ERROR,
-})
 
 
 class Action(Enum):

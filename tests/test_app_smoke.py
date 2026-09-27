@@ -117,8 +117,7 @@ class TestAppStarts(unittest.TestCase):
         self.assertIn("EqUpdater", self.app_mod.CONFIG_FILE)
 
     def test_the_window_carries_the_product_icon(self):
-        icon = getattr(self.app, "_window_icon", "")
-        self.assertTrue(icon.lower().endswith(("icon.png", "icon.ico")), icon)
+        self.assertIsNotNone(getattr(self.app, "_window_icon_photo", None))
 
     def test_update_all_starts_faded(self):
         """Nothing is installed in a throwaway folder, so there is nothing to
@@ -156,29 +155,29 @@ class TestPlannerReachesTheUI(unittest.TestCase):
         state = {"managed": True, "enabled": True,
                  "installed_version": "1.4",
                  "installed_files": ["ClassicAPI.dll"]}
-        self.assertTrue(self.m.mod_update_available(
-            self._mod(), state, {"latest_version": "1.5"}))
+        self.assertTrue(self.m.mod_plan(
+            self._mod(), state, {"latest_version": "1.5"}).will_update)
 
     def test_an_older_remote_is_not(self):
         """The headline case, through the app's own entry point."""
         state = {"managed": True, "enabled": True,
                  "installed_version": "V90",
                  "installed_files": ["ClassicAPI.dll"]}
-        self.assertFalse(self.m.mod_update_available(
-            self._mod(), state, {"latest_version": "V89"}))
+        self.assertFalse(self.m.mod_plan(
+            self._mod(), state, {"latest_version": "V89"}).will_update)
 
     def test_an_unmanaged_mod_is_never_offered(self):
         state = {"managed": False, "enabled": True,
                  "installed_version": "1.4",
                  "installed_files": ["ClassicAPI.dll"]}
-        self.assertFalse(self.m.mod_update_available(
-            self._mod(), state, {"latest_version": "9.9"}))
+        self.assertFalse(self.m.mod_plan(
+            self._mod(), state, {"latest_version": "9.9"}).will_update)
 
     def test_a_failed_lookup_is_never_offered(self):
         state = {"managed": True, "enabled": True,
                  "installed_version": "1.4",
                  "installed_files": ["ClassicAPI.dll"]}
-        self.assertFalse(self.m.mod_update_available(self._mod(), state, None))
+        self.assertFalse(self.m.mod_plan(self._mod(), state, None).will_update)
 
     def test_ownership_inferred_for_inherited_records(self):
         """A record with no `managed` key came from Octo Updater. A recorded
@@ -205,8 +204,8 @@ class TestPlannerReachesTheUI(unittest.TestCase):
 
     def test_every_texture_pack_state_is_drawable(self):
         """updateAvailable draws a button; everything else needs words."""
-        from equpdater import mpq
-        for state in mpq.STATES:
+        for state in ("unmanaged", "modified", "unverifiable", "upToDate",
+                      "updateAvailable", "sourceDiffers", "unconfirmed"):
             with self.subTest(state=state):
                 self.assertTrue(state == "updateAvailable"
                                 or state in self.m.EqUpdaterApp._MPQ_STATES)
@@ -247,8 +246,7 @@ class TestPlannerReachesTheUI(unittest.TestCase):
     def test_every_mod_status_is_drawable_or_deliberately_silent(self):
         from equpdater.states import Status
         silent = {Status.UP_TO_DATE, Status.NOT_INSTALLED, Status.DISABLED,
-                  Status.IGNORED, Status.ERROR, Status.INSTALLING,
-                  Status.UPDATING, Status.DIVERGED}
+                  Status.IGNORED, Status.ERROR, Status.DIVERGED}
         for status in Status:
             with self.subTest(status=status):
                 self.assertTrue(
@@ -336,7 +334,7 @@ class TestAnimatedBackground(unittest.TestCase):
                                           path, 40, 30, on_fail=failed.append)
         self.run_for(anim, 300)
         self.assertEqual(len(failed), 1)
-        self.assertFalse(anim.running)
+        self.assertTrue(anim._stopped)
         self.assertIsNone(anim.photo)
 
     def test_a_still_gif_is_not_an_animation(self):
@@ -353,7 +351,7 @@ class TestAnimatedBackground(unittest.TestCase):
             self.root, self.canvas, self.item, self.gif(self.COLOURS),
             40, 30)
         self.run_for(anim, 200)                # stops and waits
-        self.assertFalse(anim.worker_alive)
+        self.assertFalse(anim._producer.thread.is_alive())
         self.assertEqual(_animation_threads(), [])
 
     def test_the_worker_holds_no_tk_object(self):
@@ -483,7 +481,7 @@ class TestAnimatedBackgroundSetting(unittest.TestCase):
     def test_on_by_default_and_playing(self):
         self.assertTrue(self.app._animated_bg_var.get())
         self.assertIsNotNone(self.app._bg_anim)
-        self.assertTrue(self.app._bg_anim.running)
+        self.assertFalse(self.app._bg_anim._stopped)
 
     def test_off_shows_the_still_and_is_remembered(self):
         self.app._animated_bg_var.set(False)
@@ -494,7 +492,7 @@ class TestAnimatedBackgroundSetting(unittest.TestCase):
 
         self.app._animated_bg_var.set(True)
         self.app._toggle_animated_background()
-        self.assertTrue(self.app._bg_anim.running)
+        self.assertFalse(self.app._bg_anim._stopped)
         self.assertIs(self.m.load_config()["animated_background"], True)
 
     def test_missing_gif_keeps_the_still(self):
@@ -589,7 +587,6 @@ class TestNewsCadence(unittest.TestCase):
         a.after(1500, after_launch)
         a.mainloop()
         _close_app(a)
-        del a
         shutil.rmtree(tmp, ignore_errors=True)
 
         one, two = {"announcements": 1, "patch": 1}, {"announcements": 2, "patch": 2}

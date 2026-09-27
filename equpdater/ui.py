@@ -610,14 +610,6 @@ class AnimatedBackground:
         self.photo = None
         return gone
 
-    @property
-    def running(self) -> bool:
-        return not self._stopped
-
-    @property
-    def worker_alive(self) -> bool:
-        return bool(self._producer and self._producer.thread.is_alive())
-
     # ── Tk thread ────────────────────────────────────────────────────────
 
     def _schedule(self, delay_ms: int) -> None:

@@ -7,7 +7,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from equpdater.versions import Ordering, compare, is_newer, parse  # noqa: E402
+from equpdater.versions import Ordering, compare, parse  # noqa: E402
 
 
 class TestParse(unittest.TestCase):
@@ -51,9 +51,9 @@ class TestCompare(unittest.TestCase):
     def test_the_unitxp_case(self):
         """The exact scenario this product was rewritten around."""
         self.assertIs(compare("V90", "V89"), Ordering.OLDER)
-        self.assertFalse(is_newer("V90", "V89"))
+        self.assertIsNot(compare("V90", "V89"), Ordering.NEWER)
         self.assertIs(compare("V89", "V90"), Ordering.NEWER)
-        self.assertTrue(is_newer("V89", "V90"))
+        self.assertIs(compare("V89", "V90"), Ordering.NEWER)
 
     def test_numeric_not_lexical(self):
         """1.10 is newer than 1.9. String comparison says the opposite, which
@@ -92,14 +92,14 @@ class TestCompare(unittest.TestCase):
         self.assertIs(compare("1.2", None), Ordering.UNKNOWN)
         self.assertIs(compare("latest", "1.2"), Ordering.UNKNOWN)
 
-    def test_is_newer_is_false_for_everything_but_newer(self):
+    def test_only_a_proven_newer_remote_counts_as_newer(self):
         """The gate an automatic update hangs off: only a proven newer remote
         opens it."""
         for local, remote in [("V90", "V89"), ("1.2", "1.2"),
                               ("1.2.3", "V90"), (None, "1.2"),
                               ("1.2", None), ("1.2", "latest")]:
             with self.subTest(local=local, remote=remote):
-                self.assertFalse(is_newer(local, remote))
+                self.assertIsNot(compare(local, remote), Ordering.NEWER)
 
 
 if __name__ == "__main__":

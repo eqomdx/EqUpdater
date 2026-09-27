@@ -212,11 +212,6 @@ def plan(c: Component) -> Plan:
     return p
 
 
-def plan_all(components) -> list:
-    """Every component's decision, in the order given."""
-    return [plan(c) for c in components]
-
-
 def updatable(plans) -> list:
     """The subset Update All is allowed to touch. This is the only function
     Update All may use to choose its work."""
