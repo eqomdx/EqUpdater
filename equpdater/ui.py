@@ -465,6 +465,87 @@ class BackdropCanvas(tk.Canvas):
         self.tag_lower(self._backdrop)
 
 
+class _FrameProducer:
+    """The worker half of AnimatedBackground: decodes, crops, scales and
+    darkens frames a few ahead into a queue, on its own thread.
+
+    **It holds no Tk object** -- a path, sizes, the fade layers (Pillow
+    images), a queue and a stop flag, nothing else. That is the point of the
+    split. A thread keeps its target alive until it has finished running, so
+    whatever the target references is released *on the worker thread* when
+    it exits. When the worker's target was a method of the Tk-facing object,
+    that object -- and through it the Tk window -- could be freed there, and
+    Tcl aborts the whole process when an interpreter is deleted off the
+    thread that created it ("Tcl_AsyncDelete: async handler deleted by the
+    wrong thread"). With nothing Tk-owned reachable from here, the worker's
+    exit can only ever free Pillow images and Python values."""
+
+    def __init__(self, path: str, width: int, height: int, darken: float,
+                 fades, frames_ahead: int):
+        self.path, self.width, self.height = path, width, height
+        self.darken, self.fades = darken, list(fades or [])
+        self.queue: queue.Queue = queue.Queue(maxsize=frames_ahead)
+        self.stop_event = threading.Event()
+        self.error: str | None = None
+        self.thread = threading.Thread(target=self.run, daemon=True,
+                                       name="bg-animation")
+
+    def start(self) -> None:
+        self.thread.start()
+
+    def stop(self) -> None:
+        """Ask the worker to finish. Safe from any thread, safe twice."""
+        self.stop_event.set()
+        try:                          # unblock a worker waiting on put()
+            while True:
+                self.queue.get_nowait()
+        except queue.Empty:
+            pass
+
+    def join(self, timeout: float) -> bool:
+        """Wait up to ``timeout`` seconds; True once the worker is gone."""
+        if self.thread.is_alive() and self.thread is not threading.current_thread():
+            self.thread.join(timeout)
+        return not self.thread.is_alive()
+
+    def _frame_box(self, w: int, h: int):
+        """The part of a w×h frame that covers the window (centre crop)."""
+        scale = max(self.width / w, self.height / h)
+        cw, ch = self.width / scale, self.height / scale
+        left, top = (w - cw) / 2, (h - ch) / 2
+        return (left, top, left + cw, top + ch)
+
+    def run(self) -> None:
+        try:
+            with Image.open(self.path) as gif:
+                frames = getattr(gif, "n_frames", 1)
+                if frames < 2:
+                    raise ValueError("not an animation (1 frame)")
+                box = self._frame_box(*gif.size)
+                lut = [min(255, int(v * self.darken)) for v in range(256)] * 3
+                while not self.stop_event.is_set():
+                    for index in range(frames):
+                        if self.stop_event.is_set():
+                            return
+                        gif.seek(index)
+                        duration = max(20, int(gif.info.get("duration") or 40))
+                        frame = gif.convert("RGB").resize(
+                            (self.width, self.height),
+                            Image.Resampling.BILINEAR, box=box)
+                        if self.darken != 1.0:
+                            frame = frame.point(lut)
+                        apply_edge_fades(frame, self.fades)
+                        while not self.stop_event.is_set():
+                            try:
+                                self.queue.put((frame, duration), timeout=0.25)
+                                break
+                            except queue.Full:
+                                continue
+        except Exception as exc:                        # noqa: BLE001
+            if not self.stop_event.is_set():
+                self.error = f"{type(exc).__name__}: {exc}"
+
+
 class AnimatedBackground:
     """Play a looping GIF into one canvas image item, cover-cropped to the
     window.
@@ -472,10 +553,16 @@ class AnimatedBackground:
     **Why frames are made as they play rather than up front.** The supplied
     GIF is 622 frames; at window size each is about 2.8 MB in Tk, so the
     whole loop would need well over a gigabyte. Instead a worker thread
-    decodes, crops, scales and darkens a few frames ahead into a small queue
-    -- all Pillow, no Tk -- and the Tk thread only pastes the next finished
-    frame into a single PhotoImage on an ``after()`` timer. The worker blocks
-    while the queue is full, so it never runs ahead of what is shown.
+    (``_FrameProducer``) makes a few frames ahead into a small queue -- all
+    Pillow, no Tk -- and the Tk thread only pastes the next finished frame
+    into a single PhotoImage on an ``after()`` timer. The worker blocks while
+    the queue is full, so it never runs ahead of what is shown.
+
+    **Threads.** Everything on this object -- the widget, the canvas, the
+    PhotoImage, the ``after()`` job -- belongs to the Tk thread and is only
+    touched there. The worker sees only the producer. ``stop()`` cancels the
+    timer, tells the worker to finish, optionally waits for it, and releases
+    the PhotoImage, all from the Tk thread.
 
     Frame timing follows the GIF's own per-frame durations against a clock,
     so a late tick does not slow the loop down, and after the last frame it
@@ -497,98 +584,64 @@ class AnimatedBackground:
         self.on_image = on_image     # told the PhotoImage once it exists
         self.photo = None
         self.error: str | None = None
-        self._queue: queue.Queue = queue.Queue(maxsize=self.QUEUE_FRAMES)
-        self._stop = threading.Event()
+        self._producer: _FrameProducer | None = None
+        self._stopped = False
         self._job = None
         self._due = 0.0
         self._pending = None         # (image, duration) waiting for its time
-        self._thread = None
 
-    # ── lifecycle ────────────────────────────────────────────────────────
+    # ── lifecycle (Tk thread) ────────────────────────────────────────────
 
     def start(self) -> None:
         if Image is None or ImageTk is None:
             self._fail("Pillow is not available")
             return
-        self._thread = threading.Thread(target=self._produce, daemon=True,
-                                        name="bg-animation")
-        self._thread.start()
+        self._producer = _FrameProducer(self.path, self.width, self.height,
+                                        self.darken, self.fades,
+                                        self.QUEUE_FRAMES)
+        self._producer.start()
         self._schedule(15)
 
-    def stop(self, wait: float = 0.0) -> None:
-        """Stop drawing and let the worker exit. Safe to call twice.
+    def stop(self, wait: float = 0.0) -> bool:
+        """Stop drawing. Safe to call twice. Returns True once the worker
+        thread has exited.
 
-        ``wait`` seconds to let the worker finish its current frame -- used
-        when the window is closing, so no Pillow work is still running while
-        Tk and the interpreter are torn down."""
-        self._stop.set()
+        Cancels the timer, tells the worker to finish and -- with ``wait`` --
+        waits for it, then releases the PhotoImage here on the Tk thread. The
+        canvas item keeps showing the last frame's name until the caller puts
+        something else there, which callers do straight away."""
+        self._stopped = True
         if self._job is not None:
             try:
                 self.widget.after_cancel(self._job)
             except (tk.TclError, RuntimeError):
                 pass
             self._job = None
-        try:                          # unblock a worker waiting on put()
-            while True:
-                self._queue.get_nowait()
-        except queue.Empty:
-            pass
-        thread = self._thread
-        if wait and thread is not None and thread is not threading.current_thread():
-            thread.join(wait)
+        gone = True
+        if self._producer is not None:
+            self._producer.stop()
+            gone = self._producer.join(wait) if wait else not self._producer.thread.is_alive()
+        self._pending = None
+        self.photo = None
+        return gone
 
     @property
     def running(self) -> bool:
-        return not self._stop.is_set()
+        return not self._stopped
 
-    # ── worker thread: Pillow only ───────────────────────────────────────
-
-    def _frame_box(self, w: int, h: int):
-        """The part of a w×h frame that covers the window (centre crop)."""
-        scale = max(self.width / w, self.height / h)
-        cw, ch = self.width / scale, self.height / scale
-        left, top = (w - cw) / 2, (h - ch) / 2
-        return (left, top, left + cw, top + ch)
-
-    def _produce(self) -> None:
-        try:
-            with Image.open(self.path) as gif:
-                frames = getattr(gif, "n_frames", 1)
-                if frames < 2:
-                    raise ValueError("not an animation (1 frame)")
-                box = self._frame_box(*gif.size)
-                lut = [min(255, int(v * self.darken)) for v in range(256)] * 3
-                while not self._stop.is_set():
-                    for index in range(frames):
-                        if self._stop.is_set():
-                            return
-                        gif.seek(index)
-                        duration = max(20, int(gif.info.get("duration") or 40))
-                        frame = gif.convert("RGB").resize(
-                            (self.width, self.height),
-                            Image.Resampling.BILINEAR, box=box)
-                        if self.darken != 1.0:
-                            frame = frame.point(lut)
-                        apply_edge_fades(frame, self.fades)
-                        while not self._stop.is_set():
-                            try:
-                                self._queue.put((frame, duration), timeout=0.25)
-                                break
-                            except queue.Full:
-                                continue
-        except Exception as exc:                        # noqa: BLE001
-            if not self._stop.is_set():
-                self.error = f"{type(exc).__name__}: {exc}"
+    @property
+    def worker_alive(self) -> bool:
+        return bool(self._producer and self._producer.thread.is_alive())
 
     # ── Tk thread ────────────────────────────────────────────────────────
 
     def _schedule(self, delay_ms: int) -> None:
-        if self._stop.is_set():
+        if self._stopped:
             return
         try:
             self._job = self.widget.after(max(1, int(delay_ms)), self._tick)
         except (tk.TclError, RuntimeError):
-            self._stop.set()
+            self.stop()
 
     def _fail(self, why: str) -> None:
         self.error = why
@@ -598,10 +651,10 @@ class AnimatedBackground:
 
     def _tick(self) -> None:
         self._job = None
-        if self._stop.is_set():
+        if self._stopped:
             return
-        if self.error:
-            self._fail(self.error)
+        if self._producer is not None and self._producer.error:
+            self._fail(self._producer.error)
             return
         try:
             if self.widget.state() in ("iconic", "withdrawn"):   # not visible
@@ -609,12 +662,12 @@ class AnimatedBackground:
                 self._schedule(250)
                 return
         except (tk.TclError, RuntimeError):
-            self._stop.set()
+            self.stop()
             return
 
         if self._pending is None:
             try:
-                self._pending = self._queue.get_nowait()
+                self._pending = self._producer.queue.get_nowait()
             except queue.Empty:
                 self._schedule(10)                   # worker still decoding
                 return

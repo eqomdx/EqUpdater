@@ -29,7 +29,7 @@
 2. Double-click **`install/INSTALL.cmd`**.
 3. Launch EqUpdater from the desktop shortcut it offers.
 
-The installer sets up Python if you need it, runs the tests, builds
+The installer sets up Python if you need it, builds
 `dist\EqUpdater\EqUpdater.exe`, and never touches your game folder. No
 administrator rights are needed, and it is safe to run again to upgrade.
 
@@ -133,8 +133,12 @@ Python 3.10 or newer. On Linux, run it from source the same way.
 ### Tests
 
 ```sh
-python -m unittest discover -s tests -t .
+python tools/check.py           # the whole suite; prints only what failed
+python build.py --release       # builds only if the suite passes
 ```
+
+The suite guards EqUpdater's safety rules. It runs in CI on every change and
+before every release build; it is not part of installing.
 
 ---
 

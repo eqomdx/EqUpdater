@@ -17,8 +17,21 @@
     EqUpdater is derived from Octo Updater by rebasedkon:
     https://github.com/rebasedkon/octo-updater
 
+    The test suite is not part of an ordinary install. It gates releases
+    (python build.py --release) and runs in CI; a GUI or timing test that
+    behaves differently on one PC must not stop somebody installing the app.
+    Developers who want it here can pass -RunTests.
+
+    If a step fails, the installer prints what failed -- the failing test and
+    its traceback, or the end of the build output -- and saves the complete
+    output under %LOCALAPPDATA%\EqUpdater\install-logs.
+
 .PARAMETER NoBuild
     Set up Python and the dependencies but do not build the executable.
+
+.PARAMETER RunTests
+    Developers: run the full test suite before building, and do not build if
+    it fails.
 
 .PARAMETER NoShortcut
     Do not offer to put a shortcut on the desktop.
@@ -30,6 +43,7 @@
 param(
     [switch]$NoBuild,
     [switch]$NoShortcut,
+    [switch]$RunTests,
     [switch]$Yes
 )
 
@@ -43,6 +57,30 @@ function Write-Head($text) {
 }
 function Write-Step($text) { Write-Host "  -> $text" -ForegroundColor Gray }
 function Write-Ok($text)   { Write-Host "  OK $text" -ForegroundColor Green }
+
+# Complete output of each step goes to a log file; the console only shows the
+# part that explains a failure.
+$script:logDir = Join-Path $env:LOCALAPPDATA "EqUpdater\install-logs"
+New-Item -ItemType Directory -Force -Path $script:logDir | Out-Null
+$script:stamp = Get-Date -Format "yyyyMMdd-HHmmss"
+
+function Invoke-Logged($name, [scriptblock]$command) {
+    # Native programs write progress to stderr. Windows PowerShell turns that
+    # into error records, which the installer's ErrorActionPreference=Stop
+    # would treat as fatal even when the program succeeds - so allow it here,
+    # capture everything, and decide from the exit code alone.
+    $log = Join-Path $script:logDir "$($script:stamp)-$name.log"
+    $old = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $lines = @(& $command 2>&1 | ForEach-Object { "$_" })
+        $code = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $old
+    }
+    $lines | Set-Content -Path $log -Encoding utf8
+    return [pscustomobject]@{ Code = $code; Lines = $lines; Log = $log }
+}
 
 # ---------------------------------------------------------------------------
 # Find a real Python.
@@ -143,12 +181,12 @@ if (-not (Test-Path (Join-Path $projectDir "equpdater\app.py"))) {
 }
 Write-Ok "project: $projectDir"
 
-Write-Head "1/4  Python"
+Write-Head "1/3  Python"
 $py = Find-RealPython
 if (-not $py) { $py = Install-Python }
 Write-Ok "$($py.Path)  (Python $($py.Version))"
 
-Write-Head "2/4  Dependencies"
+Write-Head "2/3  Dependencies"
 Write-Step "pip install --user --upgrade pyinstaller certifi pillow"
 & $py.Path -m pip install --user --upgrade --disable-pip-version-check `
     pyinstaller certifi pillow
@@ -210,40 +248,53 @@ if ($fontImported -gt 0) {
     Write-Host "  No font archives found. EqUpdater will also check Downloads/Desktop at launch." -ForegroundColor Yellow
 }
 
-Write-Head "3/4  Tests"
-# The safety rules are the product. Building without checking them would be
-# shipping an updater that might overwrite somebody's files on the strength
-# of an edit nobody ran.
-# unittest writes its progress/result stream to stderr by design.  Windows
-# PowerShell turns native stderr into ErrorRecord objects; with the installer's
-# global ErrorActionPreference=Stop that can abort the script even when Python
-# exits successfully.  Temporarily allow native stderr, capture it, then make
-# the build decision from the process exit code (the authoritative result).
-$oldErrorActionPreference = $ErrorActionPreference
-$ErrorActionPreference = "Continue"
-try {
-    $testOutput = @(& $py.Path -m unittest discover `
-        -s (Join-Path $projectDir "tests") -t $projectDir 2>&1)
-    $testExitCode = $LASTEXITCODE
+if ($RunTests) {
+    # Developers only. The same gate as `python build.py --release` and CI:
+    # tools/check.py prints each failing test with its traceback (or, if the
+    # test process crashed, which test was running and every thread's stack).
+    Write-Head "Tests (developer)"
+    $check = Invoke-Logged "tests" {
+        & $py.Path (Join-Path $projectDir "tools\check.py") `
+            --log (Join-Path $script:logDir "$($script:stamp)-tests-full.log")
+    }
+    $check.Lines | Write-Host
+    if ($check.Code -ne 0) {
+        throw "The test suite failed. Not building. Full log: $($check.Log)"
+    }
+    Write-Ok "tests passed"
 }
-finally {
-    $ErrorActionPreference = $oldErrorActionPreference
-}
-$testOutput | ForEach-Object { "$_" } | Select-Object -Last 8 | Write-Host
-if ($testExitCode -ne 0) {
-    throw "The test suite failed. Not building."
-}
-Write-Ok "tests passed"
 
 if ($NoBuild) {
     Write-Head "Done (build skipped)"
     exit 0
 }
 
-Write-Head "4/4  Build"
-& $py.Path (Join-Path $projectDir "build.py")
-if ($LASTEXITCODE -ne 0) {
-    throw "The build failed. See the messages above."
+Write-Head "3/3  Build"
+# A quick check that the downloaded source is whole: it compiles and the
+# package imports. Not the test suite - no windows, no threads, no network.
+Write-Step "checking the source"
+$source = Invoke-Logged "source-check" {
+    & $py.Path -m compileall -q (Join-Path $projectDir "equpdater")
+    if ($LASTEXITCODE -eq 0) {
+        & $py.Path -c "import sys; sys.path.insert(0, r'$projectDir'); import equpdater, equpdater.news, equpdater.planner"
+    }
+}
+if ($source.Code -ne 0) {
+    $source.Lines | Select-Object -Last 30 | Write-Host
+    throw ("The EqUpdater source is incomplete or damaged - download it " +
+           "again. Details: $($source.Log)")
+}
+Write-Ok "source OK"
+
+Write-Step "building EqUpdater (this takes a minute or two)"
+$build = Invoke-Logged "build" {
+    & $py.Path (Join-Path $projectDir "build.py")
+}
+if ($build.Code -ne 0) {
+    Write-Host ""
+    Write-Host "  The last lines of the build output:" -ForegroundColor Yellow
+    $build.Lines | Select-Object -Last 40 | ForEach-Object { Write-Host "    $_" }
+    throw "The build failed. Full output: $($build.Log)"
 }
 
 # A folder build: the executable needs the _internal directory beside it, so

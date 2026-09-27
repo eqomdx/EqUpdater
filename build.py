@@ -28,8 +28,15 @@ which names a file that is not the problem, and in a --windowed build there
 is no console to say anything better. A folder build never unpacks anything,
 starts faster, and cannot fail that way.
 
+**Tests gate releases, not installs.** ``--release`` runs the whole test
+suite first (tools/check.py) and refuses to build if anything fails: that is
+the build to hand to other people. A plain build -- what install.ps1 runs on
+a user's own PC -- does not, because a GUI or timing test behaving
+differently on one machine must not stop somebody installing the program.
+
 Usage:
     python build.py             # dist/EqUpdater/EqUpdater.exe  (recommended)
+    python build.py --release   # the same, only after the test suite passes
     python build.py --onefile   # one portable file; needs %TEMP% space to run
 """
 
@@ -70,6 +77,16 @@ def run(cmd: list) -> None:
 
 def main() -> None:
     onefile = "--onefile" in sys.argv
+
+    if "--release" in sys.argv:
+        sys.path.insert(0, os.path.join(HERE, "tools"))
+        from check import run_suite
+        log = os.path.join(WORK, "test-log.txt")
+        print("Release build: running the test suite first...")
+        passed, report = run_suite(log)
+        print(report)
+        if not passed:
+            raise SystemExit("The test suite failed. Not building a release.")
 
     try:
         import PyInstaller  # noqa: F401

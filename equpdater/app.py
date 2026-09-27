@@ -2137,6 +2137,12 @@ def uninstall_mod(mod: dict, client_dir: str):
             log(f"  Removed {rel}")
 
 
+def _read_lines(path: str) -> list:
+    """A text file's lines, with the file closed again."""
+    with open(path) as f:
+        return f.read().splitlines()
+
+
 def _dlls_txt_path(client_dir: str) -> str:
     return os.path.join(client_dir, "dlls.txt")
 
@@ -2191,7 +2197,7 @@ def _write_dlls_txt(client_dir: str, lines: list):
 
 def add_dll(client_dir: str, name: str):
     path  = _dlls_txt_path(client_dir)
-    lines = open(path).read().splitlines() if os.path.exists(path) else []
+    lines = _read_lines(path) if os.path.exists(path) else []
     if not any(l.strip().lower() == name.lower() for l in lines):
         lines = [l for l in lines if l.strip()] + [name]
     # Rewrite even when the entry was already present: a dlls.txt left behind
@@ -2206,7 +2212,7 @@ def ensure_dll(client_dir: str, name: str) -> bool:
     next launch, so a mod that is already registered must not be rewritten just
     to confirm it. Returns True when something was actually repaired."""
     path  = _dlls_txt_path(client_dir)
-    lines = open(path).read().splitlines() if os.path.exists(path) else []
+    lines = _read_lines(path) if os.path.exists(path) else []
     if any(l.strip().lower() == name.lower() for l in lines):
         return False
     add_dll(client_dir, name)
@@ -2247,7 +2253,7 @@ def remove_dll(client_dir: str, name: str):
     path = _dlls_txt_path(client_dir)
     if not os.path.exists(path):
         return
-    lines = [l for l in open(path).read().splitlines()
+    lines = [l for l in _read_lines(path)
              if l.strip() and l.strip().lower() != name.lower()]
     if not lines:
         os.remove(path)
@@ -3533,12 +3539,29 @@ class EqUpdaterApp(tk.Tk):
             pass
         self._poll_job = None
 
+    def after(self, ms, func=None, *args):
+        """Tk's ``after``, except that once the window is being destroyed it
+        schedules nothing.
+
+        Background workers hand their results back with ``self.after(0, ...)``
+        from their own threads. A worker that finishes after the window has
+        closed -- a slow network call, say -- must not reach into a dead
+        interpreter; its result simply has nowhere to go."""
+        if getattr(self, "_destroying", False):
+            return None
+        return super().after(ms, func, *args)
+
     def destroy(self):
-        """Destroy EqUpdater without leaving scheduled Tcl callbacks."""
+        """Destroy EqUpdater without leaving scheduled Tcl callbacks.
+
+        Order matters: mark the window as closing (so workers' ``after``
+        hand-backs are dropped), stop the background animation and wait for
+        its worker, cancel every pending ``after`` job, and only then destroy
+        the Tk widgets."""
         if getattr(self, "_destroying", False):
             return
         self._destroying = True
-        self._stop_bg_animation(restore_static=False, wait=1.0)
+        self._stop_bg_animation(restore_static=False, wait=2.0)
         self._cancel_pending_after_callbacks()
         try:
             self.unbind_all("<MouseWheel>")
@@ -4766,7 +4789,7 @@ class EqUpdaterApp(tk.Tk):
         if dlls_path and os.path.exists(dlls_path):
             try:
                 present = {l.strip().lower()
-                           for l in open(dlls_path).read().splitlines()}
+                           for l in _read_lines(dlls_path)}
                 stale = [n for n in ("VfPatcher.dll", "dxvk")
                          if n.lower() in present]
                 for n in stale:

@@ -166,15 +166,31 @@ Every failure is logged to the session log as `<stage> failed: <why> [<url>]`.
 
 ## Current tests
 
-Latest validation:
+`python tools/check.py` -- 199 tests, ~30 s on Windows. Runs the suite in a
+child process with faulthandler, prints only failures (name, exception,
+traceback) or, if the process crashed, the test that was running and every
+thread's stack. CI: `.github/workflows/tests.yml` (windows-latest, Python
+3.12). `python build.py --release` refuses to build if the suite fails.
 
-`Ran 188 tests ... OK` (Windows, 2026-09-24, after the edge fades)
+**The installer does not run the suite** (since 2026-09-27). It checks the
+source compiles and imports, then builds; `install.ps1 -RunTests` restores the
+suite for developers. Output of every step is logged under
+`%LOCALAPPDATA%\EqUpdater\install-logs`; the console shows only what explains
+a failure.
 
-Command used in a virtual display:
-
-`xvfb-run -a python -m unittest discover -s tests -t .`
-
-The Windows installer also runs the suite before building. It intentionally decides success from Python's exit code rather than treating unittest's stderr output as a PowerShell error.
+**Why:** a user's install died at "3/4 Tests" with `Tcl_AsyncDelete: async
+handler deleted by the wrong thread` (reported as "FTCI_AsyncDelete"). Cause:
+`AnimatedBackground`'s worker thread target was a method of the Tk-facing
+object, so the `bg-animation` thread held it -- and through it the Tk window
+-- until the thread finished. The tests stopped the animation without waiting;
+when teardown let go of the window while the worker was mid-frame, the
+worker's exit dropped the last reference and Tk was deleted on the worker
+thread. Fixed structurally: the worker is `ui._FrameProducer`, which holds no
+Tk object; `AnimatedBackground.stop(wait)` joins it and releases the
+PhotoImage on the Tk thread; `EqUpdaterApp.after` schedules nothing once
+destroy has begun; tests close apps through `_close_app` (waits for the
+worker, fails on a leak, keeps the app referenced so no worker can free it).
+`TestTkTeardownRace` reproduces the crash in a child process.
 
 ## Consent and texture-pack sources (2026-09-24, second pass)
 

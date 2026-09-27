@@ -12,8 +12,12 @@ Skipped where there is no display.
 import gc
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
+import textwrap
+import threading
+import time
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -25,6 +29,61 @@ try:
     HAVE_TK = True
 except Exception:                                   # pragma: no cover
     HAVE_TK = False
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+# ── Tk / thread lifecycle for every test in this file ────────────────────────
+#
+# Tcl must delete an interpreter on the thread that created it; deleting one
+# anywhere else aborts the process ("Tcl_AsyncDelete: async handler deleted
+# by the wrong thread") -- no exception, no traceback, the test run just
+# dies. So a Tk object may only ever be freed on this (the main) thread.
+#
+# Two rules keep it that way:
+#
+# 1. The background animation's worker holds no Tk object at all (see
+#    ui._FrameProducer), and closing an app waits for that worker to exit.
+#    `_close_app` fails the test if one survives.
+# 2. A closed app is kept referenced until the process exits. Its other
+#    background workers (news, update checks) hold references to it and may
+#    finish after the test; if the test let go first, the last reference --
+#    and the interpreter -- would be dropped on that worker's thread.
+
+_CLOSED_APPS = []
+
+
+def _animation_threads():
+    return [t for t in threading.enumerate()
+            if t.name == "bg-animation" and t.is_alive()]
+
+
+def _wait_for_animation_threads(timeout=3.0):
+    """The animation workers still alive after ``timeout`` seconds."""
+    deadline = time.monotonic() + timeout
+    while _animation_threads() and time.monotonic() < deadline:
+        time.sleep(0.02)
+    return _animation_threads()
+
+
+def _close_app(app):
+    """Destroy an EqUpdaterApp the way the window's X button does, keep it
+    referenced, free what can be freed on this thread, and check that no
+    animation worker outlived it."""
+    try:
+        app.destroy()
+    finally:
+        _CLOSED_APPS.append(app)
+    gc.collect()
+    leaked = _wait_for_animation_threads()
+    if leaked:
+        raise AssertionError("bg-animation worker(s) outlived the app: %r"
+                             % leaked)
+
+
+def tearDownModule():
+    leaked = _wait_for_animation_threads()
+    assert not leaked, "bg-animation worker(s) leaked: %r" % leaked
 
 
 @unittest.skipUnless(HAVE_TK, "no display")
@@ -47,11 +106,7 @@ class TestAppStarts(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        try:
-            cls.app.destroy()
-        except Exception:
-            pass
-        gc.collect()  # free Tk objects on the Tk thread, never a worker's GC
+        _close_app(cls.app)
         shutil.rmtree(cls.tmp, ignore_errors=True)
 
     def test_product_identity(self):
@@ -91,11 +146,7 @@ class TestPlannerReachesTheUI(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        try:
-            cls.app.destroy()
-        except Exception:
-            pass
-        gc.collect()  # free Tk objects on the Tk thread, never a worker's GC
+        _close_app(cls.app)
         shutil.rmtree(cls.tmp, ignore_errors=True)
 
     def _mod(self, mod_id="ClassicAPI"):
@@ -229,8 +280,10 @@ class TestAnimatedBackground(unittest.TestCase):
         except tk.TclError:
             pass
         del self.root, self.canvas
-        gc.collect()  # free Tk objects on the Tk thread, never a worker's GC
+        gc.collect()  # free Tk objects here, on the Tk thread
         shutil.rmtree(self.tmp, ignore_errors=True)
+        self.assertEqual(_wait_for_animation_threads(), [],
+                         "a bg-animation worker outlived its test")
 
     def gif(self, frames, name="t.gif"):
         path = os.path.join(self.tmp, name)
@@ -248,7 +301,8 @@ class TestAnimatedBackground(unittest.TestCase):
         self.root.after(ms, self.root.quit)
         anim.start()
         self.root.mainloop()
-        anim.stop()
+        # Wait for the worker: the window is destroyed in tearDown.
+        self.assertTrue(anim.stop(wait=3.0), "bg-animation worker did not exit")
 
     def test_plays_every_frame_and_loops(self):
         seen = []
@@ -256,17 +310,22 @@ class TestAnimatedBackground(unittest.TestCase):
             self.root, self.canvas, self.item, self.gif(self.COLOURS),
             40, 30, darken=1.0)
 
+        shown = []
+
         def sample():
             if anim.photo is not None:
                 rgb = tuple(int(v) for v in anim.photo._PhotoImage__photo.get(5, 5))
                 if not seen or seen[-1] != rgb:
                     seen.append(rgb)
+                shown.append(self.canvas.itemcget(self.item, "image")
+                             == str(anim.photo))
         self.run_for(anim, 700, sample)
         self.assertIsNone(anim.error)
         self.assertEqual(set(seen), set(self.COLOURS))
         self.assertGreater(len(seen), len(self.COLOURS))      # came round again
         self.assertEqual(seen[:4], self.COLOURS + [self.COLOURS[0]])
-        self.assertEqual(self.canvas.itemcget(self.item, "image"), str(anim.photo))
+        self.assertTrue(shown and all(shown))                 # drawn on the canvas
+        self.assertIsNone(anim.photo)                         # released on stop
 
     def test_unreadable_gif_falls_back(self):
         path = os.path.join(self.tmp, "broken.gif")
@@ -293,15 +352,85 @@ class TestAnimatedBackground(unittest.TestCase):
         anim = self.ui.AnimatedBackground(
             self.root, self.canvas, self.item, self.gif(self.COLOURS),
             40, 30)
-        self.run_for(anim, 200)
-        import threading
-        import time
-        deadline = time.time() + 2
-        while time.time() < deadline and any(
-                t.name == "bg-animation" for t in threading.enumerate()):
-            time.sleep(0.05)
-        self.assertFalse([t for t in threading.enumerate()
-                          if t.name == "bg-animation"])
+        self.run_for(anim, 200)                # stops and waits
+        self.assertFalse(anim.worker_alive)
+        self.assertEqual(_animation_threads(), [])
+
+    def test_the_worker_holds_no_tk_object(self):
+        """The worker's thread keeps its target alive until it has finished,
+        and drops it on that thread. Anything Tk reachable from the target
+        would be freed there -- which Tcl answers by aborting the process."""
+        from PIL import ImageTk
+        anim = self.ui.AnimatedBackground(
+            self.root, self.canvas, self.item, self.gif(self.COLOURS), 40, 30)
+        anim.start()
+        try:
+            producer = anim._producer
+            self.assertIs(producer.thread._target.__self__, producer)
+            seen, stack = set(), [producer]
+            while stack:
+                obj = stack.pop()
+                if id(obj) in seen:
+                    continue
+                seen.add(id(obj))
+                self.assertNotIsInstance(obj, (tk.Misc, tk.Variable,
+                                               ImageTk.PhotoImage))
+                if isinstance(obj, (list, tuple, set)):
+                    stack.extend(obj)
+                elif isinstance(obj, dict):
+                    stack.extend(obj.values())
+                elif obj is producer:
+                    stack.extend(vars(obj).values())
+        finally:
+            self.assertTrue(anim.stop(wait=3.0))
+
+
+class TestTkTeardownRace(unittest.TestCase):
+    """The installer failure, reproduced: a test tears its window down while
+    the animation worker is still making a frame, and garbage collection
+    then runs on another thread. Before the fix the worker's exit dropped the
+    last reference to the window and Tcl aborted the process
+    (Tcl_AsyncDelete). Run in a child process, because that abort would take
+    the whole test run with it."""
+
+    SCRIPT = textwrap.dedent('''
+        import gc, sys, threading, time, tkinter as tk
+        sys.path.insert(0, {root!r})
+        from equpdater import ui
+        real = ui.apply_edge_fades
+        def slow(img, layers):             # a frame that takes a while
+            time.sleep(0.3)
+            return real(img, layers)
+        ui.apply_edge_fades = slow
+        root = tk.Tk()
+        canvas = tk.Canvas(root, width=40, height=30); canvas.pack()
+        item = canvas.create_image(0, 0, anchor="nw")
+        anim = ui.AnimatedBackground(root, canvas, item, {gif!r}, 40, 30)
+        root.after(200, root.quit)
+        anim.start(); root.mainloop()
+        anim.stop()                        # deliberately no wait
+        root.destroy(); del root, canvas, item, anim
+        gc.collect()
+        def allocate():                    # another thread triggers GC
+            for _ in range(40):
+                [object() for _ in range(20000)]
+                time.sleep(0.02)
+        t = threading.Thread(target=allocate); t.start(); t.join()
+        print("clean exit")
+    ''')
+
+    @unittest.skipUnless(HAVE_TK, "no display")
+    def test_teardown_mid_frame_does_not_abort(self):
+        script = self.SCRIPT.format(root=ROOT,
+                                    gif=os.path.join(ROOT, "bubbles.gif"))
+        for attempt in range(3):
+            with self.subTest(attempt=attempt):
+                proc = subprocess.run([sys.executable, "-c", script],
+                                      capture_output=True, text=True,
+                                      timeout=60)
+                self.assertNotIn("Tcl_AsyncDelete", proc.stderr)
+                self.assertEqual(proc.returncode, 0, proc.stderr[-2000:])
+                self.assertIn("clean exit", proc.stdout)
 
 
 class TestEdgeFades(unittest.TestCase):
@@ -345,11 +474,7 @@ class TestAnimatedBackgroundSetting(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        try:
-            cls.app.destroy()
-        except Exception:
-            pass
-        gc.collect()  # free Tk objects on the Tk thread, never a worker's GC
+        _close_app(cls.app)
         shutil.rmtree(cls.tmp, ignore_errors=True)
 
     def image_on_canvas(self):
@@ -463,12 +588,8 @@ class TestNewsCadence(unittest.TestCase):
 
         a.after(1500, after_launch)
         a.mainloop()
-        try:
-            a.destroy()
-        except Exception:
-            pass
+        _close_app(a)
         del a
-        gc.collect()  # free Tk objects on the Tk thread, never a worker's GC
         shutil.rmtree(tmp, ignore_errors=True)
 
         one, two = {"announcements": 1, "patch": 1}, {"announcements": 2, "patch": 2}
@@ -549,11 +670,7 @@ class TestNoDllWithoutConsent(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        try:
-            cls.app.destroy()
-        except Exception:
-            pass
-        gc.collect()  # free Tk objects on the Tk thread, never a worker's GC
+        _close_app(cls.app)
         shutil.rmtree(cls.tmp, ignore_errors=True)
 
     def setUp(self):

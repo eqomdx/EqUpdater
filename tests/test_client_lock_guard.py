@@ -65,11 +65,13 @@ class ClientExeLockTests(unittest.TestCase):
         it that truncated on the way past would be the bug it is meant to stop.
         """
         self.write_exe()
-        before = open(self.exe, "rb").read()
+        with open(self.exe, "rb") as f:
+            before = f.read()
 
         client_exe_locked(self.dir)
 
-        self.assertEqual(open(self.exe, "rb").read(), before)
+        with open(self.exe, "rb") as f:
+            self.assertEqual(f.read(), before)
 
     def test_sync_stops_before_it_fetches_anything(self):
         """The guard is the first thing the sync does.

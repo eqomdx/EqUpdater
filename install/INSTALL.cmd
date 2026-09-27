@@ -3,8 +3,9 @@ title EqUpdater - installer
 REM ---------------------------------------------------------------------------
 REM  Double-click this file.
 REM
-REM  It installs Python if you do not have it, runs the test suite, and builds
-REM  EqUpdater.exe. It does not touch your game folder: EqUpdater finds that
+REM  It installs Python if you do not have it and builds EqUpdater.exe.
+REM  (The test suite is for developers and CI; see install\README.md.)
+REM  It does not touch your game folder: EqUpdater finds that
 REM  itself, and imports your Octo Updater settings the first time it runs.
 REM
 REM  No administrator rights needed. Safe to run more than once.

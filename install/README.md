@@ -4,9 +4,18 @@
 *Download ZIP*), unpack it, open the `install` folder and double-click
 **`INSTALL.cmd`**.
 
-It installs Python for you if you do not have it, runs the test suite, builds
+It installs Python for you if you do not have it, checks the source, builds
 `dist\EqUpdater\EqUpdater.exe`, and offers a desktop shortcut. No
 administrator rights; safe to run again.
+
+If anything fails, it prints what went wrong and saves the full output in
+`%LOCALAPPDATA%\EqUpdater\install-logs`.
+
+**The test suite is not part of installing.** It guards EqUpdater's safety
+rules, and it runs in CI on every change and before every release build
+(`python build.py --release`). It is not run on your PC during install, where
+a GUI or timing test behaving differently on one machine could stop you
+installing the program. Developers can still run it here with `-RunTests`.
 
 **It builds a folder, not a loose .exe.** `EqUpdater.exe` needs the
 `_internal` directory beside it, so move the whole folder or use the
@@ -22,15 +31,27 @@ which is a real state for anyone who keeps games on C:. `python build.py
 ```
 
 `-NoBuild` sets up the dependencies only. `-NoShortcut` skips the desktop
-shortcut. `-Yes` answers every prompt.
+shortcut. `-Yes` answers every prompt. `-RunTests` runs the full test suite
+first and does not build if it fails.
 
 **Linux / macOS, or if you would rather do it by hand**
 
 ```sh
 python3 -m pip install --user pyinstaller certifi pillow
-python3 -m unittest discover -s tests
 python3 build.py
 ```
+
+## For developers
+
+```sh
+python tools/check.py             # the whole suite; prints only what failed
+python build.py --release         # runs the suite first, builds only if it passes
+```
+
+`tools/check.py` runs the tests in a child process, so even a hard crash
+(Tcl aborting on a Tk object freed on the wrong thread, say) is reported with
+the test that was running and every thread's stack, instead of ending the run
+silently.
 
 Or skip the executable entirely and run it from source:
 
