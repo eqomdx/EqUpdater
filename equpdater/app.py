@@ -998,6 +998,44 @@ def run_aria2c(client_dir, select_files=None, check_integrity=False,
         raise RuntimeError(f"aria2c exited with code {code}")
 
 
+def client_exe_locked(out_dir: str) -> bool:
+    """True when WoW.exe in *out_dir* cannot be opened for writing.
+
+    Asked by trying to open WoW.exe for writing rather than by listing
+    processes, because the question that matters is not "is a program called
+    WoW running somewhere" -- it is "can I write *this* file". Windows locks a
+    running image against writing, so the answer is exact for the file we are
+    about to patch, it needs no extra dependency, and it is right when the
+    player is running a second install from another folder.
+
+    Read-write is opened and closed without writing a byte; "r+b" does not
+    truncate, where the "wb" the patcher itself uses would.
+
+    Named for what it tests rather than for the usual cause. A running game is
+    why this is nearly always true, but a read-only file is the same answer to
+    the same question, and the message below says both rather than asserting the
+    one it cannot know.
+    """
+    exe = os.path.join(out_dir, "WoW.exe")
+    if not os.path.exists(exe):
+        return False
+
+    try:
+        with open(exe, "r+b"):
+            return False
+    except PermissionError:
+        return True
+    except OSError:
+        # Anything else -- a missing drive, a permissions problem of its own --
+        # is not this question, and refusing to update over it would be a guess.
+        return False
+
+
+CLOSE_THE_GAME = ("WoW.exe cannot be written. Close World of Warcraft if it is "
+                  "running, then run this again. (If the game is closed, check "
+                  "that WoW.exe is not read-only.)")
+
+
 class VerifyWorker:
     def __init__(self, out_dir: str, log_q: queue.Queue, prog_q: queue.Queue):
         self.out_dir = out_dir
@@ -1125,6 +1163,14 @@ class UpdateWorker:
         exe = os.path.join(self.out_dir, "WoW.exe")
         if not os.path.exists(exe):
             raise RuntimeError(f"WoW.exe not found in {self.out_dir}")
+
+        # Its own guard, not only the one on the sync: tweaks and a language
+        # change both reach here on their own. The write below is "wb", which
+        # truncates the file the moment it succeeds -- so the one thing this
+        # must never do is find out too late.
+        if client_exe_locked(self.out_dir):
+            raise RuntimeError(CLOSE_THE_GAME)
+
         self.log("\nApplying binary tweaks to WoW.exe…")
         # Patch the pristine (unpatched) base rather than the on-disk exe, so a
         # re-patch (tweak or language change) never stacks on patched bytes.
@@ -1149,6 +1195,18 @@ class UpdateWorker:
         # interrupted sync always resumes against the current file set.
         try:
             self.log("\nStarting client sync…\n", "acct")
+
+            # Before anything is fetched or written. A sync that discovers this
+            # halfway through has already replaced some of the client and left
+            # the rest, which is a worse state than not having started.
+            if client_exe_locked(self.out_dir):
+                self.log(CLOSE_THE_GAME, "err")
+                self.progress(0.0, "Close the game first")
+                # The window leaves its "updating" state only on __DONE__ or
+                # __ERROR__; returning without one left it stuck.
+                self.log_q.put(("__ERROR__", ""))
+                return
+
             self.progress(0.0, "Preparing…")
             raw, files = fetch_torrent()
             version = torrent_version(raw)
