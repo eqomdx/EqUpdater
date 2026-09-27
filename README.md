@@ -1,79 +1,159 @@
-# EqUpdater
+<p align="center">
+  <img src="icon.png" alt="EqUpdater" width="96">
+</p>
 
-A desktop updater and mod manager for **OctoWoW**.
+<h1 align="center">EqUpdater</h1>
 
-EqUpdater manages your game client, DLL mods, addons, texture packs, client tweaks, and server news from one place.
+<p align="center">
+  A desktop updater and mod manager for <b>OctoWoW</b>.<br>
+  Game client, DLL mods, addons, texture packs, client tweaks and server news, in one place.
+</p>
+
+<p align="center">
+  <img src="docs/screenshot.png" alt="EqUpdater's MODS tab" width="720">
+</p>
+
+> EqUpdater is derived from **[Octo Updater](https://github.com/rebasedkon/octo-updater)**
+> by **rebasedkon**. Support the original author on
+> [Ko-fi](https://ko-fi.com/rebased) or
+> [Buy Me a Coffee](https://buymeacoffee.com/rebased).
+> See [Credits](#credits).
+
+---
 
 ## Install
 
-1. Download the repository
-2. Extract it
-3. Run **`install/INSTALL.cmd`**
-4. Launch EqUpdater
+**Close World of Warcraft first.**
 
-No administrator rights are required.
+1. Download this repository (**Code → Download ZIP**) and extract it.
+2. Double-click **`install/INSTALL.cmd`**.
+3. Launch EqUpdater from the desktop shortcut it offers.
+
+The installer sets up Python if you need it, runs the tests, builds
+`dist\EqUpdater\EqUpdater.exe`, and never touches your game folder. No
+administrator rights are needed, and it is safe to run again to upgrade.
+
+Keep `EqUpdater.exe` next to the `_internal` folder beside it: it is a folder
+build, so it starts fast and never unpacks itself into `%TEMP%`.
+
+---
+
+## Safe by design
+
+**EqUpdater only automatically updates what it manages.** It will never
+silently overwrite:
+
+- addons or mods you installed yourself
+- a newer version than the one being offered
+- files you have edited
+- a different fork or source than the one you chose
+- anything it cannot verify
+
+When it holds something back, it says why. When you deliberately replace or
+downgrade something, it asks first and keeps a backup.
+
+### Managed and unmanaged
+
+- **Managed** — installed by EqUpdater, or handed over with **Manage**.
+  Checked for updates and included in **Update All**.
+- **Unmanaged** — installed by hand. Shown and left exactly as it is, until
+  you choose to manage it.
+
+**Update All** updates everything managed where a newer version can be
+confirmed, and skips the rest.
+
+---
 
 ## Features
 
-* **Game client updates** with integrity checking
-* **DLL mod management**
-* **Addon installation and updates**
-* **Texture pack management**
-* **Custom addon repositories**
-* **Client tweaks**
-* **OctoWoW news and changelogs**
-* **Windows and Linux support**
+### Game client
+- Downloads and verifies the OctoWoW client, repairing only what is wrong.
+- Optional: keep a custom `speech.mpq` (MPQ tab → **Ignore speech.mpq**).
 
-## Safe Updates
+### DLL mods
+- VanillaFixes, ClassicAPI, Nampower, SuperWoW, UnitXP_SP3, DXVK and more,
+  each with its description and latest version.
+- **Essential mods are opt-in** — you are asked once, on first run.
+- DLLs already in your client are never replaced just because EqUpdater
+  recognises them.
+- `dlls.txt` is kept in step, so an enabled mod always actually loads.
 
-EqUpdater only automatically updates files that it manages.
+### Addons
+- ★ **Recommended** addons, a wider list of maintained community versions,
+  and search.
+- Add any addon from **GitHub, GitLab, Gitea or Codeberg**.
+- Knows the difference between newer, older and modified — a different
+  commit is not assumed to be an update.
+- Switch an addon to another fork, ignore updates for one, or stop managing it.
 
-It will not silently overwrite:
+### Texture packs (MPQ)
+- Install packs such as **Octo Raid Visuals** by Rook.
+- **Link a source** for a pack you installed yourself, so it can be checked
+  for updates. Linking changes no files.
+- **Replace** keeps your old file beside the new one.
 
-* Manually installed addons or mods
-* Newer local versions
-* Locally modified files
-* Custom forks or different sources
-* Files it cannot safely verify
+### Tweaks
+- Client tweaks patched into `WoW.exe`.
+- **Reset** asks before putting everything back to defaults.
 
-## Managed vs Unmanaged
+### News
+- Announcements and the Changelog, read straight from the OctoWoW forum:
+  once at launch, and again when you press refresh.
+- If the forum cannot be read, the News tab says why and keeps the last news
+  it received.
 
-**Managed** components are installed by EqUpdater or explicitly added using **Manage**. These can be checked and updated automatically.
+### Look and feel
+- Animated underwater background (Settings → **Animated background**; off
+  uses a still image and almost no CPU).
+- Fonts: **Arial** (default), **Friz Quadrata** or **OpenDyslexic**, switched
+  live in Settings.
+- Dark title bar to match.
 
-**Unmanaged** components were installed manually. EqUpdater can detect them, but leaves them untouched unless you choose to manage them.
+---
 
-## Update All
+## Coming from Octo Updater
 
-**Update All** updates everything EqUpdater manages where a newer version can be confirmed.
+On first launch, EqUpdater finds your Octo Updater settings, backs them up and
+imports your game folder, locale, tweaks, mods and addons. Your old
+configuration is **copied, never moved**, so going back costs nothing.
 
-Anything unsafe or uncertain is skipped instead of being overwritten.
+---
 
-## Addons
+## Running from source
 
-EqUpdater supports:
+```sh
+python -m pip install pillow pyinstaller certifi
+python -m equpdater          # run it
+python build.py              # build dist/EqUpdater/EqUpdater.exe
+```
 
-* Automatic update checking
-* Custom repositories
-* GitHub, Codeberg, GitLab and Gitea sources
-* Local modification detection
-* Switching sources or forks
-* Individual install, update and removal
-* Ignoring updates for specific components
+Python 3.10 or newer. On Linux, run it from source the same way.
 
-## DLL Mods
+### Tests
 
-DLL mods can be installed and managed individually.
+```sh
+python -m unittest discover -s tests -t .
+```
 
-Essential mods are **opt-in**, and existing DLLs are not automatically replaced just because EqUpdater detects them.
+---
 
-## Texture Packs
+## Credits
 
-Texture packs can be installed through EqUpdater or linked to an external source.
+EqUpdater is a derivative work of **Octo Updater**.
 
-EqUpdater can track supported packs for updates while leaving custom or unlinked MPQs alone.
+> **Octo Updater** — Copyright (c) 2026 **rebasedkon**
+> https://github.com/rebasedkon/octo-updater
+>
+> Support the author:
+> [Ko-fi](https://ko-fi.com/rebased) ·
+> [Buy Me a Coffee](https://buymeacoffee.com/rebased)
+>
+> Contact: inskon@proton.me ·
+> [Discord (rebazed)](https://discord.com/users/287467238573867018)
 
-## Backups
+Much of what EqUpdater does — the client sync, the MPQ engine and the addon
+installer — is the original author's work. Full attribution is in
+[NOTICE](NOTICE); licence terms are in [LICENSE](LICENSE).
 
-When you deliberately replace or downgrade something, EqUpdater creates a backup first.
-
-
+Octo Raid Visuals is made by
+[Rook](https://octowow.st/git/Rook/RaidVisuals-OctoWoW).
