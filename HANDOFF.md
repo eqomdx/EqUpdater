@@ -1,6 +1,6 @@
 # EqUpdater development handoff
 
-**Version:** 2.0.2  
+**Version:** 2.0.3  
 **Date:** 2026-09-24  
 **Project:** EqUpdater, derived from rebasedkon/octo-updater  
 **Repository:** https://github.com/eqomdx/EqUpdater
