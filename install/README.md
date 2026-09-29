@@ -8,8 +8,10 @@ It installs Python for you if you do not have it, checks the source, builds
 `dist\EqUpdater\EqUpdater.exe`, and offers a desktop shortcut. No
 administrator rights; safe to run again.
 
-If anything fails, it prints what went wrong and saves the full output in
-`%LOCALAPPDATA%\EqUpdater\install-logs`.
+Every run keeps a log from its very first line: `<date>-installer.log` in
+`%LOCALAPPDATA%\EqUpdater\install-logs` (or `%TEMP%\EqUpdater\install-logs`
+if that folder cannot be written). If anything fails, the installer says what
+went wrong and prints the log's path - send that file when asking for help.
 
 **The test suite is not part of installing.** It guards EqUpdater's safety
 rules, and it runs in CI on every change and before every release build

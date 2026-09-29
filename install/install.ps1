@@ -47,7 +47,61 @@ param(
     [switch]$Yes
 )
 
+# ---------------------------------------------------------------------------
+# The installer log starts here, before anything that can fail.
+#
+# A transcript of the whole run -- every step, every message, and the error
+# that ended it -- goes to %LOCALAPPDATA%\EqUpdater\install-logs. If that
+# cannot be written it falls back to %TEMP%, then to the folder this script
+# is in, so an early failure (Python missing, pip, a bad download) still
+# leaves something to send. The heavy steps also keep their own complete
+# output next to it (see Invoke-Logged).
+# ---------------------------------------------------------------------------
+$script:stamp = Get-Date -Format "yyyyMMdd-HHmmss"
+$script:logDir = $null
+foreach ($base in @($env:LOCALAPPDATA, $env:TEMP, $PSScriptRoot)) {
+    if (-not $base) { continue }
+    $candidate = Join-Path $base "EqUpdater\install-logs"
+    try {
+        New-Item -ItemType Directory -Force -Path $candidate -ErrorAction Stop | Out-Null
+        $script:logDir = $candidate
+        break
+    } catch { }
+}
+$script:installLog = $null
+if ($script:logDir) {
+    $script:installLog = Join-Path $script:logDir "$($script:stamp)-installer.log"
+    try {
+        Start-Transcript -Path $script:installLog -Force | Out-Null
+    } catch {
+        $script:installLog = $null
+    }
+}
+
+# Whatever ends the install early, say so plainly and say where the log is.
+trap {
+    Write-Host ""
+    Write-Host "  INSTALL FAILED: $_" -ForegroundColor Red
+    if ($script:installLog) {
+        Write-Host ""
+        Write-Host "  Installer log: $script:installLog" -ForegroundColor Yellow
+        Write-Host "  (send this file if you ask for help)" -ForegroundColor Yellow
+    }
+    try { Stop-Transcript | Out-Null } catch { }
+    exit 1
+}
+
 $ErrorActionPreference = "Stop"
+
+$appVersion = "?"
+try {
+    $brandingPy = Join-Path (Split-Path -Parent $PSScriptRoot) "equpdater\branding.py"
+    $m = Select-String -Path $brandingPy -Pattern '^APP_VERSION = "([^"]+)"' -ErrorAction Stop
+    if ($m) { $appVersion = $m.Matches[0].Groups[1].Value }
+} catch { }
+Write-Host "EqUpdater $appVersion installer - $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+Write-Host "Windows $([Environment]::OSVersion.Version)  PowerShell $($PSVersionTable.PSVersion)"
+Write-Host "Arguments: $($PSBoundParameters.Keys -join ' ')"
 
 function Write-Head($text) {
     Write-Host ""
@@ -58,12 +112,8 @@ function Write-Head($text) {
 function Write-Step($text) { Write-Host "  -> $text" -ForegroundColor Gray }
 function Write-Ok($text)   { Write-Host "  OK $text" -ForegroundColor Green }
 
-# Complete output of each step goes to a log file; the console only shows the
-# part that explains a failure.
-$script:logDir = Join-Path $env:LOCALAPPDATA "EqUpdater\install-logs"
-New-Item -ItemType Directory -Force -Path $script:logDir | Out-Null
-$script:stamp = Get-Date -Format "yyyyMMdd-HHmmss"
-
+# Complete output of each heavy step also goes to its own log file; the
+# console only shows the part that explains a failure.
 function Invoke-Logged($name, [scriptblock]$command) {
     # Native programs write progress to stderr. Windows PowerShell turns that
     # into error records, which the installer's ErrorActionPreference=Stop
@@ -266,6 +316,7 @@ if ($RunTests) {
 
 if ($NoBuild) {
     Write-Head "Done (build skipped)"
+    try { Stop-Transcript | Out-Null } catch { }
     exit 0
 }
 
@@ -341,3 +392,7 @@ Write-Host "  The first time it starts it will look for an Octo Updater" -Foregr
 Write-Host "  configuration and import your settings. The old one is copied" -ForegroundColor DarkGray
 Write-Host "  aside and left exactly where it is." -ForegroundColor DarkGray
 Write-Host ""
+if ($script:installLog) {
+    Write-Host "  Installer log: $script:installLog" -ForegroundColor DarkGray
+}
+try { Stop-Transcript | Out-Null } catch { }
