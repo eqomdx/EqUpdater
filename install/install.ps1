@@ -345,6 +345,34 @@ if ($build.Code -ne 0) {
     Write-Host ""
     Write-Host "  The last lines of the build output:" -ForegroundColor Yellow
     $build.Lines | Select-Object -Last 40 | ForEach-Object { Write-Host "    $_" }
+    if ($build.Lines -match "interrupted by antivirus software") {
+        # build.py found the executable gone after packing. If Windows
+        # Defender did it, its own record says what and when (readable
+        # without administrator rights).
+        Write-Host ""
+        try {
+            $since = (Get-Date).AddHours(-2)
+            $hits = @(Get-MpThreatDetection -ErrorAction Stop | Where-Object {
+                $_.InitialDetectionTime -ge $since -and
+                (($_.Resources -join " ") -like "*$projectDir*") })
+            if ($hits.Count -gt 0) {
+                Write-Host "  Windows Defender removed this while EqUpdater was building:" -ForegroundColor Yellow
+                foreach ($h in $hits) {
+                    $threat = (Get-MpThreat -ThreatID $h.ThreatID -ErrorAction SilentlyContinue).ThreatName
+                    Write-Host "    $($h.InitialDetectionTime)  $threat"
+                    $h.Resources | ForEach-Object { Write-Host "      $_" }
+                }
+            } else {
+                Write-Host "  Windows Defender has no matching detection, so another antivirus" -ForegroundColor Yellow
+                Write-Host "  program probably removed it - check its quarantine." -ForegroundColor Yellow
+            }
+        } catch {
+            Write-Host "  (Windows Defender's history could not be read: $($_.Exception.Message))" -ForegroundColor Yellow
+        }
+        throw ("Antivirus software removed EqUpdater.exe while it was being built. " +
+               "Allow it or exclude $projectDir, then run the installer again. " +
+               "Full output: $($build.Log)")
+    }
     throw "The build failed. Full output: $($build.Log)"
 }
 

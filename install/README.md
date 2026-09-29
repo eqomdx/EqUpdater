@@ -13,6 +13,14 @@ Every run keeps a log from its very first line: `<date>-installer.log` in
 if that folder cannot be written). If anything fails, the installer says what
 went wrong and prints the log's path - send that file when asking for help.
 
+**If your antivirus removes EqUpdater.exe during the build**, the installer
+says so ("The build was interrupted by antivirus software"), shows Windows
+Defender's record of it if Defender was responsible, and stops. PyInstaller-
+built programs are a common false positive. Allow or restore `EqUpdater.exe`
+in Windows Security -> Virus & threat protection -> Protection history (or
+your antivirus's quarantine), or exclude the EqUpdater folder, then run the
+installer again.
+
 **The test suite is not part of installing.** It guards EqUpdater's safety
 rules, and it runs in CI on every change and before every release build
 (`python build.py --release`). It is not run on your PC during install, where

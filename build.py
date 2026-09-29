@@ -72,7 +72,43 @@ def run(cmd: list) -> None:
     print("  $ " + " ".join(cmd))
     proc = subprocess.run(cmd, cwd=HERE)
     if proc.returncode != 0:
+        explain_antivirus_interruption()
         raise SystemExit(f"build failed (exit {proc.returncode})")
+
+
+#: Printed when antivirus removed the executable mid-build. install.ps1
+#: recognises the first line and adds Windows Defender's own record.
+ANTIVIRUS_HINT = """
+The build was interrupted by antivirus software.
+
+PyInstaller had already packed EqUpdater and created
+    {exe}
+but the file was locked and then removed before the build could finish -- the
+"Execution of ... failed ... Retrying" and "cannot find the file" lines above.
+That is antivirus quarantining it: PyInstaller-built programs are a common
+false positive, and a freshly built, unsigned .exe the most common.
+
+To fix it:
+  1. Open Windows Security -> Virus & threat protection -> Protection history
+     (or your antivirus's quarantine list) and allow / restore EqUpdater.exe.
+  2. Or add an exclusion for this folder:
+         {folder}
+  3. Run the installer again.
+"""
+
+
+def explain_antivirus_interruption() -> None:
+    """After a failed PyInstaller run: if it got as far as packing the app
+    (the .pkg is there) but the executable it builds from that is gone, the
+    build did not fail on its own -- something removed the file. Say so,
+    instead of leaving a retry log and a FileNotFoundError to decode."""
+    if os.name != "nt":
+        return
+    work = os.path.join(WORK, NAME)
+    packed = os.path.exists(os.path.join(work, NAME + ".pkg"))
+    exe = os.path.join(work, NAME + ".exe")
+    if packed and not os.path.exists(exe):
+        print(ANTIVIRUS_HINT.format(exe=exe, folder=HERE))
 
 
 def main() -> None:
