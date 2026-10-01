@@ -516,10 +516,14 @@ class TestAnimatedBackgroundSetting(unittest.TestCase):
         """No separate header image and no solid footer block: both were
         hard-edged rectangles over the moving background."""
         self.assertIs(self.app._hdr_canvas, self.app._bg_canvas)
+        # The Settings overlay covers the whole window, and on a first run it
+        # opens 500 ms after start -- before this test on a slow machine
+        # (CI failed on that alone). It is a modal, not a footer block.
         bottoms = [w for w in self.app.place_slaves()
                    if w.winfo_y() + w.winfo_height() >= self.m.WIN_H - 2
                    and w.winfo_width() >= self.m.WIN_W - 2
-                   and w is not self.app._bg_canvas]
+                   and w is not self.app._bg_canvas
+                   and w is not self.app._settings_overlay]
         self.assertEqual(bottoms, [])
         self.app._status_var.set("status text")
         self.assertEqual(self.app._bg_canvas.itemcget(
