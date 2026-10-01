@@ -2562,6 +2562,20 @@ def addons_path(client_dir: str) -> str:
     return os.path.join(client_dir, "Interface", "AddOns")
 
 
+def check_custom_addon_url(text: str):
+    """(repository URL, folder, None) for a link the custom-addon dialog
+    can install, or (None, None, message) saying why not."""
+    url = (text or "").strip().rstrip("/")
+    if url.lower().endswith(".git"):
+        url = url[:-4]
+    if not is_allowed_git_url(url):
+        return None, None, N_("URL must be https from an allowed host.")
+    folder = repo_ref(url).repo
+    if not folder or folder in (".", "..") or "\\" in folder:
+        return None, None, N_("Could not derive addon folder name.")
+    return url, folder, None
+
+
 def is_allowed_git_url(url: str) -> bool:
     """An https link to a repository on one of the known git hosts."""
     if not (url or "").strip().lower().startswith("https://"):
@@ -7008,11 +7022,12 @@ class EqUpdaterApp(tk.Tk):
                  font=self._font(10, bold=True),
                  fg=C_GOLD, bg=P_BG).pack(anchor="w")
         url_var = tk.StringVar()
-        tk.Entry(body, textvariable=url_var, bg=P_INP, fg=C_TEXT,
-                 insertbackground=C_GOLD, relief="flat", font=FONT_MONO,
-                 highlightthickness=1, highlightbackground=P_BDR,
-                 highlightcolor=C_GOLD).pack(fill="x", ipady=self._px(7),
-                                             pady=(self._px(6), self._px(6)))
+        url_entry = tk.Entry(body, textvariable=url_var, bg=P_INP, fg=C_TEXT,
+                             insertbackground=C_GOLD, relief="flat",
+                             font=FONT_MONO, highlightthickness=1,
+                             highlightbackground=P_BDR, highlightcolor=C_GOLD)
+        url_entry.pack(fill="x", ipady=self._px(7),
+                       pady=(self._px(6), self._px(6)))
         tk.Label(body,
                  text=tr("Allowed hosts: {hosts}",
                          hosts=", ".join(ADDON_GIT_HOSTS)),
@@ -7020,17 +7035,24 @@ class EqUpdaterApp(tk.Tk):
         err = tk.Label(body, text="", font=self._font(9),
                        fg=C_ERR, bg=P_BG)
         err.pack(anchor="w")
+        self._custom_addon_status = err
+
+        # Checked as it is typed: a link that will work says so in green,
+        # and a message from an earlier attempt never outlives the text it
+        # was about. Half-typed links are not scolded; Install says why.
+        def live(*_a):
+            _url, _folder, problem = check_custom_addon_url(url_var.get())
+            if problem is None:
+                err.configure(text=tr("Valid URL. Click Install to continue."),
+                              fg=C_OK)
+            else:
+                err.configure(text="", fg=C_ERR)
+        url_var.trace_add("write", live)
 
         def submit():
-            url = url_var.get().strip().rstrip("/")
-            if url.endswith(".git"):
-                url = url[:-4]
-            if not is_allowed_git_url(url):
-                err.configure(text=tr("URL must be https from an allowed host."))
-                return
-            folder = url.rsplit("/", 1)[-1]
-            if not folder or folder in (".", "..") or "\\" in folder:
-                err.configure(text=tr("Could not derive addon folder name."))
+            url, folder, problem = check_custom_addon_url(url_var.get())
+            if problem is not None:
+                err.configure(text=tr(problem), fg=C_ERR)
                 return
             self._close_settings()
             self._log_line(f"\nInstalling custom addon {folder}…\n", "acct")
@@ -7046,6 +7068,9 @@ class EqUpdaterApp(tk.Tk):
         btn.bind("<Button-1>", lambda e: submit())
         btn.bind("<Enter>", lambda e: btn.configure(bg=C_GOLD, fg="#000"))
         btn.bind("<Leave>", lambda e: btn.configure(bg=P_BDR, fg=C_TEXT))
+        url_entry.bind("<Return>", lambda e: submit())
+        self._custom_addon_url = url_var
+        url_entry.focus_set()
 
     # ── addons rendering ─────────────────────────────────────────────────────
 

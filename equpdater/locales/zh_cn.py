@@ -283,6 +283,7 @@ STRINGS = {
     "Updating game files…": "正在更新游戏文件…",
     "Updating {name}…": "正在更新 {name}…",
     "Updating…": "正在更新…",
+    "Valid URL. Click Install to continue.": "链接有效。点击“安装”继续。",
     "Verify game files": "校验游戏文件",
     "Verifying game files…": "正在校验游戏文件…",
     "Verifying…": "正在校验…",

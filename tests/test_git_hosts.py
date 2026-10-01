@@ -208,6 +208,23 @@ class TestAddonSources(unittest.TestCase):
             configured_source=REPO + "/", ancestry_result=Ancestry.REMOTE_AHEAD)
         self.assertIs(plan(comp).action, Action.UPDATE)
 
+    def test_custom_addon_links(self):
+        """What the Add custom git addon dialog accepts, and the folder the
+        addon is installed into."""
+        check = self.app.check_custom_addon_url
+        url = "https://octowow.st/git/olzon/GuildRecipes_Octo"
+        for typed in (url, url + "/", url + ".git", " " + url + ".git/ "):
+            with self.subTest(typed=typed):
+                self.assertEqual(check(typed), (url, "GuildRecipes_Octo", None))
+        self.assertEqual(check("https://github.com/shagu/ShaguDPS")[1], "ShaguDPS")
+        for typed in ("", "https://octowow.st/git/olz", "http://github.com/a/b",
+                      url + "​",              # pasted from a web page
+                      "https://octowow.st/git/olzon/Guild Recipes",
+                      "https://github.com/a/..",
+                      "https://example.com/a/b"):
+            with self.subTest(typed=typed):
+                self.assertIsNotNone(check(typed)[2])
+
 
 class TestTexturePackSources(unittest.TestCase):
     def test_an_octowow_git_repository(self):

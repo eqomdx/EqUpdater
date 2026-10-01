@@ -857,6 +857,76 @@ class TestFirstLanguage(unittest.TestCase):
 
 
 @unittest.skipUnless(HAVE_TK, "no display")
+class TestCustomAddonDialog(unittest.TestCase):
+    """The link is checked as it is typed: green when it will work, and an
+    error from an earlier Install never outlives the text it was about."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="equ-custom-")
+        os.environ["LOCALAPPDATA"] = cls.tmp
+        os.environ["XDG_DATA_HOME"] = cls.tmp
+        for mod in [m for m in list(sys.modules) if m.startswith("equpdater")]:
+            del sys.modules[mod]
+        from equpdater import app
+        cls.m = app
+        cls.app = app.EqUpdaterApp()
+        for _ in range(4):
+            cls.app.update()
+
+    @classmethod
+    def tearDownClass(cls):
+        _close_app(cls.app)
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def setUp(self):
+        if self.app._settings_overlay is not None:
+            self.app._settings_overlay.destroy()
+            self.app._settings_overlay = None
+        self.app._open_custom_addon_dialog()
+        self.app.update()
+        self.url = self.app._custom_addon_url
+        self.status = self.app._custom_addon_status
+
+    def tearDown(self):
+        if self.app._settings_overlay is not None:
+            self.app._settings_overlay.destroy()
+            self.app._settings_overlay = None
+
+    def press_install(self):
+        install = self.m.tr("Install")
+
+        def walk(w):
+            for c in w.winfo_children():
+                if isinstance(c, tk.Label) and c.cget("text") == install:
+                    return c
+                hit = walk(c)
+                if hit is not None:
+                    return hit
+        walk(self.app._settings_overlay).event_generate("<Button-1>")
+        self.app.update()
+
+    def test_a_valid_link_says_so_in_green(self):
+        self.url.set("https://octowow.st/git/olzon/GuildRecipes_Octo")
+        self.assertEqual(self.status.cget("text"),
+                         "Valid URL. Click Install to continue.")
+        self.assertEqual(self.status.cget("fg"), self.m.C_OK)
+
+    def test_half_typed_is_not_scolded(self):
+        self.url.set("https://octowow.st/git/olz")
+        self.assertEqual(self.status.cget("text"), "")
+
+    def test_an_old_error_clears_once_the_link_is_right(self):
+        self.url.set("https://octowow.st/git/olz")
+        self.press_install()
+        self.assertEqual(self.status.cget("text"),
+                         "URL must be https from an allowed host.")
+        self.assertEqual(self.status.cget("fg"), self.m.C_ERR)
+        self.url.set("https://octowow.st/git/olzon/GuildRecipes_Octo")
+        self.assertEqual(self.status.cget("fg"), self.m.C_OK)
+
+
+@unittest.skipUnless(HAVE_TK, "no display")
 class TestNewsCadence(unittest.TestCase):
     """The forum is read once at launch and once per refresh click. Never on
     a tab switch, never on a timer, never twice at once."""

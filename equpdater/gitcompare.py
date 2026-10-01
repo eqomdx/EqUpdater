@@ -22,6 +22,7 @@ nothing is overwritten on the strength of it.
 from __future__ import annotations
 
 import json
+import re
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
@@ -151,6 +152,16 @@ def repo_ref(git_url: str, hosts=GIT_HOSTS) -> RepoRef | None:
     return RepoRef(host, segs[0], segs[1], None)
 
 
+#: What a git host allows in an owner or repository name. Anything else --
+#: a space, an invisible character pasted from a web page -- is not a
+#: repository, and must not become an addon's folder name.
+_NAME = re.compile(r"^[A-Za-z0-9_.-]+$")
+
+
+def _name_ok(name: str) -> bool:
+    return bool(_NAME.match(name)) and name not in (".", "..")
+
+
 def _split(host, segs, hosts):
     for forge in hosts:
         if forge.host != host:
@@ -161,6 +172,8 @@ def _split(host, segs, hosts):
         rest = segs[len(lead):]
         if len(rest) >= 2 and rest[0] and rest[1]:
             repo = rest[1][:-4] if rest[1].lower().endswith(".git") else rest[1]
+            if not (_name_ok(rest[0]) and _name_ok(repo)):
+                return None
             return forge, rest[0], repo, rest[2:]
     return None
 

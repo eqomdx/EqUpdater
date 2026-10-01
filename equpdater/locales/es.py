@@ -282,6 +282,7 @@ STRINGS = {
     "Updating game files…": "Actualizando archivos del juego…",
     "Updating {name}…": "Actualizando {name}…",
     "Updating…": "Actualizando…",
+    "Valid URL. Click Install to continue.": "URL válida. Haz clic en Instalar para continuar.",
     "Verify game files": "Verificar archivos del juego",
     "Verifying game files…": "Verificando archivos del juego…",
     "Verifying…": "Verificando…",
