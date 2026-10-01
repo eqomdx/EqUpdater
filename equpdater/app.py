@@ -7814,8 +7814,6 @@ class EqUpdaterApp(tk.Tk):
                             font=self._font(10, bold=True),
                             fg=C_GOLD, bg=P_BG)
         font_lbl.pack(anchor="w", pady=(self._px(20), 0))
-        self._add_tooltip(font_lbl,
-                          "Arial is the default. Changes apply live.")
 
         def _font_row(value, label, note=None, available=True):
             # Each name is drawn in its own face, so the list previews what
@@ -7838,7 +7836,7 @@ class EqUpdaterApp(tk.Tk):
             return rb
 
         _font_row("arial", "Arial",
-                  "The default: a simple, readable sans-serif.",
+                  "Simple sans-serif.",
                   self._fonts.arial_available)
         _font_row("friz", "Friz Quadrata",
                   "Warcraft-style font.",
