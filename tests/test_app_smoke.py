@@ -670,6 +670,9 @@ class TestLanguage(unittest.TestCase):
         cls.app = app.EqUpdaterApp()
         for _ in range(8):
             cls.app.update()
+        # Read now: other tests here switch the language for a moment, and a
+        # late status update during one would be in that language.
+        cls.status_at_start = cls.app._status_var.get()
 
     @classmethod
     def tearDownClass(cls):
@@ -695,7 +698,7 @@ class TestLanguage(unittest.TestCase):
         german = {self.i18n.tr("Ready to update"),
                   self.i18n.tr("Update available!")}
         self.assertNotIn("Ready to update", german)
-        self.assertIn(self.app._status_var.get(), german)
+        self.assertIn(self.status_at_start, german)
 
     def test_same_language_asks_nothing(self):
         self.assertEqual(self.ask(), [])
@@ -829,6 +832,28 @@ class TestFirstLanguage(unittest.TestCase):
         self.m.save_tweaks_config({**self.m.TWEAKS_DEFAULTS, "locale": "esES"})
         self.run_picker(lambda win, b: win.destroy())
         self.assertEqual(self.m.load_tweaks_config()["locale"], "esES")
+
+    def test_ask_language_flag_asks_once_on_an_existing_install(self):
+        """Settings kept, picker shown at the next launch, then never again."""
+        from unittest import mock
+        self.m.update_config(lambda c: c.__setitem__("ask_language", True))
+        asked = []
+        os.environ.pop("EQUPDATER_NO_LANGUAGE_PROMPT", None)
+        try:
+            with mock.patch.object(self.m.EqUpdaterApp, "_ask_first_language",
+                                   lambda app: asked.append(True)):
+                for _ in range(2):
+                    # Not _close_app: it waits for *every* animation worker,
+                    # and this class's own app is still running one.
+                    extra = self.m.EqUpdaterApp()
+                    try:
+                        extra.destroy()
+                    finally:
+                        _CLOSED_APPS.append(extra)
+        finally:
+            os.environ["EQUPDATER_NO_LANGUAGE_PROMPT"] = "1"
+        self.assertEqual(asked, [True])
+        self.assertNotIn("ask_language", self.m.load_config())
 
 
 @unittest.skipUnless(HAVE_TK, "no display")

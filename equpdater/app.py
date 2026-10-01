@@ -3329,9 +3329,15 @@ class EqUpdaterApp(tk.Tk):
         self._av_excluded = False
         self._cfg        = load_config()
         # First launch: the player picks a language before anything is drawn
-        # in one, so the window opens in it -- no restart.
-        if self._first_run and not os.environ.get("EQUPDATER_NO_LANGUAGE_PROMPT"):
+        # in one, so the window opens in it -- no restart. "ask_language" in
+        # the config asks once more on an existing install (support, testing)
+        # and is cleared as soon as it has been asked.
+        ask_again = bool(self._cfg.get("ask_language"))
+        if ((self._first_run or ask_again)
+                and not os.environ.get("EQUPDATER_NO_LANGUAGE_PROMPT")):
             self._ask_first_language()
+        if ask_again:
+            self._cfg = update_config(lambda c: c.pop("ask_language", None))
         # EqUpdater speaks the game's language (Tweaks -> Language), or
         # English where there is no translation. Fixed for this window's
         # life: everything below draws its text once.
