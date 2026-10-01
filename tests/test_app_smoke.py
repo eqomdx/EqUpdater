@@ -546,7 +546,7 @@ class TestFontList(unittest.TestCase):
             del sys.modules[mod]
         from equpdater import app
         import tkinter.font as tkfont
-        cls.tkfont = tkfont
+        cls.tkfont, cls.tk = tkfont, tk
         cls.app = app.EqUpdaterApp()
         for _ in range(8):
             cls.app.update()
@@ -560,12 +560,12 @@ class TestFontList(unittest.TestCase):
         found = []
 
         def walk(w):
-            if getattr(w, "keeps_own_font", False):
+            if getattr(w, "font_choice", None):
                 found.append(w)
             for c in w.winfo_children():
                 walk(c)
         walk(self.app)
-        return {w.cget("value"): self.tkfont.Font(
+        return {w.font_choice: self.tkfont.Font(
                     root=self.app, font=w.cget("font")).actual("family")
                 for w in found}
 
@@ -590,6 +590,54 @@ class TestFontList(unittest.TestCase):
                 self.app._change_font_choice()
                 self.app.update()
                 self.assertEqual(self.rows(), expected, choice)
+        finally:
+            self.app._font_choice_var.set("arial")
+            self.app._change_font_choice()
+
+    def test_dots_line_up_with_the_letters(self):
+        """Each dot is centred on its name's capitals, and the rows are
+        evenly spaced -- OpenDyslexic's tall line box used to lift its dot
+        above the text."""
+        if self.app._settings_overlay is None:
+            self.app._open_settings()
+        self.app.update()
+        names = []
+
+        def walk(w):
+            if getattr(w, "font_choice", None):
+                names.append(w)
+            for c in w.winfo_children():
+                walk(c)
+        walk(self.app)
+        self.assertEqual(len(names), 3)
+        tops = []
+        for name in names:
+            dot = [w for w in name.master.winfo_children()
+                   if isinstance(w, self.tk.Radiobutton)][0]
+            ascent, cap, _ = self.app._fonts.ink_metrics(name.font_choice, 10)
+            dot_mid = dot.winfo_rooty() + dot.winfo_height() / 2
+            cap_mid = name.winfo_rooty() + ascent - cap / 2
+            self.assertLessEqual(abs(dot_mid - cap_mid), 1.5, name.font_choice)
+            tops.append(name.master.winfo_rooty())
+        steps = {b - a for a, b in zip(tops, tops[1:])}
+        self.assertEqual(len(steps), 1, steps)
+
+    def test_clicking_a_name_chooses_it(self):
+        if self.app._settings_overlay is None:
+            self.app._open_settings()
+        self.app.update()
+        found = []
+
+        def walk(w):
+            if getattr(w, "font_choice", None) == "friz":
+                found.append(w)
+            for c in w.winfo_children():
+                walk(c)
+        walk(self.app)
+        try:
+            found[0].event_generate("<Button-1>")
+            self.app.update()
+            self.assertEqual(self.app._fonts.choice, "friz")
         finally:
             self.app._font_choice_var.set("arial")
             self.app._change_font_choice()

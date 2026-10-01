@@ -7815,24 +7815,48 @@ class EqUpdaterApp(tk.Tk):
                             fg=C_GOLD, bg=P_BG)
         font_lbl.pack(anchor="w", pady=(self._px(20), 0))
 
+        # Each name is drawn in its own face, so the list previews what
+        # choosing it looks like, whichever is selected now. Dot and name are
+        # separate widgets placed by the letters' measured height: Tk would
+        # centre the dot on the line box, and OpenDyslexic's line box is far
+        # taller than its letters, so its dot sat high. Every row is the same
+        # height, so the rows are evenly spaced too.
+        font_choices = ("arial", "friz", "opendyslexic")
+        ink = {c: self._fonts.ink_metrics(c, 10) for c in font_choices}
+        row_h = 2 + 2 * max(-(-cap // 2) + desc for _a, cap, desc in ink.values())
+
         def _font_row(value, label, note=None, available=True):
-            # Each name is drawn in its own face, so the list previews what
-            # choosing it looks like, whichever is selected now.
             shown = label if available else f"{label} (not installed)"
+            row = tk.Frame(rcol, bg=P_BG, height=row_h)
             rb = tk.Radiobutton(
-                rcol, text=f" {shown}", value=value,
+                row, text="", value=value,
                 variable=self._font_choice_var,
                 command=self._change_font_choice,
-                font=self._fonts.preview_font(value, 10),
-                fg=C_TEXT if available else C_TEXT_DIM, bg=P_BG,
+                fg=C_TEXT, bg=P_BG,
                 activebackground=P_BG, activeforeground=C_TEXT,
                 selectcolor=P_INP, highlightthickness=0, bd=0,
+                padx=0, pady=0,
                 state="normal" if available else "disabled",
                 cursor="hand2" if available else "arrow")
-            rb.keeps_own_font = True
-            rb.pack(anchor="w", pady=(self._px(8), 0))
+            name = tk.Label(
+                row, text=shown, font=self._fonts.preview_font(value, 10),
+                fg=C_TEXT if available else C_TEXT_DIM, bg=P_BG,
+                bd=0, padx=0, pady=0, highlightthickness=0,
+                cursor="hand2" if available else "arrow")
+            rb.keeps_own_font = name.keeps_own_font = True
+            name.font_choice = value
+            ascent, cap, _desc = ink[value]
+            dot_w = rb.winfo_reqwidth()
+            gap = self._px(5)
+            rb.place(x=0, y=row_h // 2, anchor="w")
+            name.place(x=dot_w + gap, y=row_h // 2 - (ascent - cap // 2))
+            row.configure(width=dot_w + gap + name.winfo_reqwidth())
+            row.pack(anchor="w", pady=(self._px(5), 0))
+            if available:
+                name.bind("<Button-1>", lambda _e: rb.invoke())
             if note:
                 self._add_tooltip(rb, note)
+                self._add_tooltip(name, note)
             return rb
 
         _font_row("arial", "Arial",

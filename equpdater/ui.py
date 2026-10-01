@@ -20,9 +20,9 @@ from dataclasses import dataclass
 from . import branding
 
 try:
-    from PIL import Image, ImageEnhance, ImageTk
+    from PIL import Image, ImageEnhance, ImageFont, ImageTk
 except Exception:  # pragma: no cover - source can still start without Pillow
-    Image = ImageEnhance = ImageTk = None
+    Image = ImageEnhance = ImageFont = ImageTk = None
 
 
 FRIZ_FAMILIES = (
@@ -103,6 +103,22 @@ def _bundled_font_paths() -> list[str]:
                     seen.add(path)
                     paths.append(path)
     return paths
+
+
+def _font_file_for(choice: str) -> str | None:
+    """The regular-weight file of a font choice: shipped with EqUpdater, or
+    Windows' own Arial."""
+    if choice == "arial":
+        path = os.path.join(os.environ.get("WINDIR", r"C:\Windows"),
+                            "Fonts", "arial.ttf")
+        return path if os.path.isfile(path) else None
+    prefix = {"friz": "frizquadrata", "opendyslexic": "opendyslexic"}.get(choice)
+    if not prefix:
+        return None
+    matches = [p for p in _bundled_font_paths()
+               if os.path.basename(p).lower().startswith(prefix)]
+    regular = [p for p in matches if "regular" in os.path.basename(p).lower()]
+    return (regular or matches or [None])[0]
 
 
 def _register_private_fonts() -> None:
@@ -195,6 +211,29 @@ class FontManager:
         family = {"friz": self.friz, "arial": self.arial,
                   "opendyslexic": self.open_dyslexic}.get(choice)
         return (family or self.fallback, self._scaled_size(size, choice))
+
+    def ink_metrics(self, choice: str, size: int) -> tuple[int, int, int]:
+        """(line ascent, capital height, descender), in pixels, of
+        ``preview_font(choice, size)``.
+
+        Tk only knows a font's line box. OpenDyslexic's is far taller than
+        its letters, which sit low in it, so anything centred on the box sits
+        visibly above the text. The letters' own height comes from the font
+        file; without the file (or Pillow) it is estimated."""
+        font = tkfont.Font(root=self.root, font=self.preview_font(choice, size))
+        ascent = int(font.metrics("ascent"))
+        cap, desc = round(ascent * 0.72), int(font.metrics("descent"))
+        path = _font_file_for(choice)
+        if path and ImageFont is not None:
+            try:
+                px = round(float(self.root.winfo_fpixels("1i"))
+                           * abs(int(font.actual("size"))) / 72)
+                face = ImageFont.truetype(path, px)
+                cap = -face.getbbox("H", anchor="ls")[1]
+                desc = face.getbbox("gjpqy", anchor="ls")[3]
+            except Exception:
+                pass
+        return ascent, int(cap), int(desc)
 
     def _scaled_size(self, logical_size: int | float, choice: str | None = None) -> int:
         selected = choice or self.choice
