@@ -141,6 +141,38 @@ keyed by the English text.
 - Longer languages needed room: the Tweaks name column, the Mods name
   column and the footer buttons size themselves to their text.
 
+## Install location and updates (2026-10-01)
+
+The app lives in one place: `%LOCALAPPDATA%\Programs\EqUpdater\EqUpdater.exe`.
+Player state stays in `%LOCALAPPDATA%\EqUpdater` and is never touched by the
+installer.
+
+Before this, INSTALL.cmd built into the download folder
+(`<download>\dist\EqUpdater`) and pointed the desktop shortcut there. Every
+version's zip is its own folder, so after updating, the shortcut still
+opened the old version (a player's report: "2.0.5 installed, launcher still
+opens 2.0.4").
+
+`install/deploy.py` (called by install.ps1 after the build, step 4/4):
+
+- copies the build to `EqUpdater.new`, renames the current copy to
+  `EqUpdater.old`, renames `.new` into place, deletes `.old`. A failed swap
+  puts `.old` back; a run that died between steps is repaired by the next
+  run (`repair()`). A running EqUpdater.exe (cannot be opened for writing)
+  stops it before anything changes.
+- rewrites every shortcut whose target is a file named EqUpdater.exe -
+  desktop (the real one, OneDrive included), Start menu, taskbar pinned - to
+  the permanent exe, working directory and icon. Compared through
+  GetLongPathNameW: the shell stores long paths, %TEMP% is often 8.3.
+- lists old download folders as deletable, never a git checkout.
+
+Tests: `tests/test_deploy.py`, with real .lnk files on Windows.
+
+**Do not run INSTALL.cmd / install.ps1 from inside the Claude desktop app.**
+Its processes see a private copy of %LOCALAPPDATA% (MSIX virtualization) but
+the real desktop, so the install would land in the private copy and the
+real shortcut would be pointed at it.
+
 ## News / changelog
 
 `equpdater/news.py` owns News fetching/parsing; `app.py` only renders.

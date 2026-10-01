@@ -29,12 +29,27 @@
 2. Double-click **`install/INSTALL.cmd`**.
 3. Launch EqUpdater from the desktop shortcut it offers.
 
-The installer sets up Python if you need it, builds
-`dist\EqUpdater\EqUpdater.exe`, and never touches your game folder. No
-administrator rights are needed, and it is safe to run again to upgrade.
+The installer sets up Python if you need it, builds EqUpdater and installs
+it to one permanent place:
 
-Keep `EqUpdater.exe` next to the `_internal` folder beside it: it is a folder
-build, so it starts fast and never unpacks itself into `%TEMP%`.
+    %LOCALAPPDATA%\Programs\EqUpdater\EqUpdater.exe
+
+It never touches your game folder, and no administrator rights are needed.
+
+### Updating
+
+Download the new version, extract it anywhere and run its
+`install/INSTALL.cmd` the same way. The new version **replaces** the old one
+in that same place - versions no longer live in folders of their own - and
+every EqUpdater shortcut (desktop, Start menu, taskbar) is pointed at it,
+including shortcuts an older version made into its own download folder.
+Close EqUpdater first. Your settings, managed mods and addons, and backups
+live separately in `%LOCALAPPDATA%\EqUpdater` and are kept. If anything goes
+wrong part-way, the version you had stays in place; running the installer
+again is always safe.
+
+Once installed, the folder you extracted (and any older version's folder) is
+not used any more and can be deleted.
 
 ---
 

@@ -5,8 +5,20 @@
 **`INSTALL.cmd`**.
 
 It installs Python for you if you do not have it, checks the source, builds
-`dist\EqUpdater\EqUpdater.exe`, and offers a desktop shortcut. No
-administrator rights; safe to run again.
+EqUpdater, installs it to `%LOCALAPPDATA%\Programs\EqUpdater\EqUpdater.exe`
+and offers a desktop shortcut. No administrator rights; safe to run again.
+
+**Updating is the same thing.** Run the new version's `INSTALL.cmd`: it
+replaces the app in `%LOCALAPPDATA%\Programs\EqUpdater` and points every
+EqUpdater shortcut there - desktop, Start menu, pinned to the taskbar,
+including the ones older versions made into their own download folders.
+Your settings and everything EqUpdater keeps track of stay in
+`%LOCALAPPDATA%\EqUpdater`, untouched. The replacement is staged
+(`EqUpdater.new` is built beside the old copy, which is only moved aside to
+`EqUpdater.old` once the new one is complete, and moved back if the swap
+fails), so a failed update leaves the version you had. Close EqUpdater
+first; if it is open the installer says so and changes nothing. Old download
+folders are left alone and can be deleted - see `install/deploy.py`.
 
 Every run keeps a log from its very first line: `<date>-installer.log` in
 `%LOCALAPPDATA%\EqUpdater\install-logs` (or `%TEMP%\EqUpdater\install-logs`
@@ -27,9 +39,8 @@ rules, and it runs in CI on every change and before every release build
 a GUI or timing test behaving differently on one machine could stop you
 installing the program. Developers can still run it here with `-RunTests`.
 
-**It builds a folder, not a loose .exe.** `EqUpdater.exe` needs the
-`_internal` directory beside it, so move the whole folder or use the
-shortcut. That is on purpose: a one-file build unpacks ~30 MB into `%TEMP%`
+**It installs a folder, not a loose .exe.** `EqUpdater.exe` needs the
+`_internal` directory beside it, so start it from the shortcut. That is on purpose: a one-file build unpacks ~30 MB into `%TEMP%`
 on every launch and will not start at all when the system drive is full —
 which is a real state for anyone who keeps games on C:. `python build.py
 --onefile` still makes the portable single file if you want it.
@@ -40,8 +51,8 @@ which is a real state for anyone who keeps games on C:. `python build.py
 .\install\install.ps1
 ```
 
-`-NoBuild` sets up the dependencies only. `-NoShortcut` skips the desktop
-shortcut. `-Yes` answers every prompt. `-RunTests` runs the full test suite
+`-NoBuild` sets up the dependencies only. `-NoShortcut` does not offer a new
+desktop shortcut (existing EqUpdater shortcuts are still corrected). `-Yes` answers every prompt. `-RunTests` runs the full test suite
 first and does not build if it fails.
 
 **Linux / macOS, or if you would rather do it by hand**

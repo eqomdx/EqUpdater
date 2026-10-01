@@ -4,8 +4,16 @@
 
 .DESCRIPTION
     Bootstraps a real Python (the Microsoft Store stub does not count),
-    installs PyInstaller, certifi and Pillow, then builds EqUpdater.exe from this
-    repository.
+    installs PyInstaller, certifi and Pillow, builds EqUpdater.exe from this
+    repository, and installs it to its one permanent home:
+
+        %LOCALAPPDATA%\Programs\EqUpdater\EqUpdater.exe
+
+    An update replaces the app there (staged: if anything fails, the version
+    that was working stays), so a new version never lands in a folder of its
+    own while the shortcut opens the old one. Every EqUpdater shortcut -
+    desktop, Start menu, taskbar - is pointed at it. Your settings live in
+    %LOCALAPPDATA%\EqUpdater and are not touched. See install\deploy.py.
 
     That is the whole job. EqUpdater does not touch your game folder during
     installation and does not need to know where it is: the app finds it, and
@@ -34,7 +42,8 @@
     it fails.
 
 .PARAMETER NoShortcut
-    Do not offer to put a shortcut on the desktop.
+    Do not offer to put a new shortcut on the desktop. Existing EqUpdater
+    shortcuts are still pointed at the installed copy.
 
 .EXAMPLE
     .\install.ps1
@@ -231,12 +240,12 @@ if (-not (Test-Path (Join-Path $projectDir "equpdater\app.py"))) {
 }
 Write-Ok "project: $projectDir"
 
-Write-Head "1/3  Python"
+Write-Head "1/4  Python"
 $py = Find-RealPython
 if (-not $py) { $py = Install-Python }
 Write-Ok "$($py.Path)  (Python $($py.Version))"
 
-Write-Head "2/3  Dependencies"
+Write-Head "2/4  Dependencies"
 Write-Step "pip install --user --upgrade pyinstaller certifi pillow"
 & $py.Path -m pip install --user --upgrade --disable-pip-version-check `
     pyinstaller certifi pillow
@@ -267,7 +276,7 @@ if ($NoBuild) {
     exit 0
 }
 
-Write-Head "3/3  Build"
+Write-Head "3/4  Build"
 # A quick check that the downloaded source is whole: it compiles and the
 # package imports. Not the test suite - no windows, no threads, no network.
 Write-Step "checking the source"
@@ -323,46 +332,32 @@ if ($build.Code -ne 0) {
     throw "The build failed. Full output: $($build.Log)"
 }
 
-# A folder build: the executable needs the _internal directory beside it, so
-# the shortcut points into dist\EqUpdater rather than at a loose .exe. This
-# is not a single file on purpose - see the note at the top of build.py. A
-# one-file build unpacks itself into %TEMP% on every launch and simply will
-# not start when the system drive is full, which is a real state for anybody
-# who keeps games on it.
-$exe = Join-Path $projectDir "dist\EqUpdater\EqUpdater.exe"
-if (-not (Test-Path $exe)) {
-    throw "The build finished but $exe is missing."
+# A folder build: the executable needs the _internal directory beside it.
+# This is not a single file on purpose - see the note at the top of
+# build.py. A one-file build unpacks itself into %TEMP% on every launch and
+# simply will not start when the system drive is full, which is a real state
+# for anybody who keeps games on it.
+$built = Join-Path $projectDir "dist\EqUpdater"
+if (-not (Test-Path (Join-Path $built "EqUpdater.exe"))) {
+    throw "The build finished but $built\EqUpdater.exe is missing."
 }
-Write-Ok $exe
+Write-Ok "built $built"
 
-if (-not $NoShortcut) {
-    $answer = "y"
-    if (-not $Yes) {
-        $answer = Read-Host "  Put a shortcut on the desktop? [Y/n]"
-        if (-not $answer) { $answer = "y" }
-    }
-    if ($answer -match "^[Yy]") {
-        try {
-            $desktop = [Environment]::GetFolderPath("Desktop")
-            $lnk = Join-Path $desktop "EqUpdater.lnk"
-            $shell = New-Object -ComObject WScript.Shell
-            $sc = $shell.CreateShortcut($lnk)
-            $sc.TargetPath = $exe
-            $sc.WorkingDirectory = Split-Path -Parent $exe
-            $sc.IconLocation = $exe
-            $sc.Description = "EqUpdater - OctoWoW client, mods and addons"
-            $sc.Save()
-            Write-Ok "shortcut: $lnk"
-        } catch {
-            Write-Host "  Could not create the shortcut: $_" -ForegroundColor Yellow
-        }
-    }
+Write-Head "4/4  Install"
+# The build folder is not where EqUpdater runs from: every download is its
+# own folder, and a shortcut into one kept opening that version after the
+# next was installed. deploy.py puts the app in its permanent home, keeps
+# the old copy until the new one is in place, and points every EqUpdater
+# shortcut there.
+$deployArgs = @((Join-Path $projectDir "install\deploy.py"), "--build", $built)
+if ($Yes) { $deployArgs += "--yes" }
+if ($NoShortcut) { $deployArgs += "--no-shortcut" }
+& $py.Path @deployArgs
+if ($LASTEXITCODE -ne 0) {
+    throw "EqUpdater was built but could not be installed. See the message above."
 }
 
 Write-Head "Done"
-Write-Host "  Run $exe" -ForegroundColor Green
-Write-Host "  (keep that folder together - the .exe needs what is beside it)" -ForegroundColor DarkGray
-Write-Host ""
 Write-Host "  The first time it starts it will look for an Octo Updater" -ForegroundColor DarkGray
 Write-Host "  configuration and import your settings. The old one is copied" -ForegroundColor DarkGray
 Write-Host "  aside and left exactly where it is." -ForegroundColor DarkGray
