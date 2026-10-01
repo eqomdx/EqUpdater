@@ -354,5 +354,5 @@ STRINGS = {
         "{name} сейчас отслеживается из:\n    {current}\n\nПереключить на:\n    {new}\n\nСейчас файлы не изменятся. Следующее обновление аддона придёт из нового репозитория, который может оказаться другим проектом с другим содержимым.\n\nПереключить?",
     "{name} is installed and {app} did not install it.\n\nManaging it means {app} will track:\n    {source}\n\nYour current files are not changed now. {app} will tell you when that source has a newer version, and will never replace files you have edited without asking.\n\nManage it?":
         "{name} установлен, но не через {app}.\n\nЕсли {app} будет им управлять, он будет отслеживать:\n    {source}\n\nВаши текущие файлы сейчас не изменятся. {app} сообщит, когда в источнике появится новая версия, и никогда не заменит отредактированные вами файлы без спроса.\n\nУправлять?",
-    "{section} unavailable: {reason}": "{section} недоступно: {reason}",
+    "{section} unavailable: {reason}": "{section} — недоступно: {reason}",
 }

@@ -355,5 +355,5 @@ STRINGS = {
         "{name} é acompanhado agora a partir de:\n    {current}\n\nTrocar para:\n    {new}\n\nIsso não altera nenhum arquivo agora. A próxima atualização deste addon virá do novo repositório, que pode ser outro projeto com outro conteúdo.\n\nTrocar?",
     "{name} is installed and {app} did not install it.\n\nManaging it means {app} will track:\n    {source}\n\nYour current files are not changed now. {app} will tell you when that source has a newer version, and will never replace files you have edited without asking.\n\nManage it?":
         "{name} está instalado e não foi o {app} que o instalou.\n\nSe o {app} gerenciá-lo, vai acompanhar:\n    {source}\n\nSeus arquivos atuais não mudam agora. O {app} avisará quando essa fonte tiver uma versão mais recente e nunca substituirá sem perguntar arquivos que você editou.\n\nGerenciar?",
-    "{section} unavailable: {reason}": "{section} indisponível: {reason}",
+    "{section} unavailable: {reason}": "{section} — indisponível: {reason}",
 }
