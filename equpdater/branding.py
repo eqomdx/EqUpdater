@@ -21,7 +21,7 @@ import sys
 #: The product.
 APP_NAME = "EqUpdater"
 APP_TITLE = "EqUpdater"
-APP_VERSION = "2.0.5"
+APP_VERSION = "2.0.6"
 
 #: Upstream, for the About box and the attribution the licence requires.
 #: EqUpdater is a substantially reworked derivative of Octo Updater; see
