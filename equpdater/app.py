@@ -4561,9 +4561,14 @@ class EqUpdaterApp(tk.Tk):
         # clamps it, and the clamped value can coincide with the saved one
         # (e.g. saved 180, typed 192 → clamps to 180), which would otherwise
         # hide the buttons while the entry still shows an invalid number.
+        # Reset is offered while either side is custom. Judging the screen
+        # alone hid it whenever the screen happened to show the defaults --
+        # Russian saved, English picked -- although Reset still had a saved
+        # custom value to put back.
         ui_n   = norm(ui)
         dirty  = any_bad or ui_n != norm(saved)
-        custom = any_bad or ui_n != norm(defaults)
+        custom = (any_bad or ui_n != norm(defaults)
+                  or norm(saved) != norm(defaults))
 
         self._tweaks_apply_btn.pack_forget()
         self._tweaks_reset_btn.pack_forget()

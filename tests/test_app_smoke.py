@@ -699,6 +699,29 @@ class TestLanguage(unittest.TestCase):
         self.m.save_tweaks_config({**self.m.TWEAKS_DEFAULTS, "locale": "zhCN"})
         self.assertEqual(self.ask(), ["Restart EqUpdater?"])
 
+    def shown(self):
+        return {name for name, w in (("apply", self.app._tweaks_apply_btn),
+                                     ("reset", self.app._tweaks_reset_btn))
+                if w.winfo_manager()}
+
+    def test_reset_stays_while_a_custom_value_is_saved(self):
+        """German saved, English picked: the screen shows the defaults, but
+        Reset still has German to put back, so it stays beside Apply."""
+        self.app._refresh_tweaks_panel()
+        self.app._tweak_vars["locale"].set("enUS")
+        self.assertEqual(self.shown(), {"apply", "reset"})
+        self.app._tweak_vars["locale"].set("ruRU")
+        self.assertEqual(self.shown(), {"apply", "reset"})
+
+    def test_no_reset_when_everything_is_default(self):
+        self.m.save_tweaks_config(dict(self.m.TWEAKS_DEFAULTS))
+        self.app._refresh_tweaks_panel()
+        try:
+            self.assertEqual(self.shown(), set())
+        finally:
+            self.m.save_tweaks_config({**self.m.TWEAKS_DEFAULTS, "locale": "deDE"})
+            self.app._refresh_tweaks_panel()
+
 
 @unittest.skipUnless(HAVE_TK, "no display")
 class TestNewsCadence(unittest.TestCase):
