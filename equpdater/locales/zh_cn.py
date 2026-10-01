@@ -3,8 +3,8 @@ equpdater/i18n.py."""
 
 STRINGS = {
     "(none)": "（无）",
-    "A GitHub or Codeberg repository or release download, or a dl.octowow.st link. Linking changes no files.":
-        "GitHub 或 Codeberg 仓库、发布版下载，或 dl.octowow.st 链接。关联不会更改任何文件。",
+    "A GitHub, Codeberg or OctoWoW Git repository or release download, or a dl.octowow.st link. Linking changes no files.":
+        "GitHub、Codeberg 或 OctoWoW Git 仓库、发布版下载，或 dl.octowow.st 链接。关联不会更改任何文件。",
     "A copy of the current folder is saved to {backups} first.\n\nReplace it with the latest from:\n    {source}":
         "会先将当前文件夹备份到 {backups}。\n\n用以下来源的最新版本替换：\n    {source}",
     "A different source is recommended for this addon:\n{source}\n\nSwitching forks is a choice, not an update, so nothing happens until you ask.":
@@ -234,8 +234,8 @@ STRINGS = {
     "TROUBLESHOOTING": "故障排除",
     "TWEAKS": "优化",
     "Terrain and world objects rendering distance. [100 - 10,000]": "地形和世界物体的渲染距离。[100 - 10,000]",
-    "Texture packs can be linked to a GitHub or Codeberg repository, or to dl.octowow.st.":
-        "材质包可以关联到 GitHub 或 Codeberg 仓库，或 dl.octowow.st。",
+    "Texture packs can be linked to a GitHub, Codeberg or OctoWoW Git repository, or to dl.octowow.st.":
+        "材质包可以关联到 GitHub、Codeberg 或 OctoWoW Git 仓库，或 dl.octowow.st。",
     "That download is not an .mpq file.": "该下载不是 .mpq 文件。",
     "The current files are backed up to {backups} first.": "会先将当前文件备份到 {backups}。",
     "The files here differ from the ones EqUpdater installed.": "这里的文件与 EqUpdater 安装的不同。",

@@ -22,9 +22,9 @@ nothing is overwritten on the strength of it.
 from __future__ import annotations
 
 import json
-import re
 import urllib.parse
 import urllib.request
+from dataclasses import dataclass
 from enum import Enum
 
 
@@ -42,24 +42,152 @@ class Ancestry(Enum):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-#  URL parsing
+#  Git hosts
 # ──────────────────────────────────────────────────────────────────────────────
 
-_GIT_URL = re.compile(
-    r"^https?://(?P<host>[^/]+)/(?P<owner>[^/]+)/(?P<repo>[^/]+?)(?:\.git)?/?$")
+@dataclass(frozen=True)
+class GitHost:
+    """A git host EqUpdater can read repositories from.
+
+    ``prefix`` is the path a forge is mounted under, when it does not own
+    the whole host: OctoWoW's Gitea lives at ``octowow.st/git/``, so its
+    repositories are ``/git/<owner>/<repo>`` and its API ``/git/api/v1``.
+    Everything that builds or reads a repository URL goes through this, so a
+    prefixed forge needs one entry below and no special cases elsewhere."""
+
+    name: str                       # what people call it: "OctoWoW Git"
+    host: str                       # "octowow.st"
+    kind: str                       # "github" | "gitlab" | "gitea"
+    prefix: str = ""                # "git" -> https://octowow.st/git/...
+    #: Hosts the repository archives (addon zips) are served from, besides
+    #: the host itself. GitHub hands them to its CDN.
+    archive_hosts: frozenset = frozenset()
+
+    @property
+    def root(self) -> str:
+        """Where repositories start: https://<host>[/<prefix>]."""
+        return f"https://{self.host}" + (f"/{self.prefix}" if self.prefix else "")
+
+    @property
+    def label(self) -> str:
+        """The host as people type it: "github.com", "octowow.st/git"."""
+        return self.host + (f"/{self.prefix}" if self.prefix else "")
+
+    @property
+    def api(self) -> str:
+        if self.kind == "github":
+            return "https://api.github.com"
+        if self.kind == "gitlab":
+            return f"{self.root}/api/v4"
+        return f"{self.root}/api/v1"
+
+    @property
+    def downloads_from(self) -> frozenset:
+        return frozenset({self.host}) | self.archive_hosts
+
+
+#: Every host EqUpdater reads addon sources from. Adding a Gitea (or GitLab)
+#: instance, prefixed or not, is one line here.
+GIT_HOSTS = (
+    GitHost("GitHub", "github.com", "github",
+            archive_hosts=frozenset({"codeload.github.com"})),
+    GitHost("GitLab", "gitlab.com", "gitlab"),
+    GitHost("Gitea", "gitea.com", "gitea"),
+    GitHost("Codeberg", "codeberg.org", "gitea"),
+    GitHost("OctoWoW Git", "octowow.st", "gitea", prefix="git"),
+)
+
+
+@dataclass(frozen=True)
+class RepoRef:
+    """A repository: where it lives and what it is called. ``forge`` is None
+    for a host EqUpdater does not know -- such a URL can still be compared
+    with another, but nothing is fetched from it."""
+
+    host: str
+    owner: str
+    repo: str
+    forge: GitHost | None = None
+
+    @property
+    def url(self) -> str:
+        root = self.forge.root if self.forge else f"https://{self.host}"
+        return f"{root}/{self.owner}/{self.repo}"
+
+
+def _host_of(hostname: str) -> str:
+    host = (hostname or "").lower()
+    return host[4:] if host.startswith("www.") else host
+
+
+def repo_ref(git_url: str, hosts=GIT_HOSTS) -> RepoRef | None:
+    """The repository a URL names, or None when it does not name one.
+
+    Accepts http(s), a trailing ``.git`` and a trailing slash. On a known
+    host the path must be exactly ``[<prefix>/]<owner>/<repo>``: a page
+    inside a repository (``/tree/main``) is not the repository, and on a
+    prefixed host a path outside the prefix is not a repository at all."""
+    if not git_url:
+        return None
+    try:
+        parts = urllib.parse.urlsplit(git_url.strip())
+    except ValueError:
+        return None
+    if parts.scheme not in ("http", "https") or parts.query or parts.fragment:
+        return None
+    host = _host_of(parts.hostname)
+    segs = [s for s in parts.path.split("/") if s]
+    if not host or not segs:
+        return None
+    if segs[-1].lower().endswith(".git"):
+        segs[-1] = segs[-1][:-4]
+    split = _split(host, segs, hosts)
+    if split is not None:
+        forge, owner, repo, rest = split
+        return RepoRef(host, owner, repo, forge) if not rest else None
+    # An unknown host keeps the plain /<owner>/<repo> reading, for comparing.
+    if any(f.host == host for f in hosts) or len(segs) != 2 or not all(segs):
+        return None
+    return RepoRef(host, segs[0], segs[1], None)
+
+
+def _split(host, segs, hosts):
+    for forge in hosts:
+        if forge.host != host:
+            continue
+        lead = [s for s in forge.prefix.split("/") if s]
+        if [s.lower() for s in segs[:len(lead)]] != [s.lower() for s in lead]:
+            continue
+        rest = segs[len(lead):]
+        if len(rest) >= 2 and rest[0] and rest[1]:
+            repo = rest[1][:-4] if rest[1].lower().endswith(".git") else rest[1]
+            return forge, rest[0], repo, rest[2:]
+    return None
+
+
+def split_repo_url(url: str, hosts=GIT_HOSTS):
+    """(forge, owner, repo, rest) for a URL on a known host that goes on
+    past the repository -- a release download, say -- or None. ``rest`` is
+    the path after ``<owner>/<repo>``, as a list of segments."""
+    try:
+        parts = urllib.parse.urlsplit((url or "").strip())
+    except ValueError:
+        return None
+    if parts.scheme != "https":
+        return None
+    segs = [s for s in parts.path.split("/") if s]
+    return _split(_host_of(parts.hostname), segs, hosts)
+
+
+def forge_named(label: str, hosts=GIT_HOSTS):
+    """The host whose label ("octowow.st/git") this is, or None."""
+    return next((h for h in hosts if h.label == label), None)
 
 
 def parse_repo(git_url: str):
     """(host, owner, repo) from a repository URL, or None when it is not one."""
-    if not git_url:
-        return None
-    m = _GIT_URL.match(git_url.strip())
-    if not m:
-        return None
-    host = m.group("host").lower()
-    if host.startswith("www."):
-        host = host[4:]
-    return host, m.group("owner"), m.group("repo")
+    ref = repo_ref(git_url)
+    return (ref.host, ref.owner, ref.repo) if ref else None
 
 
 def same_repo(a: str, b: str) -> bool:
@@ -79,16 +207,10 @@ def same_repo(a: str, b: str) -> bool:
 #  Host APIs
 # ──────────────────────────────────────────────────────────────────────────────
 
-#: Hosts whose compare endpoint this module knows how to read. A host missing
-#: from here is not an error, it simply answers UNKNOWN -- which protects the
-#: files rather than risking them.
-GITHUB_HOSTS = {"github.com"}
-GITEA_HOSTS = {"codeberg.org", "gitea.com"}
-GITLAB_HOSTS = {"gitlab.com"}
-
-
-def _compare_urls(host: str, owner: str, repo: str, base: str, head: str):
-    """(forward_url, reverse_url, reader) for a host, or None if unsupported.
+def compare_urls(git_url: str, base: str, head: str):
+    """(forward_url, reverse_url, reader) for a repository, or None when its
+    host is not one this module can ask -- which answers UNKNOWN and so
+    protects the files rather than risking them.
 
     Two URLs because the generic answer is inferred from asking twice: how
     many commits does head have that base does not, and then the same
@@ -96,22 +218,26 @@ def _compare_urls(host: str, owner: str, repo: str, base: str, head: str):
     reader below uses that when it is there, but the two-call form works on
     every Gitea and GitLab as well, which is what keeps Codeberg addons
     honest."""
-    owner_q = urllib.parse.quote(owner, safe="")
-    repo_q = urllib.parse.quote(repo, safe="")
+    ref = repo_ref(git_url)
+    if ref is None or ref.forge is None:
+        return None
+    forge = ref.forge
+    owner_q = urllib.parse.quote(ref.owner, safe="")
+    repo_q = urllib.parse.quote(ref.repo, safe="")
 
-    if host in GITHUB_HOSTS:
-        base_url = f"https://api.github.com/repos/{owner_q}/{repo_q}/compare"
+    if forge.kind == "github":
+        base_url = f"{forge.api}/repos/{owner_q}/{repo_q}/compare"
         return (f"{base_url}/{base}...{head}",
                 f"{base_url}/{head}...{base}",
                 _read_github)
-    if host in GITEA_HOSTS:
-        base_url = f"https://{host}/api/v1/repos/{owner_q}/{repo_q}/compare"
+    if forge.kind == "gitea":
+        base_url = f"{forge.api}/repos/{owner_q}/{repo_q}/compare"
         return (f"{base_url}/{base}...{head}",
                 f"{base_url}/{head}...{base}",
                 _read_gitea)
-    if host in GITLAB_HOSTS:
-        proj = urllib.parse.quote(f"{owner}/{repo}", safe="")
-        base_url = f"https://gitlab.com/api/v4/projects/{proj}/repository/compare"
+    if forge.kind == "gitlab":
+        proj = urllib.parse.quote(f"{ref.owner}/{ref.repo}", safe="")
+        base_url = f"{forge.api}/projects/{proj}/repository/compare"
         return (f"{base_url}?from={base}&to={head}",
                 f"{base_url}?from={head}&to={base}",
                 _read_gitlab)
@@ -167,10 +293,7 @@ def ancestry(git_url: str, installed_sha: str, remote_sha: str,
     if installed_sha == remote_sha:
         return Ancestry.IDENTICAL
 
-    parts = parse_repo(git_url)
-    if not parts:
-        return Ancestry.UNKNOWN
-    urls = _compare_urls(*parts, installed_sha, remote_sha)
+    urls = compare_urls(git_url, installed_sha, remote_sha)
     if urls is None:
         return Ancestry.UNKNOWN
 

@@ -3,8 +3,8 @@ equpdater/i18n.py."""
 
 STRINGS = {
     "(none)": "(nenhum)",
-    "A GitHub or Codeberg repository or release download, or a dl.octowow.st link. Linking changes no files.":
-        "Um repositório do GitHub ou Codeberg, um download de uma versão publicada ou um link do dl.octowow.st. Vincular não altera nenhum arquivo.",
+    "A GitHub, Codeberg or OctoWoW Git repository or release download, or a dl.octowow.st link. Linking changes no files.":
+        "Um repositório do GitHub, Codeberg ou OctoWoW Git, um download de uma versão publicada ou um link do dl.octowow.st. Vincular não altera nenhum arquivo.",
     "A copy of the current folder is saved to {backups} first.\n\nReplace it with the latest from:\n    {source}":
         "Primeiro uma cópia da pasta atual é salva em {backups}.\n\nSubstituir pela versão mais recente de:\n    {source}",
     "A different source is recommended for this addon:\n{source}\n\nSwitching forks is a choice, not an update, so nothing happens until you ask.":
@@ -234,8 +234,8 @@ STRINGS = {
     "TROUBLESHOOTING": "SOLUÇÃO DE PROBLEMAS",
     "TWEAKS": "AJUSTES",
     "Terrain and world objects rendering distance. [100 - 10,000]": "Distância de renderização do terreno e dos objetos do mundo. [100 - 10.000]",
-    "Texture packs can be linked to a GitHub or Codeberg repository, or to dl.octowow.st.":
-        "Pacotes de texturas podem ser vinculados a um repositório do GitHub ou Codeberg, ou ao dl.octowow.st.",
+    "Texture packs can be linked to a GitHub, Codeberg or OctoWoW Git repository, or to dl.octowow.st.":
+        "Pacotes de texturas podem ser vinculados a um repositório do GitHub, Codeberg ou OctoWoW Git, ou ao dl.octowow.st.",
     "That download is not an .mpq file.": "Esse download não é um arquivo .mpq.",
     "The current files are backed up to {backups} first.": "Primeiro é feito um backup dos arquivos atuais em {backups}.",
     "The files here differ from the ones EqUpdater installed.": "Os arquivos aqui são diferentes dos que o EqUpdater instalou.",

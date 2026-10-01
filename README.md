@@ -97,7 +97,8 @@ confirmed, and skips the rest.
 ### Addons
 - ★ **Recommended** addons, a wider list of maintained community versions,
   and search.
-- Add any addon from **GitHub, GitLab, Gitea or Codeberg**.
+- Add any addon from **GitHub, GitLab, Gitea, Codeberg and OctoWoW Git**
+  (`https://octowow.st/git/<owner>/<repo>`).
 - Knows the difference between newer, older and modified — a different
   commit is not assumed to be an update.
 - Switch an addon to another fork, ignore updates for one, or stop managing it.
@@ -105,7 +106,8 @@ confirmed, and skips the rest.
 ### Texture packs (MPQ)
 - Install packs such as **Octo Raid Visuals** by Rook.
 - **Link a source** for a pack you installed yourself, so it can be checked
-  for updates. Linking changes no files.
+  for updates: a GitHub, Codeberg or OctoWoW Git release, or a
+  dl.octowow.st link. Linking changes no files.
 - **Replace** keeps your old file beside the new one.
 
 ### Tweaks

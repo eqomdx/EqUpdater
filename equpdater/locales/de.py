@@ -2,8 +2,8 @@
 
 STRINGS = {
     "(none)": "(keine)",
-    "A GitHub or Codeberg repository or release download, or a dl.octowow.st link. Linking changes no files.":
-        "Ein GitHub- oder Codeberg-Repository oder ein Release-Download oder ein dl.octowow.st-Link. Das Verknüpfen ändert keine Dateien.",
+    "A GitHub, Codeberg or OctoWoW Git repository or release download, or a dl.octowow.st link. Linking changes no files.":
+        "Ein GitHub-, Codeberg- oder OctoWoW-Git-Repository oder ein Release-Download oder ein dl.octowow.st-Link. Das Verknüpfen ändert keine Dateien.",
     "A copy of the current folder is saved to {backups} first.\n\nReplace it with the latest from:\n    {source}":
         "Zuerst wird eine Kopie des aktuellen Ordners in {backups} gespeichert.\n\nDurch die neueste Version ersetzen von:\n    {source}",
     "A different source is recommended for this addon:\n{source}\n\nSwitching forks is a choice, not an update, so nothing happens until you ask.":
@@ -233,8 +233,8 @@ STRINGS = {
     "TROUBLESHOOTING": "FEHLERBEHEBUNG",
     "TWEAKS": "TWEAKS",
     "Terrain and world objects rendering distance. [100 - 10,000]": "Darstellungsentfernung für Gelände und Weltobjekte. [100 - 10.000]",
-    "Texture packs can be linked to a GitHub or Codeberg repository, or to dl.octowow.st.":
-        "Texturpakete lassen sich mit einem GitHub- oder Codeberg-Repository oder mit dl.octowow.st verknüpfen.",
+    "Texture packs can be linked to a GitHub, Codeberg or OctoWoW Git repository, or to dl.octowow.st.":
+        "Texturpakete lassen sich mit einem GitHub-, Codeberg- oder OctoWoW-Git-Repository oder mit dl.octowow.st verknüpfen.",
     "That download is not an .mpq file.": "Dieser Download ist keine .mpq-Datei.",
     "The current files are backed up to {backups} first.": "Die aktuellen Dateien werden zuerst in {backups} gesichert.",
     "The files here differ from the ones EqUpdater installed.": "Die Dateien hier weichen von denen ab, die EqUpdater installiert hat.",

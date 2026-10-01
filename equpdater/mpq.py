@@ -29,13 +29,16 @@ from collections import namedtuple
 from urllib.parse import unquote, urlsplit
 
 from . import branding
+from .gitcompare import forge_named, split_repo_url
 from .i18n import tr
 
-#: Hosts a texture-pack source may live on. The same set the downloader is
-#: allowed to fetch binaries from; a source that could be linked but never
-#: downloaded would be a trap.
+#: Git hosts (by label, see gitcompare.GIT_HOSTS) whose releases a texture
+#: pack may come from, and the source kind each is recorded as. The same
+#: hosts the downloader may fetch binaries from; a source that could be
+#: linked but never downloaded would be a trap.
 RELEASE_HOSTS = {"github.com": "github_release",
-                 "codeberg.org": "codeberg_release"}
+                 "codeberg.org": "codeberg_release",
+                 "octowow.st/git": "gitea_release"}
 DIRECT_HOSTS = ("octowow.st", "dl.octowow.st")
 
 
@@ -59,7 +62,7 @@ def parse_source(text: str) -> dict:
       https://github.com/<owner>/<repo>/releases   (same)
       https://github.com/<o>/<r>/releases/download/<tag>/<file>.mpq
                                                    latest release, that file
-      the same three shapes on codeberg.org
+      the same three shapes on codeberg.org and octowow.st/git
       https://dl.octowow.st/.../<file>.mpq         direct, with a .sha256
     """
     url = (text or "").strip()
@@ -69,33 +72,38 @@ def parse_source(text: str) -> dict:
     if parts.scheme != "https":
         raise ValueError(tr("The link must start with https://"))
     host = (parts.hostname or "").lower()
-    path = [p for p in parts.path.split("/") if p]
 
-    if host in RELEASE_HOSTS:
-        if len(path) < 2:
-            raise ValueError(tr("Link the repository, e.g. {example}",
-                                example="https://%s/owner/repo" % host))
-        owner, repo = path[0], path[1]
-        if repo.endswith(".git"):
-            repo = repo[:-4]
+    split = split_repo_url(url)
+    if split is not None and split[0].label in RELEASE_HOSTS:
+        forge, owner, repo, rest = split
         asset = None
-        if len(path) >= 6 and path[2] == "releases" and path[3] == "download":
-            asset = unquote(path[-1])
+        if len(rest) >= 4 and rest[0] == "releases" and rest[1] == "download":
+            asset = unquote(rest[-1])
             if not asset.lower().endswith(".mpq"):
                 raise ValueError(tr("That download is not an .mpq file."))
-        elif len(path) > 2 and path[2] != "releases":
+        elif rest and rest[0] != "releases":
             raise ValueError(tr("Link the repository or one of its release "
                                 "downloads, not a page inside it."))
-        return {"kind": RELEASE_HOSTS[host], "owner": owner, "repo": repo,
-                "asset": asset}
+        source = {"kind": RELEASE_HOSTS[forge.label], "owner": owner,
+                  "repo": repo, "asset": asset}
+        if source["kind"] == "gitea_release":
+            source["forge"] = forge.label
+        return source
+    for label in RELEASE_HOSTS:
+        forge = forge_named(label)
+        root = forge.root.lower() if forge is not None else None
+        if root and (url.lower().rstrip("/") == root
+                     or url.lower().startswith(root + "/")):
+            raise ValueError(tr("Link the repository, e.g. {example}",
+                                example=forge.root + "/owner/repo"))
 
     if host in DIRECT_HOSTS:
         if not parts.path.lower().endswith(".mpq"):
             raise ValueError(tr("A direct link must end in .mpq"))
         return {"kind": "url", "url": url}
 
-    raise ValueError(tr("Texture packs can be linked to a GitHub or Codeberg "
-                        "repository, or to dl.octowow.st."))
+    raise ValueError(tr("Texture packs can be linked to a GitHub, Codeberg or "
+                        "OctoWoW Git repository, or to dl.octowow.st."))
 
 
 def catalogue_source(filename: str) -> dict:
@@ -121,8 +129,9 @@ def describe_source(src: dict | None) -> str:
     if kind == "catalogue":
         return tr("{app} list ({file})", app=branding.APP_NAME,
                   file=src.get("file"))
-    if kind in ("github_release", "codeberg_release"):
-        host = "github.com" if kind == "github_release" else "codeberg.org"
+    if kind in ("github_release", "codeberg_release", "gitea_release"):
+        host = {"github_release": "github.com",
+                "codeberg_release": "codeberg.org"}.get(kind) or src.get("forge")
         where = "%s/%s/%s" % (host, src.get("owner"), src.get("repo"))
         return where + (" · %s" % src["asset"] if src.get("asset") else "")
     if kind == "url":

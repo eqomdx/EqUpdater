@@ -47,13 +47,14 @@ from .i18n import N_, tr
 from .config import (APP_DATA_DIR, BACKUP_DIR, CONFIG_FILE, bootstrap_config,
                      ensure_dir, load_config, new_addon_record,
                      new_mod_record, update_config)
-from .gitcompare import Ancestry, ancestry, same_repo, short as short_sha
+from .gitcompare import (GIT_HOSTS, Ancestry, ancestry, forge_named,
+                         repo_ref, same_repo, short as short_sha)
 from .hashing import files_hash, folder_hash
 from .planner import (Component, plan, skipped_notably,
                       updatable)
 from .states import Action, Plan, Status
 from .news import (ANNOUNCEMENTS_FORUM_ID, CHANGELOG_FORUM_ID,
-                   fetch_latest_post, fetch_topic_list)
+                   fetch_latest_post, fetch_topic_list, is_challenge_page)
 from .ui import (AnimatedBackground, FontManager, GradientButton,
                  GradientPalette, apply_edge_fades, cover_background,
                  BackdropCanvas, blend, edge_fade_layers, photo_image,
@@ -710,15 +711,22 @@ def resolve_mpq_source(src: dict, local_file: str) -> mpq.Remote:
     if kind == "url":
         return mpq.Remote(sha=fetch_mpq_sha256(src["url"]), marker=None,
                           url=src["url"])
-    if kind in ("github_release", "codeberg_release"):
-        key = (kind, src["owner"].lower(), src["repo"].lower())
+    if kind in ("github_release", "codeberg_release", "gitea_release"):
+        key = (kind, src.get("forge"), src["owner"].lower(), src["repo"].lower())
         hit = _MPQ_RELEASE_CACHE.get(key)
         if hit and time.time() - hit[0] < _MPQ_RELEASE_TTL:
             release = hit[1]
         else:
-            latest = (_github_latest if kind == "github_release"
-                      else _codeberg_latest)
-            release = latest(src["owner"], src["repo"], raise_errors=True)
+            if kind == "gitea_release":
+                forge = forge_named(src.get("forge") or "")
+                if forge is None or forge.kind != "gitea":
+                    raise RuntimeError("unknown source kind %r" % kind)
+                release = _gitea_latest(forge.api, src["owner"], src["repo"],
+                                        raise_errors=True)
+            else:
+                latest = (_github_latest if kind == "github_release"
+                          else _codeberg_latest)
+                release = latest(src["owner"], src["repo"], raise_errors=True)
             if not release:
                 raise RuntimeError("the repository has no releases")
             _MPQ_RELEASE_CACHE[key] = (time.time(), release)
@@ -1743,11 +1751,17 @@ def updater_update_available(latest_tag: str) -> bool:
 
 
 def _codeberg_latest(owner: str, repo: str, raise_errors=False) -> dict | None:
-    url = f"https://codeberg.org/api/v1/repos/{owner}/{repo}/releases?limit=10&pre-release=false"
+    return _gitea_latest("https://codeberg.org/api/v1", owner, repo,
+                         raise_errors=raise_errors)
+
+
+def _gitea_latest(api: str, owner: str, repo: str,
+                  raise_errors=False) -> dict | None:
+    """The newest full release of a repository on a Gitea (Codeberg,
+    OctoWoW Git), from its API root."""
+    url = f"{api}/repos/{owner}/{repo}/releases?limit=10&pre-release=false"
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": UA})
-        with secure_urlopen(req, timeout=10) as r:
-            releases = json.load(r)
+        releases = _api_json(url)
         for rel in releases:
             if not rel.get("prerelease", False) and not rel.get("draft", False):
                 return rel
@@ -2535,10 +2549,13 @@ ADDON_STATUS_NAMES = {
     Status.DISABLED:         "upToDate",
 }
 
-ADDON_GIT_HOSTS = ("github.com", "gitlab.com", "gitea.com", "codeberg.org")
+#: Where addon sources may live, as people type them -- the git host
+#: registry in gitcompare, so a new host (prefixed Gitea included) is added
+#: there once.
+ADDON_GIT_HOSTS = tuple(h.label for h in GIT_HOSTS)
 
-ADDON_ZIP_HOSTS = {"github.com", "codeload.github.com", "gitlab.com",
-                   "gitea.com", "codeberg.org"}
+#: Where an addon archive may be downloaded from.
+ADDON_ZIP_HOSTS = frozenset().union(*(h.downloads_from for h in GIT_HOSTS))
 
 
 def addons_path(client_dir: str) -> str:
@@ -2546,14 +2563,11 @@ def addons_path(client_dir: str) -> str:
 
 
 def is_allowed_git_url(url: str) -> bool:
-    try:
-        parts = urlsplit(url)
-    except ValueError:
+    """An https link to a repository on one of the known git hosts."""
+    if not (url or "").strip().lower().startswith("https://"):
         return False
-    if parts.scheme != "https":
-        return False
-    host = (parts.hostname or "").lower()
-    return any(host == h or host.endswith("." + h) for h in ADDON_GIT_HOSTS)
+    ref = repo_ref(url)
+    return ref is not None and ref.forge is not None
 
 
 def _slim_addon_catalog(catalog: list) -> list:
@@ -2634,30 +2648,35 @@ def strip_wow_colors(text: str) -> str:
 
 def _git_parts(git_url: str):
     """→ (kind, repo_url, owner, repo, api_base); kind ∈ github/gitlab/gitea.
-    Handles path prefixes like octowow.st/git/<owner>/<repo>."""
-    parts = urlsplit(git_url)
-    host  = (parts.hostname or "").lower()
-    segs  = [s for s in parts.path.split("/") if s]
-    if len(segs) < 2:
+    From the git host registry, so a forge mounted under a path prefix
+    (octowow.st/git/<owner>/<repo>, API at /git/api/v1) needs no special
+    case here. An unknown host is refused rather than guessed at."""
+    ref = repo_ref(git_url)
+    if ref is None or ref.forge is None:
         raise ValueError(f"Unsupported git URL: {git_url}")
-    owner, repo = segs[-2], segs[-1]
-    if repo.endswith(".git"):
-        repo = repo[:-4]
-    prefix   = "/".join(segs[:-2])
-    origin   = f"https://{parts.netloc}"
-    repo_url = origin + (f"/{prefix}" if prefix else "") + f"/{owner}/{repo}"
-    if host == "github.com" or host.endswith(".github.com"):
-        return "github", repo_url, owner, repo, GITHUB_API
-    if host == "gitlab.com" or host.endswith(".gitlab.com"):
-        return "gitlab", repo_url, owner, repo, f"{origin}/api/v4"
-    api = origin + (f"/{prefix}" if prefix else "") + "/api/v1"
-    return "gitea", repo_url, owner, repo, api
+    return ref.forge.kind, ref.url, ref.owner, ref.repo, ref.forge.api
+
+
+#: What a host behind DDoS protection sends an app instead of the answer
+#: (octowow.st today). Said plainly, rather than as "not JSON" or "corrupted
+#: archive".
+DDOS_CHECK = N_("octowow.st is showing its DDoS-protection check to apps "
+                "right now")
+
+
+def _refuse_challenge(body: bytes, headers) -> None:
+    if body[:2] == b"PK" or body[:1] in (b"{", b"["):
+        return
+    if is_challenge_page(body[:4096].decode("utf-8", "replace"), headers):
+        raise RuntimeError(DDOS_CHECK)
 
 
 def _api_json(url: str, timeout=10):
     req = urllib.request.Request(url, headers={"User-Agent": UA})
     with secure_urlopen(req, timeout=timeout) as r:
-        return json.load(r)
+        body = r.read()
+        _refuse_challenge(body, r.headers)
+    return json.loads(body)
 
 
 def _describe_net_error(e: Exception) -> str:
@@ -2706,10 +2725,10 @@ def addon_remote_sha(git_url: str, branch=None, ref=None,
         if entry and (now - entry.get("timestamp", 0)) < ADDON_SHA_CACHE_TTL:
             return entry.get("sha")
 
-    kind, _repo_url, owner, repo, api = _git_parts(git_url)
     pin = ref or branch          # explicit branch/ref when the caller has one
     sha = None
     try:
+        kind, _repo_url, owner, repo, api = _git_parts(git_url)
         if kind == "github":
             if pin:
                 sha = _api_json(
@@ -2780,6 +2799,7 @@ def install_addon_files(client_dir: str, folder: str, git_url: str, sha: str):
     with secure_urlopen(req, timeout=120,
                         allowed_hosts=ADDON_ZIP_HOSTS) as r:
         data = r.read()
+        _refuse_challenge(data, r.headers)
 
     import zipfile
     import io
@@ -6587,9 +6607,9 @@ class EqUpdaterApp(tk.Tk):
         ent.pack(fill="x", ipady=self._px(6), pady=(self._px(4), self._px(4)))
         ent.bind("<FocusIn>", lambda e: choice.set("url"))
         tk.Label(body,
-                 text=tr("A GitHub or Codeberg repository or release "
-                         "download, or a dl.octowow.st link. Linking changes "
-                         "no files."),
+                 text=tr("A GitHub, Codeberg or OctoWoW Git repository or "
+                         "release download, or a dl.octowow.st link. Linking "
+                         "changes no files."),
                  font=self._font(9), fg=C_TEXT_DIM, bg=P_BG,
                  wraplength=MW - self._px(50), justify="left").pack(anchor="w")
         err = tk.Label(body, text="", font=self._font(9), fg=C_ERR, bg=P_BG,

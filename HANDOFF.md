@@ -173,6 +173,29 @@ Its processes see a private copy of %LOCALAPPDATA% (MSIX virtualization) but
 the real desktop, so the install would land in the private copy and the
 real shortcut would be pointed at it.
 
+## Git hosts, OctoWoW Git included (2026-10-01)
+
+`gitcompare.GIT_HOSTS` is the one list of hosts addon sources may live on:
+GitHub, GitLab, gitea.com, Codeberg and OctoWoW Git. Each is a `GitHost`
+with an optional path **prefix** - OctoWoW's Gitea is mounted at
+`octowow.st/git/`, so repositories are `/git/<owner>/<repo>` and the API is
+`/git/api/v1`. `repo_ref()` / `parse_repo()` / `same_repo()`, the compare
+URLs, the app's `_git_parts`, `is_allowed_git_url`, `ADDON_GIT_HOSTS`
+(shown in the custom-addon dialog), `ADDON_ZIP_HOSTS` and the texture-pack
+release sources (`mpq.RELEASE_HOSTS`, kind `gitea_release` with a `forge`
+label) all read it. Adding another prefixed Gitea is one entry there.
+
+On a known host a URL must be exactly `[<prefix>/]<owner>/<repo>` (optional
+`.git`, trailing slash, `www.`); a page inside a repository is not one. An
+unknown host is no longer guessed to be a Gitea.
+
+**octowow.st/git answers apps with the BlazingFast "Just a moment please"
+page today**, like the forum. `_refuse_challenge` turns that into the
+message `DDOS_CHECK` instead of a JSON error or "corrupted archive", and
+ancestry answers UNKNOWN, so nothing is replaced on it. OctoWoW Git addons
+(the catalogue lists shaga/AtlasLoot and shaga/LifeSafer_LowHealthWarning)
+work once OctoWoW allowlists `EqUpdater/`. Tests: `tests/test_git_hosts.py`.
+
 ## News / changelog
 
 `equpdater/news.py` owns News fetching/parsing; `app.py` only renders.
