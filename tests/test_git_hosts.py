@@ -226,6 +226,146 @@ class TestAddonSources(unittest.TestCase):
                 self.assertIsNotNone(check(typed)[2])
 
 
+def make_archive(comment=b"", files=("Addon/Addon.toc",)):
+    """A zip as Gitea's `git archive` makes it: the commit in the comment."""
+    import io
+    import zipfile
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        for name in files:
+            zf.writestr(name, "## Title: Addon\n")
+        zf.comment = comment
+    return buf.getvalue()
+
+
+class TestArchiveFallback(unittest.TestCase):
+    """While OctoWoW Git's API is behind the DDoS check: the commit comes
+    from the archive, installs work, and a changed addon is held back as
+    "Unable to verify" with Replace offered -- never updated automatically."""
+
+    @classmethod
+    def setUpClass(cls):
+        from equpdater import app
+        cls.app = app
+
+    def setUp(self):
+        self.app._ARCHIVES.clear()
+        self.downloads = []
+        self.patches = [
+            mock.patch.object(self.app, "load_config", lambda: {}),
+            mock.patch.object(self.app, "update_config", lambda f: {}),
+        ]
+        for p in self.patches:
+            p.start()
+
+    def tearDown(self):
+        for p in self.patches:
+            p.stop()
+        self.app._ARCHIVES.clear()
+
+    def blocked_api(self, url, timeout=10):
+        raise self.app.DdosCheckError(self.app.DDOS_CHECK)
+
+    def archive(self, data):
+        def download(url):
+            self.downloads.append(url)
+            return data
+        return download
+
+    def test_reading_the_commit(self):
+        self.assertEqual(self.app.archive_commit(make_archive(NEW.encode())), NEW)
+        self.assertEqual(self.app.archive_commit(make_archive(NEW.upper().encode())), NEW)
+        self.assertIsNone(self.app.archive_commit(make_archive(b"")))
+        self.assertIsNone(self.app.archive_commit(make_archive(b"not a commit")))
+        self.assertIsNone(self.app.archive_commit(b"<html>Just a moment</html>"))
+
+    def test_blocked_api_reads_the_default_branch_archive(self):
+        with mock.patch.object(self.app, "_api_json", self.blocked_api), \
+                mock.patch.object(self.app, "_download_archive",
+                                  self.archive(make_archive(NEW.encode()))):
+            sha = self.app.addon_remote_sha(REPO, force=True, raise_errors=True)
+        self.assertEqual(sha, NEW)
+        self.assertEqual(self.downloads, [f"{REPO}/archive/HEAD.zip"])
+
+    def test_a_pinned_branch_reads_its_own_archive(self):
+        with mock.patch.object(self.app, "_api_json", self.blocked_api), \
+                mock.patch.object(self.app, "_download_archive",
+                                  self.archive(make_archive(NEW.encode()))):
+            self.app.addon_remote_sha(REPO, branch="dev", force=True)
+        self.assertEqual(self.downloads, [f"{REPO}/archive/dev.zip"])
+
+    def test_an_archive_that_does_not_say_is_an_error(self):
+        with mock.patch.object(self.app, "_api_json", self.blocked_api), \
+                mock.patch.object(self.app, "_download_archive",
+                                  self.archive(make_archive(b""))):
+            self.assertIsNone(self.app.addon_remote_sha(REPO, force=True))
+            with self.assertRaises(RuntimeError):
+                self.app.addon_remote_sha(REPO, force=True, raise_errors=True)
+
+    def test_a_working_api_is_used_as_before(self):
+        """Once OctoWoW allowlists EqUpdater/, nothing here runs."""
+        with mock.patch.object(self.app, "_api_json",
+                               lambda url, timeout=10: [{"sha": NEW}]), \
+                mock.patch.object(self.app, "_download_archive",
+                                  self.archive(make_archive(OLD.encode()))):
+            self.assertEqual(self.app.addon_remote_sha(REPO, force=True), NEW)
+        self.assertEqual(self.downloads, [])
+
+    def test_only_gitea_falls_back(self):
+        with mock.patch.object(self.app, "_api_json", self.blocked_api), \
+                mock.patch.object(self.app, "_download_archive",
+                                  self.archive(make_archive(NEW.encode()))):
+            self.assertIsNone(self.app.addon_remote_sha(
+                "https://github.com/o/r", force=True))
+        self.assertEqual(self.downloads, [])
+
+    def test_install_reuses_the_archive_it_just_read(self):
+        import shutil
+        import tempfile
+        client = tempfile.mkdtemp(prefix="equ-archive-")
+        try:
+            data = make_archive(NEW.encode(),
+                                ("GitAddonsManager-main/GitAddonsManager.toc",
+                                 "GitAddonsManager-main/core.lua"))
+            with mock.patch.object(self.app, "_api_json", self.blocked_api), \
+                    mock.patch.object(self.app, "_download_archive",
+                                      self.archive(data)), \
+                    mock.patch.object(self.app, "log", lambda *a, **k: None):
+                sha = self.app.addon_remote_sha(REPO, force=True, raise_errors=True)
+                self.app.install_addon_files(client, "GitAddonsManager", REPO, sha)
+            self.assertEqual(len(self.downloads), 1)
+            folder = os.path.join(self.app.addons_path(client), "GitAddonsManager")
+            self.assertEqual(sorted(os.listdir(folder)),
+                             ["GitAddonsManager.toc", "core.lua"])
+        finally:
+            shutil.rmtree(client, ignore_errors=True)
+
+    def test_a_changed_addon_is_held_back_with_replace_offered(self):
+        app = self.app
+        with mock.patch.object(app, "_api_json", self.blocked_api):
+            anc = app.ancestry(REPO, OLD, NEW, fetch=app._api_json)
+        self.assertIs(anc, app.Ancestry.UNKNOWN)
+        saved = app.new_addon_record(managed=True, git=REPO, sha=OLD)
+        decision = app.plan(app.addon_component(
+            "GitAddonsManager", saved, installed=True, remote_sha=NEW,
+            configured_source=REPO, ancestry_result=anc))
+        self.assertIsNot(decision.action, app.Action.UPDATE)
+        status = app.ADDON_STATUS_NAMES[decision.status]
+        self.assertEqual(status, "unverifiable")
+        self.assertTrue(app.addon_offers_replace(
+            {"status": status, "remote_sha": NEW, "installed_sha": OLD}))
+
+    def test_replace_is_not_offered_when_there_is_nothing_new(self):
+        offers = self.app.addon_offers_replace
+        self.assertFalse(offers({"status": "unverifiable", "remote_sha": None,
+                                 "installed_sha": OLD}))
+        self.assertFalse(offers({"status": "unverifiable", "remote_sha": OLD,
+                                 "installed_sha": OLD}))
+        self.assertFalse(offers({"status": "upToDate"}))
+        for held in ("modified", "localNewer", "diverged"):
+            self.assertTrue(offers({"status": held}))
+
+
 class TestTexturePackSources(unittest.TestCase):
     def test_an_octowow_git_repository(self):
         self.assertEqual(mpq.parse_source(REPO),

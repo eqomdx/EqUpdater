@@ -2497,6 +2497,17 @@ def addon_is_managed(saved: dict | None) -> bool:
     return bool(saved.get("sha") and saved.get("git"))
 
 
+def addon_offers_replace(rec: dict) -> bool:
+    """Whether an installed addon's row offers Replace: the held-back
+    states, and "unable to verify" when the source does have a different
+    commit -- something to replace with, just not provably newer."""
+    status = rec.get("status")
+    if status in ("modified", "localNewer", "diverged"):
+        return True
+    return (status == "unverifiable" and bool(rec.get("remote_sha"))
+            and rec.get("remote_sha") != rec.get("installed_sha"))
+
+
 def addon_component(folder: str, saved: dict | None, *,
                     installed: bool, remote_sha=None,
                     configured_source=None, current_hash=None,
@@ -2678,11 +2689,74 @@ DDOS_CHECK = N_("octowow.st is showing its DDoS-protection check to apps "
                 "right now")
 
 
+class DdosCheckError(RuntimeError):
+    """A host answered with its DDoS-protection page instead of the data."""
+
+
 def _refuse_challenge(body: bytes, headers) -> None:
     if body[:2] == b"PK" or body[:1] in (b"{", b"["):
         return
     if is_challenge_page(body[:4096].decode("utf-8", "replace"), headers):
-        raise RuntimeError(DDOS_CHECK)
+        raise DdosCheckError(DDOS_CHECK)
+
+
+# ── Commits from archives, while a Gitea's API is behind its DDoS check ────
+#
+# octowow.st answers apps' API calls with its DDoS page but serves repository
+# archives, and Gitea stamps the commit an archive was made from into the
+# zip's comment (it is `git archive`). So the latest commit can be read from
+# the archive itself: <repo>/archive/HEAD.zip for the default branch, or the
+# pinned branch's. That is enough to install and to notice that the source
+# moved on. It is not enough to say which way it moved -- that is the
+# compare API, still blocked -- so a changed addon reads "Unable to verify"
+# and is never updated automatically; Replace is offered instead. Once the
+# API answers again none of this runs.
+
+#: Archives fetched to read their commit, kept briefly so installing that
+#: commit does not download it a second time. {sha: (time, bytes)}
+_ARCHIVES: dict = {}
+_ARCHIVE_KEEP = 600
+_ARCHIVES_MAX = 4
+
+_SHA = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
+
+
+def archive_commit(data: bytes) -> str | None:
+    """The commit a git-archive zip was made from (its comment), or None."""
+    import zipfile
+    import io
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as zf:
+            comment = zf.comment.decode("ascii", "replace").strip().lower()
+    except (zipfile.BadZipFile, OSError, ValueError):
+        return None
+    return comment if _SHA.fullmatch(comment) else None
+
+
+def _download_archive(url: str) -> bytes:
+    req = urllib.request.Request(url, headers={"User-Agent": UA})
+    with secure_urlopen(req, timeout=120, allowed_hosts=ADDON_ZIP_HOSTS) as r:
+        data = r.read()
+        _refuse_challenge(data, r.headers)
+    return data
+
+
+def _commit_from_archive(git_url: str, pin=None) -> str:
+    """The latest commit of the default branch (or ``pin``), read from the
+    repository's archive. Raises when the archive does not say."""
+    from urllib.parse import quote
+    _kind, repo_url, _owner, _repo, _api = _git_parts(git_url)
+    data = _download_archive(f"{repo_url}/archive/{quote(pin or 'HEAD', safe='')}.zip")
+    sha = archive_commit(data)
+    if not sha:
+        raise DdosCheckError(DDOS_CHECK)
+    now = time.time()
+    for old in [k for k, (t, _d) in _ARCHIVES.items() if now - t > _ARCHIVE_KEEP]:
+        _ARCHIVES.pop(old, None)
+    while len(_ARCHIVES) >= _ARCHIVES_MAX:
+        _ARCHIVES.pop(next(iter(_ARCHIVES)))
+    _ARCHIVES[sha] = (now, data)
+    return sha
 
 
 def _api_json(url: str, timeout=10):
@@ -2762,10 +2836,15 @@ def addon_remote_sha(git_url: str, branch=None, ref=None,
                 lst = _api_json(
                     f"{api}/projects/{proj}/repository/commits?per_page=1")
                 sha = lst[0].get("id") if lst else None
-        else:  # gitea / codeberg
+        else:  # gitea / codeberg / OctoWoW Git
             q = f"?sha={pin}&limit=1" if pin else "?limit=1"
-            lst = _api_json(f"{api}/repos/{owner}/{repo}/commits{q}")
-            sha = lst[0].get("sha") if lst else None
+            try:
+                lst = _api_json(f"{api}/repos/{owner}/{repo}/commits{q}")
+                sha = lst[0].get("sha") if lst else None
+            except DdosCheckError:
+                # The API is behind the host's DDoS check; its archives are
+                # not, and say which commit they are. See _commit_from_archive.
+                sha = _commit_from_archive(git_url, pin)
     except Exception as e:
         if raise_errors:
             raise RuntimeError(_describe_net_error(e)) from e
@@ -2807,13 +2886,13 @@ def _rmtree_force(path):
 def install_addon_files(client_dir: str, folder: str, git_url: str, sha: str):
     """Download the repo archive at `sha` and unpack it into
     Interface/AddOns/<folder>, atomically replacing any existing copy."""
-    url = addon_zip_url(git_url, sha)
-    log(f"  Downloading {folder} @ {sha[:10]}…")
-    req = urllib.request.Request(url, headers={"User-Agent": UA})
-    with secure_urlopen(req, timeout=120,
-                        allowed_hosts=ADDON_ZIP_HOSTS) as r:
-        data = r.read()
-        _refuse_challenge(data, r.headers)
+    kept = _ARCHIVES.pop(sha, None)
+    if kept and time.time() - kept[0] <= _ARCHIVE_KEEP:
+        data = kept[1]               # fetched moments ago to read its commit
+        log(f"  Installing {folder} @ {sha[:10]}…")
+    else:
+        log(f"  Downloading {folder} @ {sha[:10]}…")
+        data = _download_archive(addon_zip_url(git_url, sha))
 
     import zipfile
     import io
@@ -7454,7 +7533,7 @@ class EqUpdaterApp(tk.Tk):
             # why it is held back and wants the remote copy anyway. Offered
             # beside the explanation rather than instead of it, and it warns
             # again before it does anything.
-            if status in ("modified", "localNewer", "diverged"):
+            if addon_offers_replace(rec):
                 rep = tk.Label(row, text=tr("Replace…"),
                                font=self._font(10), fg=C_TEXT_DIM,
                                bg=C_PANEL, cursor="hand2")
@@ -8562,6 +8641,9 @@ class EqUpdaterApp(tk.Tk):
             "diverged": tr("The installed copy came from different history - "
                            "another branch or fork. Its contents may differ "
                            "substantially."),
+            "unverifiable": tr("The source has a different version, but "
+                               "whether it is newer or older than yours "
+                               "could not be checked."),
         }.get(rec.get("status"),
               tr("The installed copy will be replaced."))
 

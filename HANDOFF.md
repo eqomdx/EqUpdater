@@ -189,12 +189,24 @@ On a known host a URL must be exactly `[<prefix>/]<owner>/<repo>` (optional
 `.git`, trailing slash, `www.`); a page inside a repository is not one. An
 unknown host is no longer guessed to be a Gitea.
 
-**octowow.st/git answers apps with the BlazingFast "Just a moment please"
-page today**, like the forum. `_refuse_challenge` turns that into the
-message `DDOS_CHECK` instead of a JSON error or "corrupted archive", and
-ancestry answers UNKNOWN, so nothing is replaced on it. OctoWoW Git addons
-(the catalogue lists shaga/AtlasLoot and shaga/LifeSafer_LowHealthWarning)
-work once OctoWoW allowlists `EqUpdater/`. Tests: `tests/test_git_hosts.py`.
+**octowow.st/git's API (and git's info/refs) answers apps with the
+BlazingFast "Just a moment please" page today**, like the forum.
+`_refuse_challenge` raises `DdosCheckError` (message `DDOS_CHECK`) instead
+of a JSON error or "corrupted archive".
+
+Its **archives are not blocked**, and Gitea stamps the commit into the
+zip's comment (`git archive`). So when a Gitea's commits API is blocked,
+`addon_remote_sha` falls back to `_commit_from_archive`: it downloads
+`<repo>/archive/HEAD.zip` (or the pinned branch's), reads the commit with
+`archive_commit`, and keeps the bytes for ten minutes in `_ARCHIVES` so the
+install that follows does not download again. Installs and update
+detection work; ancestry (the compare API) still answers UNKNOWN, so a
+changed addon is "Unable to verify" - never updated automatically - and
+its row offers Replace… (`addon_offers_replace`: unverifiable with a
+different remote commit). Verified live on 2026-10-01 against
+olzon/GuildRecipes_Octo. When OctoWoW allowlists `EqUpdater/` the API
+answers and none of the fallback runs; the full update flow returns by
+itself. Tests: `tests/test_git_hosts.py` (TestArchiveFallback).
 
 ## News / changelog
 

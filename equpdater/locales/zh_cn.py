@@ -247,6 +247,8 @@ STRINGS = {
         "已安装的版本来自不同的历史——其他分支或分叉。内容可能有很大差异。",
     "The installed copy is NEWER than the source's. Replacing it is a downgrade.":
         "已安装的版本比来源的更新。替换它将是降级。",
+    "The source has a different version, but whether it is newer or older than yours could not be checked.":
+        "来源有不同的版本，但无法确认它比你的版本更新还是更旧。",
     "The installed copy will be replaced.": "已安装的版本将被替换。",
     "The installed files are gone. Reinstall to put them back.": "已安装的文件不见了。重新安装即可恢复。",
     "The installed version is newer than the one the configured source offers. EqUpdater will not replace it.":

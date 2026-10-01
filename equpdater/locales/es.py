@@ -246,6 +246,8 @@ STRINGS = {
         "La copia instalada viene de otro historial: otra rama u otro fork. Su contenido puede ser muy distinto.",
     "The installed copy is NEWER than the source's. Replacing it is a downgrade.":
         "La copia instalada es MÁS RECIENTE que la de la fuente. Reemplazarla es volver a una versión anterior.",
+    "The source has a different version, but whether it is newer or older than yours could not be checked.":
+        "La fuente tiene una versión distinta, pero no se pudo comprobar si es más reciente o más antigua que la tuya.",
     "The installed copy will be replaced.": "La copia instalada será reemplazada.",
     "The installed files are gone. Reinstall to put them back.": "Los archivos instalados han desaparecido. Reinstala para recuperarlos.",
     "The installed version is newer than the one the configured source offers. EqUpdater will not replace it.":

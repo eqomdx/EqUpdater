@@ -246,6 +246,8 @@ STRINGS = {
         "Установленная версия взята из другой истории — другой ветки или форка. Её содержимое может сильно отличаться.",
     "The installed copy is NEWER than the source's. Replacing it is a downgrade.":
         "Установленная версия НОВЕЕ, чем в источнике. Замена будет откатом на старую версию.",
+    "The source has a different version, but whether it is newer or older than yours could not be checked.":
+        "В источнике другая версия, но проверить, новее она или старее вашей, не удалось.",
     "The installed copy will be replaced.": "Установленная версия будет заменена.",
     "The installed files are gone. Reinstall to put them back.": "Установленные файлы пропали. Переустановите, чтобы их вернуть.",
     "The installed version is newer than the one the configured source offers. EqUpdater will not replace it.":
