@@ -2997,7 +2997,7 @@ TWEAKS_DEFAULTS = {
 TWEAKS_ITEMS = [
     (None, N_("GENERAL"), "section", False, None, None, None, None, None),
 
-    ("locale",            N_("Game Language"),    "dropdown", False, None,
+    ("locale",            N_("Language"),    "dropdown", False, None,
      None,
      None, None, None),
 
@@ -3328,7 +3328,11 @@ class EqUpdaterApp(tk.Tk):
         # the user just added it themselves.
         self._av_excluded = False
         self._cfg        = load_config()
-        # EqUpdater speaks the game's language (Tweaks -> Game Language), or
+        # First launch: the player picks a language before anything is drawn
+        # in one, so the window opens in it -- no restart.
+        if self._first_run and not os.environ.get("EQUPDATER_NO_LANGUAGE_PROMPT"):
+            self._ask_first_language()
+        # EqUpdater speaks the game's language (Tweaks -> Language), or
         # English where there is no translation. Fixed for this window's
         # life: everything below draws its text once.
         i18n.set_language(load_tweaks_config().get("locale", DEFAULT_LOCALE))
@@ -3860,6 +3864,59 @@ class EqUpdaterApp(tk.Tk):
             self._start_bg_animation()
         else:
             self._stop_bg_animation()
+
+    def _ask_first_language(self) -> None:
+        """The first-launch language picker: one button per language, each
+        in its own words, since the player may read only one of them. The
+        choice is the Language tweak -- EqUpdater's text and, at the next
+        patch, the game's. Closing the window keeps what is saved."""
+        current = load_tweaks_config().get("locale", DEFAULT_LOCALE)
+        self._apply_window_icon()
+        win = tk.Toplevel(self, bg=C_PANEL)
+        win.title(branding.APP_TITLE)
+        win.resizable(False, False)
+        style_title_bar(win, caption=C_BG, text=C_TEXT)
+        chosen = {}
+
+        body = tk.Frame(win, bg=C_PANEL)
+        body.pack(padx=self._px(28), pady=(self._px(20), self._px(24)))
+        tk.Label(body, text="Language · Sprache · Язык · 语言 · Idioma",
+                 font=("Arial", 12, "bold"), fg=C_GOLD,
+                 bg=C_PANEL).pack(pady=(0, self._px(14)))
+
+        def pick(code):
+            chosen["code"] = code
+            win.destroy()
+
+        for code, (_i, label) in LOCALES.items():
+            base = C_GOLD if code == current else C_PANEL_BDR
+            fg = "#000" if code == current else C_TEXT
+            btn = tk.Label(body, text=label, font=("Arial", 11),
+                           fg=fg, bg=base, cursor="hand2",
+                           pady=self._px(6))
+            btn.pack(fill="x", pady=(0, self._px(6)))
+            btn.language = code
+            btn.bind("<Button-1>", lambda e, c=code: pick(c))
+            btn.bind("<Enter>", lambda e, b=btn: b.configure(bg=C_GOLD_LT, fg="#000"))
+            btn.bind("<Leave>", lambda e, b=btn, bg=base, f=fg: b.configure(bg=bg, fg=f))
+
+        win.update_idletasks()
+        w, h = win.winfo_reqwidth(), win.winfo_reqheight()
+        win.geometry("+%d+%d" % ((win.winfo_screenwidth() - w) // 2,
+                                 (win.winfo_screenheight() - h) // 2))
+        win.protocol("WM_DELETE_WINDOW", win.destroy)
+        win.lift()
+        win.focus_force()
+        win.grab_set()
+        self._language_prompt = win
+        self.wait_window(win)
+        self._language_prompt = None
+
+        code = chosen.get("code")
+        if code and code != current:
+            tweaks = load_tweaks_config()
+            tweaks["locale"] = code
+            save_tweaks_config(tweaks)
 
     def _apply_window_icon(self):
         """Put EqUpdater's icon on the title bar/taskbar cross-platform.
@@ -4445,10 +4502,14 @@ class EqUpdaterApp(tk.Tk):
             row = tk.Frame(self._tweaks_inner, bg=C_PANEL)
             row.pack(fill="x", padx=PAD_X, pady=self._px(3))
 
-            tk.Label(row, text=label,
-                     font=self._font(10, bold=True),
-                     fg=C_TEXT, bg=C_PANEL,
-                     width=name_chars, anchor="w").pack(side="left")
+            name_lbl = tk.Label(row, text=label,
+                                font=self._font(10, bold=True),
+                                fg=C_TEXT, bg=C_PANEL,
+                                width=name_chars, anchor="w")
+            name_lbl.pack(side="left")
+            if tid == "locale":
+                self._add_tooltip(name_lbl, tr(
+                    "Language selection for both in-game and EqUpdater Client."))
 
             if kind == "checkbox":
                 var = tk.BooleanVar(value=values.get(tid, False))
@@ -4700,7 +4761,7 @@ class EqUpdaterApp(tk.Tk):
         self.after(0, self._offer_language_restart)
 
     def _offer_language_restart(self):
-        """EqUpdater's text is drawn once, so a new Game Language shows in
+        """EqUpdater's text is drawn once, so a new Language shows in
         EqUpdater after a restart. Offered, never forced, and asked in the
         language just chosen -- the one the player can read."""
         wanted = i18n.ui_language(

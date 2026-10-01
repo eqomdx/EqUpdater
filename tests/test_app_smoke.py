@@ -32,6 +32,11 @@ except Exception:                                   # pragma: no cover
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+# Every app here starts on an empty profile, which is a first launch, and a
+# first launch waits for the language picker. TestFirstLanguage drives the
+# picker itself.
+os.environ["EQUPDATER_NO_LANGUAGE_PROMPT"] = "1"
+
 
 # ── Tk / thread lifecycle for every test in this file ────────────────────────
 #
@@ -764,6 +769,66 @@ class TestLanguage(unittest.TestCase):
         finally:
             self.m.save_tweaks_config({**self.m.TWEAKS_DEFAULTS, "locale": "deDE"})
             self.app._refresh_tweaks_panel()
+
+
+@unittest.skipUnless(HAVE_TK, "no display")
+class TestFirstLanguage(unittest.TestCase):
+    """The first-launch picker: one button per language, the choice saved as
+    the Language tweak, closing it keeps what is saved."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="equ-firstlang-")
+        os.environ["LOCALAPPDATA"] = cls.tmp
+        os.environ["XDG_DATA_HOME"] = cls.tmp
+        for mod in [m for m in list(sys.modules) if m.startswith("equpdater")]:
+            del sys.modules[mod]
+        from equpdater import app
+        cls.m = app
+        cls.app = app.EqUpdaterApp()
+        for _ in range(4):
+            cls.app.update()
+
+    @classmethod
+    def tearDownClass(cls):
+        _close_app(cls.app)
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def setUp(self):
+        self.m.save_tweaks_config(dict(self.m.TWEAKS_DEFAULTS))
+
+    def run_picker(self, act):
+        """Open the picker; once it is up, ``act(window, buttons)``."""
+        def when_open():
+            win = getattr(self.app, "_language_prompt", None)
+            if win is None:
+                self.app.after(20, when_open)
+                return
+            buttons = {}
+
+            def walk(w):
+                if getattr(w, "language", None):
+                    buttons[w.language] = w
+                for c in w.winfo_children():
+                    walk(c)
+            walk(win)
+            self.seen = sorted(buttons)
+            act(win, buttons)
+        self.app.after(20, when_open)
+        self.app._ask_first_language()
+
+    def test_every_language_is_offered(self):
+        self.run_picker(lambda win, b: win.destroy())
+        self.assertEqual(self.seen, sorted(self.m.LOCALES))
+
+    def test_the_choice_is_saved_as_the_language(self):
+        self.run_picker(lambda win, b: b["ruRU"].event_generate("<Button-1>"))
+        self.assertEqual(self.m.load_tweaks_config()["locale"], "ruRU")
+
+    def test_closing_keeps_what_is_saved(self):
+        self.m.save_tweaks_config({**self.m.TWEAKS_DEFAULTS, "locale": "esES"})
+        self.run_picker(lambda win, b: win.destroy())
+        self.assertEqual(self.m.load_tweaks_config()["locale"], "esES")
 
 
 @unittest.skipUnless(HAVE_TK, "no display")

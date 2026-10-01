@@ -99,7 +99,9 @@ STRINGS = {
     "GAME FOLDER": "游戏文件夹",
     "GENERAL": "常规",
     "GRAPHICS": "图形",
-    "Game Language": "游戏语言",
+    "Language": "语言",
+    "Language selection for both in-game and EqUpdater Client.":
+        "同时设置游戏和 EqUpdater 客户端的语言。",
     "Game folder changed": "游戏文件夹已更改",
     "Grass and small rocks rendering distance. [0 - 300]": "草和小石块的渲染距离。[0 - 300]",
     "Ground Clutter Distance": "地面细节距离",

@@ -106,7 +106,8 @@ Do not silently present OpenDyslexic while rendering a fallback family.
 
 ## Languages (2026-10-01)
 
-EqUpdater's own text follows the saved Game Language tweak: English,
+EqUpdater's own text follows the saved Language tweak (it also sets the
+game's language; it was called "Game Language" until 2026-10-01): English,
 German, Russian, Simplified Chinese, Spanish, Portuguese (BR). A game
 language without a translation shows English. `equpdater/i18n.py` holds the
 mechanism; `equpdater/locales/{de,ru,zh_cn,es,pt_br}.py` hold one dict each,
@@ -121,6 +122,11 @@ keyed by the English text.
 - The language is set once, in `EqUpdaterApp.__init__`, before anything is
   drawn. Applying (or resetting) tweaks with a new language offers a
   restart, asked in the new language, and only after WoW.exe is written.
+- **First launch** (no config file yet) shows `_ask_first_language` before
+  the language is set, so the window opens in the choice with no restart.
+  Each button is in its own language. Closing it keeps what is saved
+  (English, or what an Octo Updater import brought). The smoke tests set
+  `EQUPDATER_NO_LANGUAGE_PROMPT=1`, since every test app is a first launch.
 - **Not translated on purpose:** the session log (support reads it), news
   posts, addon descriptions from the catalogue, server/OS error text, and
   names. Stored errors stay English and are translated where shown.

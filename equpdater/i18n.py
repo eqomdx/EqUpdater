@@ -1,6 +1,6 @@
 """EqUpdater's own words in the player's language.
 
-EqUpdater speaks the language the game is set to (Tweaks -> Game Language).
+EqUpdater speaks the language the game is set to (Tweaks -> Language).
 A game language with no translation here leaves EqUpdater in English. The
 language is fixed for the life of the window; changing it restarts
 EqUpdater (see ``EqUpdaterApp._offer_language_restart``).

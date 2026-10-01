@@ -98,7 +98,9 @@ STRINGS = {
     "GAME FOLDER": "CARPETA DEL JUEGO",
     "GENERAL": "GENERAL",
     "GRAPHICS": "GRÁFICOS",
-    "Game Language": "Idioma del juego",
+    "Language": "Idioma",
+    "Language selection for both in-game and EqUpdater Client.":
+        "Selección de idioma para el juego y el cliente EqUpdater.",
     "Game folder changed": "Carpeta del juego cambiada",
     "Grass and small rocks rendering distance. [0 - 300]": "Distancia de dibujado de la hierba y las piedras pequeñas. [0 - 300]",
     "Ground Clutter Distance": "Distancia de detalles del suelo",

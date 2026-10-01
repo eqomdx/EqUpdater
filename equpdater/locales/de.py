@@ -98,7 +98,9 @@ STRINGS = {
     "GAME FOLDER": "SPIELORDNER",
     "GENERAL": "ALLGEMEIN",
     "GRAPHICS": "GRAFIK",
-    "Game Language": "Spielsprache",
+    "Language": "Sprache",
+    "Language selection for both in-game and EqUpdater Client.":
+        "Sprachauswahl für das Spiel und den EqUpdater-Client.",
     "Game folder changed": "Spielordner geändert",
     "Grass and small rocks rendering distance. [0 - 300]": "Darstellungsentfernung für Gras und kleine Steine. [0 - 300]",
     "Ground Clutter Distance": "Bodendetail-Entfernung",

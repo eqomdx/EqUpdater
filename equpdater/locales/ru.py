@@ -98,7 +98,9 @@ STRINGS = {
     "GAME FOLDER": "ПАПКА ИГРЫ",
     "GENERAL": "ОБЩИЕ",
     "GRAPHICS": "ГРАФИКА",
-    "Game Language": "Язык игры",
+    "Language": "Язык",
+    "Language selection for both in-game and EqUpdater Client.":
+        "Выбор языка для игры и клиента EqUpdater.",
     "Game folder changed": "Папка игры изменена",
     "Grass and small rocks rendering distance. [0 - 300]": "Дальность отрисовки травы и мелких камней. [0 - 300]",
     "Ground Clutter Distance": "Дальность мелких деталей",
