@@ -109,6 +109,12 @@ def main() -> int:
     ap.add_argument("--log", help="write the complete test output here")
     args = ap.parse_args()
     passed, report = run_suite(args.log)
+    # A failure's text can hold any character (translations, test data); a
+    # console that cannot show one must not turn the report into a crash.
+    try:
+        sys.stdout.reconfigure(errors="replace")
+    except (AttributeError, ValueError):
+        pass
     print(report)
     return 0 if passed else 1
 
