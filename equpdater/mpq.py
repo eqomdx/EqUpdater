@@ -29,6 +29,7 @@ from collections import namedtuple
 from urllib.parse import unquote, urlsplit
 
 from . import branding
+from .i18n import tr
 
 #: Hosts a texture-pack source may live on. The same set the downloader is
 #: allowed to fetch binaries from; a source that could be linked but never
@@ -63,17 +64,17 @@ def parse_source(text: str) -> dict:
     """
     url = (text or "").strip()
     if not url:
-        raise ValueError("Paste a link to where this pack comes from.")
+        raise ValueError(tr("Paste a link to where this pack comes from."))
     parts = urlsplit(url)
     if parts.scheme != "https":
-        raise ValueError("The link must start with https://")
+        raise ValueError(tr("The link must start with https://"))
     host = (parts.hostname or "").lower()
     path = [p for p in parts.path.split("/") if p]
 
     if host in RELEASE_HOSTS:
         if len(path) < 2:
-            raise ValueError("Link the repository, e.g. "
-                             "https://%s/owner/repo" % host)
+            raise ValueError(tr("Link the repository, e.g. {example}",
+                                example="https://%s/owner/repo" % host))
         owner, repo = path[0], path[1]
         if repo.endswith(".git"):
             repo = repo[:-4]
@@ -81,20 +82,20 @@ def parse_source(text: str) -> dict:
         if len(path) >= 6 and path[2] == "releases" and path[3] == "download":
             asset = unquote(path[-1])
             if not asset.lower().endswith(".mpq"):
-                raise ValueError("That download is not an .mpq file.")
+                raise ValueError(tr("That download is not an .mpq file."))
         elif len(path) > 2 and path[2] != "releases":
-            raise ValueError("Link the repository or one of its release "
-                             "downloads, not a page inside it.")
+            raise ValueError(tr("Link the repository or one of its release "
+                                "downloads, not a page inside it."))
         return {"kind": RELEASE_HOSTS[host], "owner": owner, "repo": repo,
                 "asset": asset}
 
     if host in DIRECT_HOSTS:
         if not parts.path.lower().endswith(".mpq"):
-            raise ValueError("A direct link must end in .mpq")
+            raise ValueError(tr("A direct link must end in .mpq"))
         return {"kind": "url", "url": url}
 
-    raise ValueError("Texture packs can be linked to a GitHub or Codeberg "
-                     "repository, or to dl.octowow.st.")
+    raise ValueError(tr("Texture packs can be linked to a GitHub or Codeberg "
+                        "repository, or to dl.octowow.st."))
 
 
 def catalogue_source(filename: str) -> dict:
@@ -115,10 +116,11 @@ def source_of(record: dict | None, filename: str) -> dict | None:
 
 def describe_source(src: dict | None) -> str:
     if not src:
-        return "not linked"
+        return tr("not linked")
     kind = src.get("kind")
     if kind == "catalogue":
-        return "%s list (%s)" % (branding.APP_NAME, src.get("file"))
+        return tr("{app} list ({file})", app=branding.APP_NAME,
+                  file=src.get("file"))
     if kind in ("github_release", "codeberg_release"):
         host = "github.com" if kind == "github_release" else "codeberg.org"
         where = "%s/%s/%s" % (host, src.get("owner"), src.get("repo"))
@@ -126,7 +128,7 @@ def describe_source(src: dict | None) -> str:
     if kind == "url":
         parts = urlsplit(src.get("url") or "")
         return (parts.hostname or "") + parts.path
-    return "unknown source"
+    return tr("unknown source")
 
 
 def pick_asset(assets: list, asset: str | None, local_file: str) -> dict:

@@ -104,6 +104,33 @@ Embedded family names verified during this work:
 
 Do not silently present OpenDyslexic while rendering a fallback family.
 
+## Languages (2026-10-01)
+
+EqUpdater's own text follows the saved Game Language tweak: English,
+German, Russian, Spanish, Portuguese (BR). Chinese (and anything else
+without a translation) shows English. `equpdater/i18n.py` holds the
+mechanism; `equpdater/locales/{de,ru,es,pt_br}.py` hold one dict each, keyed
+by the English text.
+
+- Wrap shown text in `tr("…")`, with named placeholders:
+  `tr("Delete {folder}?", folder=name)`. Text defined in a table at import
+  time is marked `N_("…")` and passed through `tr()` where it is shown.
+- `tests/test_i18n.py` collects every `tr`/`N_` literal and fails if any
+  language lacks it, keeps a stale one, or changes the placeholders. Adding
+  or rewording English text therefore means adding the four translations.
+- The language is set once, in `EqUpdaterApp.__init__`, before anything is
+  drawn. Applying (or resetting) tweaks with a new language offers a
+  restart, asked in the new language, and only after WoW.exe is written.
+- **Not translated on purpose:** the session log (support reads it), news
+  posts, addon descriptions from the catalogue, server/OS error text, and
+  names. Stored errors stay English and are translated where shown.
+- The translations were written by the assistant, not native speakers.
+  Have a native speaker read each before relying on them.
+- Friz Quadrata has no Cyrillic; Russian in Friz falls back to another face
+  for those letters. Arial and OpenDyslexic cover all five languages.
+- Longer languages needed room: the Tweaks name column, the Mods name
+  column and the footer buttons size themselves to their text.
+
 ## News / changelog
 
 `equpdater/news.py` owns News fetching/parsing; `app.py` only renders.

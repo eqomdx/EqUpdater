@@ -644,6 +644,63 @@ class TestFontList(unittest.TestCase):
 
 
 @unittest.skipUnless(HAVE_TK, "no display")
+class TestLanguage(unittest.TestCase):
+    """EqUpdater speaks the saved Game Language, and offers a restart --
+    asked in the new language -- when that changes."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="equ-lang-")
+        os.environ["LOCALAPPDATA"] = cls.tmp
+        os.environ["XDG_DATA_HOME"] = cls.tmp
+        for mod in [m for m in list(sys.modules) if m.startswith("equpdater")]:
+            del sys.modules[mod]
+        from equpdater import app, i18n
+        cls.m, cls.i18n = app, i18n
+        app.save_tweaks_config({**app.TWEAKS_DEFAULTS, "locale": "deDE"})
+        cls.app = app.EqUpdaterApp()
+        for _ in range(8):
+            cls.app.update()
+
+    @classmethod
+    def tearDownClass(cls):
+        _close_app(cls.app)
+        cls.i18n.set_language("enUS")
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def setUp(self):
+        self.m.save_tweaks_config({**self.m.TWEAKS_DEFAULTS, "locale": "deDE"})
+
+    def ask(self):
+        from unittest import mock
+        asked = []
+        with mock.patch("tkinter.messagebox.askyesno",
+                        lambda title, body, **kw: asked.append(title) or False):
+            self.app._offer_language_restart()
+        return asked
+
+    def test_the_window_speaks_the_game_language(self):
+        self.assertEqual(self.i18n.language(), "deDE")
+        self.assertEqual(self.app._status_var.get(),
+                         self.i18n.tr("Ready to update"))
+        self.assertNotEqual(self.app._status_var.get(), "Ready to update")
+
+    def test_same_language_asks_nothing(self):
+        self.assertEqual(self.ask(), [])
+
+    def test_a_new_language_is_offered_in_that_language(self):
+        self.m.save_tweaks_config({**self.m.TWEAKS_DEFAULTS, "locale": "ruRU"})
+        asked = self.ask()
+        self.assertEqual(asked, ["Перезапустить EqUpdater?"])
+        # Declined: the window carries on in the language it was drawn in.
+        self.assertEqual(self.i18n.language(), "deDE")
+
+    def test_chinese_game_means_english_window(self):
+        self.m.save_tweaks_config({**self.m.TWEAKS_DEFAULTS, "locale": "zhCN"})
+        self.assertEqual(self.ask(), ["Restart EqUpdater?"])
+
+
+@unittest.skipUnless(HAVE_TK, "no display")
 class TestNewsCadence(unittest.TestCase):
     """The forum is read once at launch and once per refresh click. Never on
     a tab switch, never on a timer, never twice at once."""

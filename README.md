@@ -109,6 +109,9 @@ confirmed, and skips the rest.
 - Fonts: **Arial** (default), **Friz Quadrata** or **OpenDyslexic**, switched
   live in Settings. All three come with EqUpdater; nothing to install.
 - Dark title bar to match.
+- In your language: EqUpdater follows **Tweaks → Game Language** —
+  English, Deutsch, Русский, Español or Português (BR). Chinese stays
+  English. Changing the language offers a restart.
 
 ---
 

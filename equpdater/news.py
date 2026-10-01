@@ -50,6 +50,8 @@ from html import unescape
 from html.parser import HTMLParser
 from urllib.parse import parse_qs, urljoin, urlparse
 
+from .i18n import N_
+
 BASE = "https://octowow.st/forum/"
 ANNOUNCEMENTS_FORUM_ID = 2
 CHANGELOG_FORUM_ID = 4
@@ -497,7 +499,7 @@ def _get(url: str, stage: str, *, opener, user_agent: str, timeout: int,
         code = getattr(exc, "code", None)
         why = f"HTTP {code}" if code else f"{type(exc).__name__}: {exc}"
         raise ForumError(stage, url, why,
-                         short="octowow.st could not be reached") from exc
+                         short=N_("octowow.st could not be reached")) from exc
     body = raw.decode(charset, errors="replace")
     if is_challenge_page(body, headers):
         raise ForumBlockedError(
@@ -505,8 +507,8 @@ def _get(url: str, stage: str, *, opener, user_agent: str, timeout: int,
             "the site answered with its DDoS-protection check (BlazingFast "
             "'Just a moment please...') instead of the forum; it admits "
             "browsers only",
-            short="octowow.st is showing its DDoS-protection check to apps "
-                  "right now")
+            short=N_("octowow.st is showing its DDoS-protection check to apps "
+                  "right now"))
     return body
 
 
@@ -521,7 +523,7 @@ def fetch_forum_topics(forum_id: int, *, opener, user_agent: str,
         raise ForumError(f"forum {forum_id} listing parse", url,
                          "no topic rows found; the page is not a phpBB "
                          "listing or its markup has changed",
-                         short="the forum page could not be read")
+                         short=N_("the forum page could not be read"))
     return newest_first(rows)
 
 
@@ -535,7 +537,7 @@ def fetch_first_post(topic: TopicRow, *, opener, user_agent: str,
     if parsed is None:
         raise ForumError(f"topic {topic.topic_id} parse", url,
                          "no post found on the topic page",
-                         short="the forum topic could not be read")
+                         short=N_("the forum topic could not be read"))
     author, created, content = parsed
     return ForumPost(topic.topic_id, topic.title, topic.author or author,
                      _iso(topic.created_at or created), topic.url, content)

@@ -18,6 +18,8 @@ from __future__ import annotations
 
 from enum import Enum
 
+from .i18n import N_
+
 
 class Status(Enum):
     """What a component is. This is display vocabulary, deliberately plain."""
@@ -67,19 +69,19 @@ class Action(Enum):
     Only UPDATE does anything. Every SKIP_* carries its own reason so the log
     can say which one applied instead of falling silent."""
 
-    UPDATE = "update"
-    SKIP_UP_TO_DATE = "up to date"
-    SKIP_LOCAL_NEWER = "local version is newer"
-    SKIP_UNMANAGED = "not managed by EqUpdater"
-    SKIP_MODIFIED = "local files have been modified"
-    SKIP_IGNORED = "updates ignored"
-    SKIP_DISABLED = "disabled"
-    SKIP_NOT_INSTALLED = "not installed"
-    SKIP_SOURCE_CHANGED = "configured source differs from the installed one"
-    SKIP_DIVERGED = "local and remote histories have diverged"
-    SKIP_UNVERIFIABLE = "cannot determine which is newer"
-    REQUIRES_CONFIRMATION = "needs explicit confirmation"
-    ERROR = "error"
+    UPDATE = N_("update")
+    SKIP_UP_TO_DATE = N_("up to date")
+    SKIP_LOCAL_NEWER = N_("local version is newer")
+    SKIP_UNMANAGED = N_("not managed by EqUpdater")
+    SKIP_MODIFIED = N_("local files have been modified")
+    SKIP_IGNORED = N_("updates ignored")
+    SKIP_DISABLED = N_("disabled")
+    SKIP_NOT_INSTALLED = N_("not installed")
+    SKIP_SOURCE_CHANGED = N_("configured source differs from the installed one")
+    SKIP_DIVERGED = N_("local and remote histories have diverged")
+    SKIP_UNVERIFIABLE = N_("cannot determine which is newer")
+    REQUIRES_CONFIRMATION = N_("needs explicit confirmation")
+    ERROR = N_("error")
 
     def __str__(self) -> str:
         return self.value

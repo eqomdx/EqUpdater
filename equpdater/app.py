@@ -42,7 +42,8 @@ from functools import cache
 import tkinter as tk
 from tkinter import filedialog
 
-from . import branding, mpq
+from . import branding, i18n, mpq
+from .i18n import N_, tr
 from .config import (APP_DATA_DIR, BACKUP_DIR, CONFIG_FILE, bootstrap_config,
                      ensure_dir, load_config, new_addon_record,
                      new_mod_record, update_config)
@@ -655,7 +656,7 @@ MPQ_PATCHES = [
     {
         "file": "patch-O.mpq",
         "name": "Octo Raid Visuals",
-        "description": "Adds ground markers and sounds for boss abilities in raids.",
+        "description": N_("Adds ground markers and sounds for boss abilities in raids."),
         "url":  "https://dl.octowow.st/client/latest/Data/patch-O.mpq",
         # Where the pack is made. Shown as a credit and a link for the user's
         # browser; downloads still come from OctoWoW's own copy above, which
@@ -1193,13 +1194,13 @@ class UpdateWorker:
             # the rest, which is a worse state than not having started.
             if client_exe_locked(self.out_dir):
                 self.log(CLOSE_THE_GAME, "err")
-                self.progress(0.0, "Close the game first")
+                self.progress(0.0, N_("Close the game first"))
                 # The window leaves its "updating" state only on __DONE__ or
                 # __ERROR__; returning without one left it stuck.
                 self.log_q.put(("__ERROR__", ""))
                 return
 
-            self.progress(0.0, "Preparing…")
+            self.progress(0.0, N_("Preparing…"))
             raw, files = fetch_torrent()
             version = torrent_version(raw)
 
@@ -1275,8 +1276,8 @@ class UpdateWorker:
                     frac = p["done"] / p["total"] if p["total"] else 0.0
                     status = None
                     if self.check_integrity:
-                        want = ("Verifying game files…" if p["checking"]
-                                else "Updating game files…")
+                        want = (N_("Verifying game files…") if p["checking"]
+                                else N_("Updating game files…"))
                         if want != _phase["status"]:
                             _phase["status"] = status = want
                     self.progress(min(frac, 1.0), label, status)
@@ -1301,11 +1302,11 @@ class UpdateWorker:
 
             if self._cancel:
                 self.log("\nUpdate cancelled.", "err")
-                self.progress(0.0, "Cancelled")
+                self.progress(0.0, N_("Cancelled"))
                 self.log_q.put(("__ERROR__", ""))
                 return
 
-            self.progress(1.0, "Verifying…")
+            self.progress(1.0, N_("Verifying…"))
             if not torrent_tree_intact(self.out_dir, files,
                                        ignore_speech=ignore_speech):
                 self.log("\n✗  Download incomplete — click Update to finish.", "err")
@@ -1323,7 +1324,7 @@ class UpdateWorker:
             # clean base — but only when the sync actually (re)downloaded it.
             refresh_pristine_wow(self.out_dir)
             if wow_downloaded:
-                self.progress(1.0, "Patching…")
+                self.progress(1.0, N_("Patching…"))
                 self.patch_exe()
             else:
                 self.log("\nWoW.exe unchanged — skipping patch.", "dim")
@@ -1494,7 +1495,7 @@ MODS_REGISTRY = [
         "id":          "VanillaFixes",
         "essential": True,
         "name":        "VanillaFixes",
-        "description": "Eliminates stuttering and animation lag and enables mod loading. Required by other mods.",
+        "description": N_("Eliminates stuttering and animation lag and enables mod loading. Required by other mods."),
         "repo_url":    "https://github.com/hannesmann/vanillafixes",
         "source": {
             "kind":          "github_release",
@@ -1512,7 +1513,7 @@ MODS_REGISTRY = [
         "id":          "ClassicAPI",
         "essential": True,
         "name":        "ClassicAPI",
-        "description": "Expands the addon API with functions from later WoW versions.",
+        "description": N_("Expands the addon API with functions from later WoW versions."),
         "repo_url":    "https://github.com/brues-code/ClassicAPI",
         "source": {
             "kind":          "github_release",
@@ -1529,7 +1530,7 @@ MODS_REGISTRY = [
         "id":          "AuctionQueryThrottle",
         "essential": True,
         "name":        "AuctionQueryThrottle",
-        "description": "Removes the fixed 5-second wait between auction house searches.",
+        "description": N_("Removes the fixed 5-second wait between auction house searches."),
         "repo_url":    "https://github.com/brues-code/AuctionQueryThrottle",
         "source": {
             "kind":          "github_release",
@@ -1546,7 +1547,7 @@ MODS_REGISTRY = [
         "id":          "dxvk",
         "essential": True,
         "name":        "DXVK",
-        "description": "Enables Vulkan-based rendering for improved performance.",
+        "description": N_("Enables Vulkan-based rendering for improved performance."),
         "repo_url":    "https://github.com/doitsujin/dxvk",
         "source": {
             "kind":          "github_release",
@@ -1564,7 +1565,7 @@ MODS_REGISTRY = [
         "id":          "nampower",
         "essential": True,
         "name":        "Nampower",
-        "description": "Reduces input lag and expands the addon API.",
+        "description": N_("Reduces input lag and expands the addon API."),
         "repo_url":    "https://github.com/Emyrk/nampower",
         "source": {
             "kind":          "github_release",
@@ -1581,7 +1582,7 @@ MODS_REGISTRY = [
         "id":          "SuperWoW",
         "essential": True,
         "name":        "SuperWoW",
-        "description": "Adds new features, including healing combat text, chat links of spells and recipes, and expands the addon API.",
+        "description": N_("Adds new features, including healing combat text, chat links of spells and recipes, and expands the addon API."),
         "repo_url":    "https://github.com/balakethelock/SuperWoW",
         "source": {
             "kind":          "github_release",
@@ -1602,7 +1603,7 @@ MODS_REGISTRY = [
         "id":          "transmogfix",
         "essential": True,
         "name":        "TransmogFix",
-        "description": "Prevents frame drops on character death caused by the server-side transmogrification durability recalculation.",
+        "description": N_("Prevents frame drops on character death caused by the server-side transmogrification durability recalculation."),
         "repo_url":    "https://codeberg.org/MarcelineVQ/WeirdUtils",
         "source": {
             "kind":          "direct_file",
@@ -1617,7 +1618,7 @@ MODS_REGISTRY = [
         "id":          "UnitXP_SP3",
         "essential": True,
         "name":        "UnitXP_SP3",
-        "description": "Adds new features, including frame limiter, improved targeting, and anti-aliased combat text, and expands the addon API.",
+        "description": N_("Adds new features, including frame limiter, improved targeting, and anti-aliased combat text, and expands the addon API."),
         "repo_url":    "https://codeberg.org/konaka/UnitXP_SP3",
         "source": {
             "kind":          "codeberg_release",
@@ -1634,7 +1635,7 @@ MODS_REGISTRY = [
         "id":          "VanillaHelpers",
         "essential": True,
         "name":        "VanillaHelpers",
-        "description": "Increases the maximum supported texture resolution and improves memory allocation.",
+        "description": N_("Increases the maximum supported texture resolution and improves memory allocation."),
         "repo_url":    "https://github.com/isfir/VanillaHelpers",
         "source": {
             "kind":          "github_release",
@@ -1651,7 +1652,7 @@ MODS_REGISTRY = [
         "id":          "VanillaMultiMonitorFix",
         "essential": False,
         "name":        "VanillaMultiMonitorFix",
-        "description": "Fixes incorrect game resolution on multi-monitor setups with different resolutions. Set the desired monitor's index in VMMFix_preferred_monitor.txt; use ShowAllDisplayDevices.exe to find the index.",
+        "description": N_("Fixes incorrect game resolution on multi-monitor setups with different resolutions. Set the desired monitor's index in VMMFix_preferred_monitor.txt; use ShowAllDisplayDevices.exe to find the index."),
         "repo_url":    "https://github.com/Mates1500/VanillaMultiMonitorFix",
         "source": {
             "kind":          "github_release",
@@ -1675,7 +1676,7 @@ MODS_REGISTRY = [
         "id":          "no1600x1200",
         "essential": False,
         "name":        "No1600x1200",
-        "description": "Fixes incorrect game resolution when your monitor native resolution isn't detected or 1600x1200 is listed as the maximum.",
+        "description": N_("Fixes incorrect game resolution when your monitor native resolution isn't detected or 1600x1200 is listed as the maximum."),
         "repo_url":    "https://github.com/RetroCro/TurtleWoW-Mods",
         "source": {
             "kind":          "direct_file",
@@ -1886,7 +1887,7 @@ def install_mod(mod: dict, client_dir: str, release: dict | None = None) -> list
         rel = release if release is not None else \
             _codeberg_latest(src["owner"], src["repo"], raise_errors=True)
         if not rel:
-            raise RuntimeError("no release found on Codeberg")
+            raise RuntimeError(N_("no release found on Codeberg"))
         import fnmatch
         assets = rel.get("assets", [])
         asset  = next(
@@ -1938,7 +1939,7 @@ def install_mod(mod: dict, client_dir: str, release: dict | None = None) -> list
         rel = release if release is not None else \
             _github_latest(src["owner"], src["repo"], raise_errors=True)
         if not rel:
-            raise RuntimeError("no release found on GitHub")
+            raise RuntimeError(N_("no release found on GitHub"))
         asset = _pick_asset(rel.get("assets", []), src["asset_pattern"], src["prefer_no"])
         if not asset:
             raise RuntimeError(
@@ -2664,9 +2665,9 @@ def _describe_net_error(e: Exception) -> str:
     import urllib.error
     if isinstance(e, urllib.error.HTTPError):
         if e.code == 403:
-            return "API rate limit exceeded — try again in 1 hour"
+            return N_("API rate limit exceeded — try again in 1 hour")
         if e.code == 404:
-            return "repository or branch not found"
+            return N_("repository or branch not found")
         host = (e.url or "").split("/")[2] if (e.url or "").count("/") >= 2 \
             else "server"
         return f"HTTP {e.code} from {host}"
@@ -2684,12 +2685,12 @@ def describe_install_error(e: Exception) -> str:
     if isinstance(e, OSError) and getattr(e, "errno", None) in (2, 13, 22):
         # The archive/file vanished or got locked mid-operation — on Windows
         # that's almost always the antivirus quarantining the download.
-        return ("Blocked by antivirus — open Settings (⚙) → "
-                "'Add game folder to Defender exclusions', then retry")
+        return N_("Blocked by antivirus — open Settings (⚙) → "
+                  "'Add game folder to Defender exclusions', then retry")
     if isinstance(e, zipfile.BadZipFile):
-        return ("Downloaded archive is corrupted (possibly blocked by "
-                "antivirus) — retry, or use Settings (⚙) → "
-                "'Add game folder to Defender exclusions'")
+        return N_("Downloaded archive is corrupted (possibly blocked by "
+                  "antivirus) — retry, or use Settings (⚙) → "
+                  "'Add game folder to Defender exclusions'")
     return str(e)
 
 
@@ -2994,44 +2995,44 @@ TWEAKS_DEFAULTS = {
 }
 
 TWEAKS_ITEMS = [
-    (None, "GENERAL", "section", False, None, None, None, None, None),
+    (None, N_("GENERAL"), "section", False, None, None, None, None, None),
 
-    ("locale",            "Game Language",    "dropdown", False, None,
+    ("locale",            N_("Game Language"),    "dropdown", False, None,
      None,
      None, None, None),
 
-    ("alwaysAutoLoot",    "Auto Loot",        "checkbox", True,  None,
-     "Reverses the auto-loot behavior to always auto-loot.",
+    ("alwaysAutoLoot",    N_("Auto Loot"),        "checkbox", True,  None,
+     N_("Reverses the auto-loot behavior to always auto-loot."),
      None, None, None),
 
-    ("nameplateRange",    "Nameplate Range",          "number",   False, None,
-     "Distance at which nameplates are visible. [0 - 41]",
+    ("nameplateRange",    N_("Nameplate Range"),          "number",   False, None,
+     N_("Distance at which nameplates are visible. [0 - 41]"),
      0, 41, 1),
 
-    (None, "CAMERA", "section", False, None, None, None, None, None),
+    (None, N_("CAMERA"), "section", False, None, None, None, None, None),
 
-    ("fieldOfView",       "Field of View",            "number",   False, None,
-     "Recommended values by aspect ratio: [4:3 = 90] [16:9 = 110] [21:9 = 150] [32:9 = 180]",
+    ("fieldOfView",       N_("Field of View"),            "number",   False, None,
+     N_("Recommended values by aspect ratio: [4:3 = 90] [16:9 = 110] [21:9 = 150] [32:9 = 180]"),
      90, 180, 5),
 
-    ("cameraDistance",    "Camera Distance",          "number",   False, None,
-         "Maximum camera zoom-out distance. [50 - 100]",
+    ("cameraDistance",    N_("Camera Distance"),          "number",   False, None,
+         N_("Maximum camera zoom-out distance. [50 - 100]"),
          50, 100, 1),
 
-    (None, "GRAPHICS", "section", False, None, None, None, None, None),
+    (None, N_("GRAPHICS"), "section", False, None, None, None, None, None),
 
-    ("farClip",           "World Distance",          "number",   False, None,
-     "Terrain and world objects rendering distance. [100 - 10,000]",
+    ("farClip",           N_("World Distance"),          "number",   False, None,
+     N_("Terrain and world objects rendering distance. [100 - 10,000]"),
      100, 10000, 1),
 
-    ("frillDistance",     "Ground Clutter Distance",  "number",   False, None,
-     "Grass and small rocks rendering distance. [0 - 300]",
+    ("frillDistance",     N_("Ground Clutter Distance"),  "number",   False, None,
+     N_("Grass and small rocks rendering distance. [0 - 300]"),
      0, 300, 1),
 
-    (None, "SOUND", "section", False, None, None, None, None, None),
+    (None, N_("SOUND"), "section", False, None, None, None, None, None),
 
-    ("soundInBackground", "Sound in Background",        "checkbox", True,  None,
-     "Allows game sounds to play in the background.",
+    ("soundInBackground", N_("Sound in Background"),        "checkbox", True,  None,
+     N_("Allows game sounds to play in the background."),
      None, None, None),
 ]
 
@@ -3143,12 +3144,17 @@ def _strip_html(raw: str) -> str:
     return txt.strip()
 
 
+_MONTHS = (N_("Jan"), N_("Feb"), N_("Mar"), N_("Apr"), N_("May"), N_("Jun"),
+           N_("Jul"), N_("Aug"), N_("Sep"), N_("Oct"), N_("Nov"), N_("Dec"))
+
+
 def _format_news_date(iso: str) -> str:
     from datetime import datetime
     try:
-        return datetime.fromisoformat(iso).strftime("%d %b %Y")
+        d = datetime.fromisoformat(iso)
     except Exception:
         return iso
+    return f"{d.day:02d} {tr(_MONTHS[d.month - 1])} {d.year}"
 
 
 def _news_open(req, timeout):
@@ -3177,7 +3183,8 @@ def _news_error(section: str, exc: Exception) -> str:
     """The panel's line for a failed refresh; the full reason goes to the
     session log."""
     log(f"{section}: {exc}", "err")
-    return f"{section} unavailable: {getattr(exc, 'short', None) or exc}"
+    return tr("{section} unavailable: {reason}", section=tr(section),
+              reason=tr(getattr(exc, "short", None) or str(exc)))
 
 # ──────────────────────────────────────────────────────────────────────────────
 #  GUI
@@ -3321,6 +3328,10 @@ class EqUpdaterApp(tk.Tk):
         # the user just added it themselves.
         self._av_excluded = False
         self._cfg        = load_config()
+        # EqUpdater speaks the game's language (Tweaks -> Game Language), or
+        # English where there is no translation. Fixed for this window's
+        # life: everything below draws its text once.
+        i18n.set_language(load_tweaks_config().get("locale", DEFAULT_LOCALE))
 
         # One font policy for the whole application. Friz Quadrata is the
         # default presentation, with Arial and OpenDyslexic available live
@@ -3644,16 +3655,17 @@ class EqUpdaterApp(tk.Tk):
         cv.delete(tag)
         cx, cy = self._nav_pos[tab], self._px(54)
         font = self._font(11, bold=True)
+        label = tr(tab)
         if tab == self._active_tab:
             for r, col in ((self._px(2), "#42340f"), (self._px(1), "#7a5c1d")):
                 for dx, dy in ((-r, 0), (r, 0), (0, -r), (0, r),
                                (-r, -r), (r, -r), (-r, r), (r, r)):
-                    cv.create_text(cx + dx, cy + dy, text=tab,
+                    cv.create_text(cx + dx, cy + dy, text=label,
                                    font=font, fill=col, tags=tag)
-            cv.create_text(cx, cy, text=tab, font=font, fill=C_GOLD_LT,
+            cv.create_text(cx, cy, text=label, font=font, fill=C_GOLD_LT,
                            tags=tag)
         else:
-            cv.create_text(cx, cy, text=tab, font=font,
+            cv.create_text(cx, cy, text=label, font=font,
                            fill=C_GOLD_LT if hover else C_TEXT, tags=tag)
 
         # Update-counter badges
@@ -3973,10 +3985,10 @@ class EqUpdaterApp(tk.Tk):
         on the right edge of the panels below (the Changelog border).
         Re-run on font changes, since every face measures differently."""
         import tkinter.font as tkfont
-        tabs = ["NEWS", "TWEAKS", "ADDONS", "MODS", "MPQ"]
+        tabs = [N_("NEWS"), N_("TWEAKS"), N_("ADDONS"), N_("MODS"), N_("MPQ")]
         font = tkfont.Font(font=self._font(11, bold=True))
         pad = self._px(18)                       # clickable margin each side
-        widths = [font.measure(t) for t in tabs]
+        widths = [font.measure(tr(t)) for t in tabs]
         right = WIN_W - self._px(40)             # panels' right edge
         x = right + pad - sum(w + 2 * pad for w in widths)
         for tab, text_w in zip(tabs, widths):
@@ -3996,7 +4008,7 @@ class EqUpdaterApp(tk.Tk):
         if not self._update_available:
             return
         cv.create_text(self._logo_cx, self._logo_y + self._px(26),
-                       text="Update available!",
+                       text=tr("Update available!"),
                        font=self._font(10, bold=True),
                        fill=C_GOLD_LT if hover else C_GOLD,
                        anchor="n", tags="upd_label")
@@ -4136,7 +4148,7 @@ class EqUpdaterApp(tk.Tk):
             try:
                 feat = fetch_featured_post()
             except Exception as exc:
-                err = _news_error("Announcements", exc)
+                err = _news_error(N_("Announcements"), exc)
 
             def apply():
                 self._feat_loading = False
@@ -4161,7 +4173,7 @@ class EqUpdaterApp(tk.Tk):
             try:
                 items = fetch_patch_notes()
             except Exception as exc:
-                err = _news_error("Changelog", exc)
+                err = _news_error(N_("Changelog"), exc)
 
             def apply():
                 self._patch_loading = False
@@ -4184,7 +4196,7 @@ class EqUpdaterApp(tk.Tk):
                  font=self._font(12, bold=True),
                  fg=C_GOLD_LT, bg=C_PANEL_ALT).pack(side="left")
         if loading:
-            tk.Label(inner, text="Refreshing…", font=self._font(8),
+            tk.Label(inner, text=tr("Refreshing…"), font=self._font(8),
                      fg=C_TEXT_DIM, bg=C_PANEL_ALT).pack(
                          side="right", padx=(0, self._px(8)))
         rf = tk.Label(inner, text="⟳", font=("Segoe UI Symbol", 14),
@@ -4202,12 +4214,12 @@ class EqUpdaterApp(tk.Tk):
         f.configure(bg=C_PANEL, highlightthickness=1,
                     highlightbackground=C_PANEL_BDR)
         self._news_header(
-            f, "ANNOUNCEMENTS",
+            f, tr("ANNOUNCEMENTS"),
             self._load_featured, loading=loading)
 
         if not post:
-            msg = error or ("Loading announcements…" if loading
-                            else "No announcements available.")
+            msg = error or (tr("Loading announcements…") if loading
+                            else tr("No announcements available."))
             tk.Label(f, text=msg, font=self._font(10),
                      fg=C_TEXT_DIM, bg=C_PANEL, wraplength=self._news_left_w - self._px(40),
                      justify="left").pack(padx=self._px(20),
@@ -4225,7 +4237,7 @@ class EqUpdaterApp(tk.Tk):
 
         byline = []
         if post.get("author"):
-            byline.append(f"by {post['author']}")
+            byline.append(tr("by {author}", author=post["author"]))
         date = _format_news_date(post.get("date", ""))
         if date:
             byline.append(date)
@@ -4238,7 +4250,7 @@ class EqUpdaterApp(tk.Tk):
             fill="x", padx=self._px(20))
 
         if post.get("url"):
-            link = tk.Label(f, text="⧉  Read full announcement",
+            link = tk.Label(f, text="⧉  " + tr("Read full announcement"),
                             font=self._font(10, bold=True),
                             fg=C_GOLD, bg=C_PANEL,
                             cursor="hand2", anchor="w")
@@ -4260,7 +4272,8 @@ class EqUpdaterApp(tk.Tk):
                  pady=(self._px(6), self._px(2)))
 
         if error:
-            tk.Label(f, text=error + " · showing cached content",
+            tk.Label(f, text=tr("{error} · showing cached content",
+                                error=error),
                      font=self._font(8), fg=C_TEXT_DIM, bg=C_PANEL,
                      wraplength=self._news_left_w - self._px(40),
                      justify="left", anchor="w").pack(
@@ -4274,12 +4287,12 @@ class EqUpdaterApp(tk.Tk):
         f.configure(bg=C_PANEL, highlightthickness=1,
                     highlightbackground=C_PANEL_BDR)
         self._news_header(
-            f, "CHANGELOG", self._load_patch_notes,
+            f, tr("CHANGELOG"), self._load_patch_notes,
             loading=loading)
 
         if not items:
-            msg = error or ("Loading changelog…" if loading
-                            else "No changelog entries available.")
+            msg = error or (tr("Loading changelog…") if loading
+                            else tr("No changelog entries available."))
             tk.Label(f, text=msg, font=self._font(10),
                      fg=C_TEXT_DIM, bg=C_PANEL, wraplength=self._news_right_w - self._px(30),
                      justify="left").pack(padx=self._px(14),
@@ -4334,7 +4347,7 @@ class EqUpdaterApp(tk.Tk):
                          anchor="w").pack(fill="x", pady=(self._px(5), 0))
 
             if item.get("url"):
-                lnk = tk.Label(card, text="Read more",
+                lnk = tk.Label(card, text=tr("Read more"),
                                font=self._font(9, bold=True),
                                fg=C_GOLD, bg=C_PANEL,
                                cursor="hand2", anchor="w")
@@ -4348,7 +4361,8 @@ class EqUpdaterApp(tk.Tk):
                 fill="x", pady=(self._px(11), 0))
 
         if error:
-            tk.Label(f, text=error + " · showing cached content",
+            tk.Label(f, text=tr("{error} · showing cached content",
+                                error=error),
                      font=self._font(8), fg=C_TEXT_DIM, bg=C_PANEL,
                      wraplength=self._news_right_w - self._px(30),
                      justify="left", anchor="w").pack(
@@ -4369,7 +4383,7 @@ class EqUpdaterApp(tk.Tk):
         bar = tk.Frame(outer, bg=C_PANEL)
         bar.place(relx=1.0, x=-self._px(16), y=self._px(3), anchor="ne")
 
-        apl = tk.Label(bar, text="Apply", font=self._font(11),
+        apl = tk.Label(bar, text=tr("Apply"), font=self._font(11),
                        fg=C_TEXT, bg=C_PANEL_BDR, cursor="hand2",
                        padx=self._px(16), pady=self._px(4))
         apl.bind("<Button-1>", lambda e: self._apply_tweaks())
@@ -4377,7 +4391,7 @@ class EqUpdaterApp(tk.Tk):
         apl.bind("<Leave>",    lambda e: apl.configure(bg=C_PANEL_BDR, fg=C_TEXT))
         self._tweaks_apply_btn = apl
 
-        rst = tk.Label(bar, text="Reset", font=self._font(11),
+        rst = tk.Label(bar, text=tr("Reset"), font=self._font(11),
                        fg=C_TEXT, bg=C_PANEL_BDR, cursor="hand2",
                        padx=self._px(16), pady=self._px(4))
         rst.bind("<Button-1>", lambda e: self._reset_tweaks())
@@ -4398,13 +4412,24 @@ class EqUpdaterApp(tk.Tk):
 
         values = load_tweaks_config()
         PAD_X  = self._px(16)
+        # The name column fits the longest name in this language: "Nameplate
+        # Range" in German or Spanish is half as long again as in English.
+        # Measured in the widths of "0", the unit a Label's width is in.
+        import tkinter.font as tkfont
+        name_font = tkfont.Font(font=self._font(10, bold=True))
+        zero = max(1, name_font.measure("0"))
+        name_chars = max([22] + [-(-name_font.measure(tr(item[1])) // zero) + 1
+                                 for item in TWEAKS_ITEMS if item[2] != "section"])
 
         for (tid, label, kind, _, _, desc, mn, mx, _) in TWEAKS_ITEMS:
+            label = tr(label)
+            desc = tr(desc) if desc else desc
             if tid == "fieldOfView":
                 # Shown, never applied on its own - see load_tweaks_config().
                 try:
-                    desc = ("%s Suggested for your display: %d."
-                            % (desc, fov_default_for_display()))
+                    desc = tr("{description} Suggested for your display: {value}.",
+                              description=desc,
+                              value=fov_default_for_display())
                 except Exception:
                     pass
             if kind == "section":
@@ -4423,7 +4448,7 @@ class EqUpdaterApp(tk.Tk):
             tk.Label(row, text=label,
                      font=self._font(10, bold=True),
                      fg=C_TEXT, bg=C_PANEL,
-                     width=22, anchor="w").pack(side="left")
+                     width=name_chars, anchor="w").pack(side="left")
 
             if kind == "checkbox":
                 var = tk.BooleanVar(value=values.get(tid, False))
@@ -4590,19 +4615,22 @@ class EqUpdaterApp(tk.Tk):
         out = self._game_path.get().strip()
         patch_now = bool(out and os.path.exists(os.path.join(out, "WoW.exe")))
         if not messagebox.askyesno(
-                "Reset tweaks?",
-                "Every tweak goes back to its default value"
-                + (", and WoW.exe is patched with the defaults now."
-                   if patch_now else ".")
-                + "\n\nYour current values are not kept.\n\nReset tweaks?",
+                tr("Reset tweaks?"),
+                (tr("Every tweak goes back to its default value, and WoW.exe "
+                    "is patched with the defaults now.") if patch_now else
+                 tr("Every tweak goes back to its default value."))
+                + "\n\n" + tr("Your current values are not kept.")
+                + "\n\n" + tr("Reset tweaks?"),
                 icon="warning", default="no", parent=self):
             return
         defaults = dict(TWEAKS_DEFAULTS)
         save_tweaks_config(defaults)
         self._refresh_tweaks_panel()
+        if not patch_now:
+            self._offer_language_restart()
         if patch_now:
-            self._set_btn_busy("Patching…")
-            self._status_var.set("Applying tweaks…")
+            self._set_btn_busy(tr("Patching…"))
+            self._status_var.set(tr("Applying tweaks…"))
             # Pass the same defaults that were saved
             threading.Thread(target=self._apply_tweaks_worker,
                              args=(out, defaults), daemon=True).start()
@@ -4617,16 +4645,18 @@ class EqUpdaterApp(tk.Tk):
         out = self._game_path.get().strip()
         if not out:
             self._log_line("Game folder not set.\n", "err")
+            self._offer_language_restart()
             return
 
         exe = os.path.join(out, "WoW.exe")
         if not os.path.exists(exe):
             self._log_line("WoW.exe not found — run Update first.\n", "err")
+            self._offer_language_restart()
             return
 
         self._log_line("\nApplying tweaks to WoW.exe...\n", "acct")
-        self._set_btn_busy("Patching…")
-        self._status_var.set("Applying tweaks…")
+        self._set_btn_busy(tr("Patching…"))
+        self._status_var.set(tr("Applying tweaks…"))
         threading.Thread(target=self._apply_tweaks_worker,
                          args=(out, values), daemon=True).start()
 
@@ -4657,9 +4687,45 @@ class EqUpdaterApp(tk.Tk):
             self._log_line(f"\n✗ Tweak patch failed: {e}\n", "err")
 
             def _fail_state():
-                self._status_var.set("Tweaks failed — check the log")
+                self._status_var.set(tr("Tweaks failed — check the log"))
                 self._set_btn_update()
             self.after(0, _fail_state)
+        # Only now, with WoW.exe written: a restart mid-patch would leave it
+        # half-written.
+        self.after(0, self._offer_language_restart)
+
+    def _offer_language_restart(self):
+        """EqUpdater's text is drawn once, so a new Game Language shows in
+        EqUpdater after a restart. Offered, never forced, and asked in the
+        language just chosen -- the one the player can read."""
+        wanted = i18n.ui_language(
+            load_tweaks_config().get("locale", DEFAULT_LOCALE))
+        current = i18n.language()
+        if wanted == current:
+            return
+        from tkinter import messagebox
+        i18n.set_language(wanted)
+        title = tr("Restart {app}?", app=branding.APP_NAME)
+        body = tr("{app} restarts to show its text in the language you "
+                  "chose.\n\nRestart now?", app=branding.APP_NAME)
+        i18n.set_language(current)
+        if messagebox.askyesno(title, body, parent=self):
+            self._restart()
+
+    def _restart(self):
+        """Start a fresh EqUpdater, then close this one."""
+        if getattr(sys, "frozen", False):
+            cmd = [sys.executable]
+        else:
+            cmd = [sys.executable, os.path.join(branding.app_dir(), "EqUpdater.py")]
+        try:
+            subprocess.Popen(cmd, cwd=branding.app_dir(),
+                             creationflags=getattr(subprocess, "DETACHED_PROCESS", 0),
+                             close_fds=True)
+        except OSError as e:
+            self._log_line(f"Could not restart: {e}\n", "err")
+            return
+        self._on_close()
 
     # ── version migrations ─────────────────────────────────────────────────────────
 
@@ -4792,12 +4858,14 @@ class EqUpdaterApp(tk.Tk):
         note = tk.Frame(outer, bg=C_PANEL)
         note.pack(fill="x", padx=self._px(16), pady=(self._px(14), self._px(8)),
                   anchor="w")
-        tk.Label(note, text="Mods marked with ",
+        # One sentence for the translators, split around the star.
+        before, after = tr("Mods marked with {star} are essential").split("{star}")
+        tk.Label(note, text=before,
                  font=self._font(10), fg=C_TEXT_DIM,
                  bg=C_PANEL).pack(side="left")
         tk.Label(note, text="★", font=self._font(10),
                  fg=C_GOLD, bg=C_PANEL).pack(side="left")
-        tk.Label(note, text=" are essential",
+        tk.Label(note, text=after,
                  font=self._font(10), fg=C_TEXT_DIM,
                  bg=C_PANEL).pack(side="left")
 
@@ -4832,7 +4900,7 @@ class EqUpdaterApp(tk.Tk):
 
         # Packed on demand by _refresh_apply_btn_visibility(): shown only
         # when there are unapplied checkbox changes or a mod is in error.
-        self._apply_btn = tk.Label(foot, text="Apply",
+        self._apply_btn = tk.Label(foot, text=tr("Apply"),
                                    font=self._font(11),
                                    fg=C_TEXT, bg=C_PANEL_BDR,
                                    cursor="hand2", padx=self._px(16),
@@ -4868,7 +4936,7 @@ class EqUpdaterApp(tk.Tk):
                 if live is not None and "ver_label" in refs:
                     # Installed mods show their installed version; others
                     # show the latest available.
-                    ver = state.get("installed_version") or live.get("latest_version") or "unknown"
+                    ver = state.get("installed_version") or live.get("latest_version") or tr("unknown")
                     refs["ver_label"].configure(text=f"  {ver}")
 
                 # Checkbox always reflects config only — never a registry default.
@@ -4889,7 +4957,7 @@ class EqUpdaterApp(tk.Tk):
                         fg=C_TEXT if state.get("enabled", False) else C_TEXT_DIM)
                 if "error_label" in refs:
                     if has_error:
-                        refs["error_label"].configure(text=f"  \u26a0  {state['error']}")
+                        refs["error_label"].configure(text=f"  \u26a0  {tr(state['error'])}")
                         refs["error_label"].pack(fill="x", pady=(0, self._px(4)))
                     else:
                         refs["error_label"].pack_forget()
@@ -4903,13 +4971,22 @@ class EqUpdaterApp(tk.Tk):
             w.destroy()
         self._mod_row_vars = {}
 
+        # Wide enough for the longest name beside the longest version word:
+        # "unknown" in Spanish or Portuguese clipped at a fixed 210 px.
+        import tkinter.font as tkfont
+        name_font = tkfont.Font(font=self._font(10, bold=True))
+        small = tkfont.Font(font=self._font(9))
+        name_w = max(self._px(210),
+                     max(name_font.measure(m["name"]) for m in MODS_REGISTRY)
+                     + small.measure("★ " + "  " + tr("unknown")) + self._px(10))
+
         for mod in mods_sorted:
             mid   = mod["id"]
             state = mods_cfg.get(mid, {})
             live  = next((m for m in self._mods_state if m["id"] == mid), {})
 
             # Installed mods show their installed version; others show latest.
-            latest_ver  = state.get("installed_version") or live.get("latest_version") or "unknown"
+            latest_ver  = state.get("installed_version") or live.get("latest_version") or tr("unknown")
             # Checkbox reflects only what's actually recorded in config — never
             # a registry default. Pending (not-yet-applied) UI changes still
             # win so an in-progress toggle survives a background re-render.
@@ -4927,7 +5004,7 @@ class EqUpdaterApp(tk.Tk):
             row = tk.Frame(container, bg=C_PANEL)
             row.pack(fill="x", pady=self._px(5))
 
-            name_f = tk.Frame(row, bg=C_PANEL, width=self._px(210))
+            name_f = tk.Frame(row, bg=C_PANEL, width=name_w)
             name_f.pack(side="left", fill="y")
             name_f.pack_propagate(False)
             # Essential mods get a gold star badge; a fixed-width slot keeps
@@ -4937,7 +5014,7 @@ class EqUpdaterApp(tk.Tk):
                             width=2, anchor="w")
             star.pack(side="left")
             if essential:
-                self._add_tooltip(star, "Essential mod")
+                self._add_tooltip(star, tr("Essential mod"))
             name_label = tk.Label(name_f, text=mod["name"],
                                   font=self._font(10, bold=True),
                                   fg=name_col, bg=C_PANEL, anchor="w")
@@ -4967,7 +5044,7 @@ class EqUpdaterApp(tk.Tk):
                            relief="flat", cursor="hand2",
                            command=lambda m=mid, v=ignore_var: self._set_ignore(m, v)
                            ).pack(side="left")
-            tk.Label(ig_f, text="Ignore updates",
+            tk.Label(ig_f, text=tr("Ignore updates"),
                      font=self._font(9), fg=C_TEXT_DIM, bg=C_PANEL).pack(side="left")
 
             link = tk.Label(row, text="⧉",
@@ -4978,7 +5055,7 @@ class EqUpdaterApp(tk.Tk):
             link.bind("<Enter>",    lambda e, l=link: l.configure(fg=C_GOLD))
             link.bind("<Leave>",    lambda e, l=link: l.configure(fg=C_TEXT_DIM))
 
-            update_label = tk.Label(row, text="update",
+            update_label = tk.Label(row, text=tr("update"),
                                     font=self._font(10, bold=True),
                                     fg=C_GOLD, bg=C_PANEL, cursor="hand2")
             update_label.bind("<Button-1>",
@@ -4995,7 +5072,7 @@ class EqUpdaterApp(tk.Tk):
                               l.configure(fg=getattr(l, "_base", C_GOLD)))
             self._style_mod_action_label(update_label, mod, state, live)
 
-            desc_label = tk.Label(row, text=mod["description"],
+            desc_label = tk.Label(row, text=tr(mod["description"]),
                                   font=self._font(10),
                                   fg=(C_TEXT if enabled else C_TEXT_DIM),
                                   bg=C_PANEL, wraplength=self._px(400),
@@ -5008,7 +5085,7 @@ class EqUpdaterApp(tk.Tk):
                                    bg=C_PANEL, anchor="w", padx=self._px(16))
             if existing_err:
                 name_label.configure(fg=C_ERR)
-                error_label.configure(text=f"  \u26a0  {existing_err}")
+                error_label.configure(text=f"  \u26a0  {tr(existing_err)}")
                 error_label.pack(fill="x", pady=(0, self._px(4)))
 
             divider = tk.Frame(self._mods_inner, bg=C_DIVIDER, height=self._px(1))
@@ -5083,22 +5160,22 @@ class EqUpdaterApp(tk.Tk):
     _RES_FIX_NOTICE = {
         "no1600x1200": (
             "No1600x1200",
-            "No1600x1200 mod may cause the game to crash on launch on some "
+            N_("No1600x1200 mod may cause the game to crash on launch on some "
             "systems.\n\n"
             "VanillaMultiMonitorFix is the recommended resolution fix. Use "
             "No1600x1200 only if VanillaMultiMonitorFix doesn't solve your "
             "problem.\n\n"
-            "Enable No1600x1200 anyway?",
+            "Enable No1600x1200 anyway?"),
             True),
         "VanillaMultiMonitorFix": (
             "VanillaMultiMonitorFix",
-            "Enable this mod only if the game doesn't detect your monitor's "
+            N_("Enable this mod only if the game doesn't detect your monitor's "
             "native resolution.\n\n"
             "VanillaMultiMonitorFix may interfere with correct resolution "
             "detection. By default, it's recommended to first try launching the "
             "game with DXVK, which may fix the resolution detection issue.\n\n"
             "Enable VanillaMultiMonitorFix only if you're actually experiencing "
-            "resolution issues.",
+            "resolution issues."),
             False),
     }
 
@@ -5137,12 +5214,13 @@ class EqUpdaterApp(tk.Tk):
         # 1) Conflict — only when the other fix is currently on.
         replace_other = self._mod_is_on(other)
         if replace_other and not messagebox.askyesno(
-                "Conflicting mods",
-                f"{name} and {oname} both affect the game's resolution detection "
-                f"and can't be used together — only one can be active at a time.\n\n"
-                f"VanillaMultiMonitorFix is recommended if you experience "
-                f"resolution issues in the game.\n\n"
-                f"Replace {oname} with {name}?",
+                tr("Conflicting mods"),
+                tr("{name} and {other} both affect the game's resolution "
+                   "detection and can't be used together — only one can be "
+                   "active at a time.\n\n"
+                   "VanillaMultiMonitorFix is recommended if you experience "
+                   "resolution issues in the game.\n\n"
+                   "Replace {other} with {name}?", name=name, other=oname),
                 parent=self):
             _cancel()
             return False
@@ -5150,6 +5228,7 @@ class EqUpdaterApp(tk.Tk):
         # 2) That mod's own notice (crash risk / usage guidance). A confirm
         # notice can still cancel the toggle; an OK-only one just informs.
         title, message, confirm = self._RES_FIX_NOTICE[mod_id]
+        message = tr(message)
         if confirm:
             if not messagebox.askyesno(title, message, parent=self):
                 _cancel()
@@ -5190,30 +5269,30 @@ class EqUpdaterApp(tk.Tk):
     #: A status the user cannot act on must not look like a button -- that is
     #: how a warning gets clicked through.
     _MOD_ACTIONS = {
-        Status.UPDATE_AVAILABLE: ("update", "act",
-                                  "Install the newer version from the "
-                                  "configured source."),
-        Status.MISSING_FILES:    ("reinstall", "act",
-                                  "The installed files are gone. Reinstall "
-                                  "to put them back."),
-        Status.LOCAL_NEWER:      ("local newer", "info",
-                                  "The installed version is newer than the "
+        Status.UPDATE_AVAILABLE: (N_("update"), "act",
+                                  N_("Install the newer version from the "
+                                  "configured source.")),
+        Status.MISSING_FILES:    (N_("reinstall"), "act",
+                                  N_("The installed files are gone. Reinstall "
+                                  "to put them back.")),
+        Status.LOCAL_NEWER:      (N_("local newer"), "info",
+                                  N_("The installed version is newer than the "
                                   "one the configured source offers. "
-                                  "EqUpdater will not replace it."),
-        Status.UNMANAGED:        ("not managed", "adopt",
-                                  "Found on disk, installed by something "
+                                  "EqUpdater will not replace it.")),
+        Status.UNMANAGED:        (N_("not managed"), "adopt",
+                                  N_("Found on disk, installed by something "
                                   "else. EqUpdater will not touch it until "
-                                  "you ask it to."),
-        Status.MODIFIED:         ("modified", "info",
-                                  "These files differ from the ones "
+                                  "you ask it to.")),
+        Status.MODIFIED:         (N_("modified"), "info",
+                                  N_("These files differ from the ones "
                                   "EqUpdater installed. Automatic updates "
-                                  "are held back."),
-        Status.UNVERIFIABLE:     ("can't verify", "info",
-                                  "The latest version could not be "
-                                  "determined, so nothing is replaced."),
-        Status.DIFFERENT_SOURCE: ("other source", "info",
-                                  "Installed from a different repository "
-                                  "than the one now configured."),
+                                  "are held back.")),
+        Status.UNVERIFIABLE:     (N_("can't verify"), "info",
+                                  N_("The latest version could not be "
+                                  "determined, so nothing is replaced.")),
+        Status.DIFFERENT_SOURCE: (N_("other source"), "info",
+                                  N_("Installed from a different repository "
+                                  "than the one now configured.")),
     }
 
     def _style_mod_action_label(self, lbl, mod, state, live, plan_=None):
@@ -5226,8 +5305,8 @@ class EqUpdaterApp(tk.Tk):
         if state.get("error"):
             lbl._base, lbl._hover = C_GOLD, C_GOLD_LT
             lbl._mode = "act"
-            lbl.configure(text="retry", fg=C_GOLD)
-            self._set_tooltip(lbl, str(state.get("error")))
+            lbl.configure(text=tr("retry"), fg=C_GOLD)
+            self._set_tooltip(lbl, tr(str(state.get("error"))))
             lbl.pack(side="right", padx=(self._px(2), self._px(8)))
             return
 
@@ -5239,15 +5318,18 @@ class EqUpdaterApp(tk.Tk):
             return
 
         text, mode, tip = entry
+        text, tip = tr(text), tr(tip)
         if p.status is Status.UPDATE_AVAILABLE and p.remote:
-            text = f"update to {p.remote}"
+            text = tr("update to {version}", version=p.remote)
             tip = f"{p.local} \u2192 {p.remote}"
         elif p.status is Status.LOCAL_NEWER:
-            tip = (f"Installed {p.local}; the configured source offers "
-                   f"{p.remote}. {tip}\n\n"
-                   f"Right-click to install {p.remote} anyway.")
+            tip = (tr("Installed {local}; the configured source offers "
+                      "{remote}.", local=p.local, remote=p.remote)
+                   + " " + tip + "\n\n"
+                   + tr("Right-click to install {version} anyway.",
+                        version=p.remote))
         elif p.status is Status.MODIFIED:
-            tip = tip + "\n\nRight-click to replace them anyway."
+            tip = tip + "\n\n" + tr("Right-click to replace them anyway.")
 
         colour = {"act": C_GOLD, "adopt": C_MOD_HL}.get(mode, C_TEXT_DIM)
         lbl._base = colour
@@ -5288,14 +5370,15 @@ class EqUpdaterApp(tk.Tk):
         client = self._game_path.get().strip()
         files = mod.get("installed_files") or []
         if not messagebox.askyesno(
-                f"Manage {mod['name']} with {branding.APP_NAME}?",
-                f"{mod['name']} is already installed and {branding.APP_NAME} "
-                f"did not install it.\n\n"
-                f"Managing it means {branding.APP_NAME} may offer updates "
-                f"for it from the configured source. Your current files are "
-                f"not changed now, and a newer local build will still never "
-                f"be replaced automatically.\n\n"
-                f"Manage it?"):
+                tr("Manage {name} with {app}?", name=mod["name"],
+                   app=branding.APP_NAME),
+                tr("{name} is already installed and {app} did not install "
+                   "it.\n\n"
+                   "Managing it means {app} may offer updates for it from the "
+                   "configured source. Your current files are not changed "
+                   "now, and a newer local build will still never be "
+                   "replaced automatically.\n\n"
+                   "Manage it?", name=mod["name"], app=branding.APP_NAME)):
             return
 
         def _merge(c):
@@ -5325,8 +5408,8 @@ class EqUpdaterApp(tk.Tk):
             return
         mod = next(m for m in MODS_REGISTRY if m["id"] == mod_id)
         self._log_line(f"\nUpdating {mod['name']}...\n", "acct")
-        self._set_btn_busy("Installing…")
-        self._status_var.set("Downloading mods…")
+        self._set_btn_busy(tr("Installing…"))
+        self._status_var.set(tr("Downloading mods…"))
         threading.Thread(target=self._apply_mods_worker,
                          args=(out, mod_id), daemon=True).start()
 
@@ -5334,9 +5417,9 @@ class EqUpdaterApp(tk.Tk):
         out = self._game_path.get().strip()
         if not out:
             return
-        self._apply_btn.configure(text="Applying...", bg="#2a2a32", fg=C_TEXT_DIM)
-        self._set_btn_busy("Installing…")
-        self._status_var.set("Downloading mods…")
+        self._apply_btn.configure(text=tr("Applying…"), bg="#2a2a32", fg=C_TEXT_DIM)
+        self._set_btn_busy(tr("Installing…"))
+        self._status_var.set(tr("Downloading mods…"))
         threading.Thread(target=self._apply_mods_worker,
                          args=(out,), daemon=True).start()
 
@@ -5449,8 +5532,8 @@ class EqUpdaterApp(tk.Tk):
             return
 
         self._log_line("\nInstalling essential mods...\n", "acct")
-        self._set_btn_busy("Installing…")
-        self._status_var.set("Downloading mods…")
+        self._set_btn_busy(tr("Installing…"))
+        self._status_var.set(tr("Downloading mods…"))
         threading.Thread(target=self._apply_mods_worker,
                          args=(out,), daemon=True).start()
 
@@ -5460,13 +5543,13 @@ class EqUpdaterApp(tk.Tk):
         from tkinter import messagebox
         names = "\n".join("    • %s" % m["name"] for m in mods)
         yes = messagebox.askyesno(
-            "Install essential mods?",
-            "%s can install these client mods:\n\n%s\n\n"
-            "They are DLLs the game loads at start-up, downloaded from each "
-            "mod's own release page. Nothing is installed unless you say "
-            "yes.\n\nYou can change this later in Settings → Install "
-            "essential mods, or pick mods one at a time on the MODS tab.\n\n"
-            "Install them now?" % (branding.APP_NAME, names),
+            tr("Install essential mods?"),
+            tr("{app} can install these client mods:\n\n{mods}\n\n"
+               "They are DLLs the game loads at start-up, downloaded from each "
+               "mod's own release page. Nothing is installed unless you say "
+               "yes.\n\nYou can change this later in Settings → Install "
+               "essential mods, or pick mods one at a time on the MODS "
+               "tab.\n\nInstall them now?", app=branding.APP_NAME, mods=names),
             parent=self)
 
         def _merge(c):
@@ -5641,10 +5724,10 @@ class EqUpdaterApp(tk.Tk):
                             f"{mod['register_dll']}.")
                 continue
 
-            action = ("Installing" if needs_install else
-                      "Updating" if needs_update else "Removing")
-            self.after(0, lambda a=action, n=mod["name"]:
-                       self._status_var.set(f"{a} {n}…"))
+            status = (tr("Installing {name}…", name=mod["name"]) if needs_install
+                      else tr("Updating {name}…", name=mod["name"]) if needs_update
+                      else tr("Removing {name}…", name=mod["name"]))
+            self.after(0, lambda t=status: self._status_var.set(t))
 
             try:
                 if needs_install:
@@ -5743,7 +5826,7 @@ class EqUpdaterApp(tk.Tk):
                     refs["ignore"].set(state.get("ignore_updates", False))
 
                 live = next((m for m in self._mods_state if m["id"] == mid), {})
-                ver  = state.get("installed_version") or live.get("latest_version") or "unknown"
+                ver  = state.get("installed_version") or live.get("latest_version") or tr("unknown")
                 if "ver_label" in refs:
                     refs["ver_label"].configure(text=f"  {ver}")
 
@@ -5814,12 +5897,13 @@ class EqUpdaterApp(tk.Tk):
 
         legend = tk.Frame(top, bg=C_PANEL)
         legend.pack(side="left")
-        tk.Label(legend, text="Addons marked with ",
+        before, after = tr("Addons marked with {star} are recommended").split("{star}")
+        tk.Label(legend, text=before,
                  font=self._font(10), fg=C_TEXT_DIM,
                  bg=C_PANEL).pack(side="left")
         tk.Label(legend, text="★", font=self._font(10),
                  fg=C_GOLD, bg=C_PANEL).pack(side="left")
-        tk.Label(legend, text=" are recommended",
+        tk.Label(legend, text=after,
                  font=self._font(10), fg=C_TEXT_DIM,
                  bg=C_PANEL).pack(side="left")
 
@@ -5847,7 +5931,7 @@ class EqUpdaterApp(tk.Tk):
         foot.columnconfigure(1, weight=1)
         foot.columnconfigure(2, weight=1)
 
-        chk = tk.Label(foot, text="⟳  Check for updates",
+        chk = tk.Label(foot, text="⟳  " + tr("Check for updates"),
                        font=self._font(10), fg=C_TEXT_DIM, bg=C_PANEL,
                        cursor="hand2")
         chk.grid(row=0, column=0, sticky="w")
@@ -5855,7 +5939,7 @@ class EqUpdaterApp(tk.Tk):
         chk.bind("<Enter>", lambda e: chk.configure(fg=C_GOLD))
         chk.bind("<Leave>", lambda e: chk.configure(fg=C_TEXT_DIM))
 
-        add = tk.Label(foot, text="+  Add custom git addon",
+        add = tk.Label(foot, text="+  " + tr("Add custom git addon"),
                        font=self._font(10, bold=True), fg="#d76f9e",
                        bg=C_PANEL, cursor="hand2")
         add.grid(row=0, column=1)
@@ -5889,7 +5973,7 @@ class EqUpdaterApp(tk.Tk):
         tk.Frame(foot, bg=C_DIVIDER, height=self._px(1)).pack(
             fill="x", pady=(0, self._px(8)))
         cb_ignore_speech = tk.Checkbutton(
-            foot, text=" Ignore speech.mpq",
+            foot, text=" " + tr("Ignore speech.mpq"),
             variable=self._ignore_speech_var,
             command=self._toggle_ignore_speech,
             font=self._font(10), fg=C_TEXT, bg=C_PANEL,
@@ -5899,8 +5983,8 @@ class EqUpdaterApp(tk.Tk):
         cb_ignore_speech.pack(anchor="w")
         self._add_tooltip(
             cb_ignore_speech,
-            "Ignores verification and updates for speech.mpq, allowing custom "
-            "speech sounds")
+            tr("Ignores verification and updates for speech.mpq, allowing "
+               "custom speech sounds"))
 
         list_frame = tk.Frame(outer, bg=C_PANEL)
         list_frame.pack(fill="both", expand=True,
@@ -6048,26 +6132,27 @@ class EqUpdaterApp(tk.Tk):
         installed = getattr(self, "_mpq_installed_rows", [])
         available = getattr(self, "_mpq_available_rows", [])
         busy = getattr(self, "_mpq_busy", None)
-        busy_text = getattr(self, "_mpq_busy_text", "Downloading…")
+        busy_text = getattr(self, "_mpq_busy_text", tr("Downloading…"))
 
-        self._mpq_section_header("INSTALLED", installed)
+        self._mpq_section_header(N_("INSTALLED"), installed)
         if self._mpq_sections_open.get("INSTALLED", True):
             for row in installed:
                 entry  = row["entry"]
                 src    = row["source"]
                 fname  = row["file"]
                 name   = entry["name"] if entry else fname
-                desc   = entry["description"] if entry else ""
+                desc   = tr(entry["description"]) if entry else ""
                 state  = row.get("state")
                 button = None
                 if row["update"] and src:
-                    button = ("Update", lambda r=row, n=name: self._mpq_fetch(
+                    button = (tr("Update"), lambda r=row, n=name: self._mpq_fetch(
                         r["file"], r["source"], n))
                 if src:
-                    source_line = ("Source: " + mpq.describe_source(src),
-                                   "Unlink", lambda f=fname: self._mpq_unlink(f))
+                    source_line = (tr("Source: {source}",
+                                      source=mpq.describe_source(src)),
+                                   tr("Unlink"), lambda f=fname: self._mpq_unlink(f))
                 else:
-                    source_line = ("Source: not linked", "Link source…",
+                    source_line = (tr("Source: not linked"), tr("Link source…"),
                                    lambda f=fname: self._open_mpq_link_dialog(f))
                 # Credit only a pack known to be the listed one; a file that
                 # merely shares its name is not evidence of who made it.
@@ -6080,13 +6165,13 @@ class EqUpdaterApp(tk.Tk):
                               source_line=source_line,
                               credit=entry if listed else None)
 
-        self._mpq_section_header("AVAILABLE", available)
+        self._mpq_section_header(N_("AVAILABLE"), available)
         if self._mpq_sections_open.get("AVAILABLE", True):
             for entry in available:
                 self._mpq_row(entry["name"], entry["file"],
-                              entry["description"], credit=entry,
+                              tr(entry["description"]), credit=entry,
                               busy=busy_text if busy == entry["file"] else None,
-                              button=("Install", lambda en=entry: self._mpq_fetch(
+                              button=(tr("Install"), lambda en=entry: self._mpq_fetch(
                                   en["file"], mpq.catalogue_source(en["file"]),
                                   en["name"])))
 
@@ -6099,7 +6184,7 @@ class EqUpdaterApp(tk.Tk):
                          font=self._font(14, bold=True),
                          fg=C_GOLD, bg=C_PANEL, cursor="hand2", width=2)
         arrow.pack(side="left")
-        lbl = tk.Label(hdr, text=title, font=self._font(12, bold=True),
+        lbl = tk.Label(hdr, text=tr(title), font=self._font(12, bold=True),
                        fg=C_GOLD, bg=C_PANEL, cursor="hand2")
         lbl.pack(side="left")
         tk.Label(hdr, text=f"  {len(rows)}", font=self._font(10),
@@ -6113,7 +6198,7 @@ class EqUpdaterApp(tk.Tk):
         lbl.bind("<Button-1>", toggle)
 
         if is_open and not rows:
-            tk.Label(f, text="Nothing here.", font=self._font(10),
+            tk.Label(f, text=tr("Nothing here."), font=self._font(10),
                      fg=C_TEXT_DIM, bg=C_PANEL).pack(anchor="w",
                                                      padx=self._px(8))
 
@@ -6123,30 +6208,30 @@ class EqUpdaterApp(tk.Tk):
     #: one somebody made themselves. These say which is which instead of
     #: calling all three out of date and offering to replace them.
     _MPQ_STATES = {
-        "upToDate":      ("Up to date", None,
-                          "Matches the pack its source publishes."),
-        "unmanaged":     ("Not linked", None,
-                          "EqUpdater did not install this pack and does not "
+        "upToDate":      (N_("Up to date"), None,
+                          N_("Matches the pack its source publishes.")),
+        "unmanaged":     (N_("Not linked"), None,
+                          N_("EqUpdater did not install this pack and does not "
                           "know where it came from, so it cannot check it "
                           "for updates. Link its source below; linking "
-                          "changes no files."),
-        "modified":      ("Modified locally", "#d4b43c",
-                          "This file has changed since EqUpdater installed "
-                          "or linked it. Automatic updates are held back."),
-        "unverifiable":  ("Unable to verify", None,
-                          "The source could not be checked, so nothing is "
-                          "replaced."),
-        "sourceDiffers": ("Differs from source", "#d4b43c",
-                          "This is not the file its source publishes now. An "
+                          "changes no files.")),
+        "modified":      (N_("Modified locally"), "#d4b43c",
+                          N_("This file has changed since EqUpdater installed "
+                          "or linked it. Automatic updates are held back.")),
+        "unverifiable":  (N_("Unable to verify"), None,
+                          N_("The source could not be checked, so nothing is "
+                          "replaced.")),
+        "sourceDiffers": (N_("Differs from source"), "#d4b43c",
+                          N_("This is not the file its source publishes now. An "
                           "MPQ carries no version, so it could be older, "
                           "newer or edited - it is left alone. Replace "
                           "installs the source's copy and keeps yours as a "
-                          ".bak file."),
-        "unconfirmed":   ("Source not confirmed", None,
-                          "The source publishes no checksum, so EqUpdater "
+                          ".bak file.")),
+        "unconfirmed":   (N_("Source not confirmed"), None,
+                          N_("The source publishes no checksum, so EqUpdater "
                           "cannot prove this file is its copy. Replace "
                           "installs the source's copy, keeps yours as a "
-                          ".bak file, and tracks updates from then on."),
+                          ".bak file, and tracks updates from then on.")),
     }
 
     def _mpq_row(self, name, filename, description, busy=None, button=None,
@@ -6185,16 +6270,17 @@ class EqUpdaterApp(tk.Tk):
             btn.bind("<Leave>", lambda e: btn.configure(bg=C_GOLD))
         elif state in self._MPQ_STATES:
             text, colour, tip = self._MPQ_STATES[state]
+            text, tip = tr(text), tr(tip)
             if replace:
-                rep = tk.Label(top, text="Replace…", font=self._font(10),
+                rep = tk.Label(top, text=tr("Replace…"), font=self._font(10),
                                fg=C_TEXT_DIM, bg=C_PANEL, cursor="hand2")
                 rep.pack(side="right", padx=self._px(8))
                 rep.bind("<Button-1>", lambda e, cb=replace: cb())
                 rep.bind("<Enter>", lambda e, w=rep: w.configure(fg=C_ERR))
                 rep.bind("<Leave>", lambda e, w=rep: w.configure(fg=C_TEXT_DIM))
                 self._set_tooltip(
-                    rep, "Install the source's copy over this one. You are "
-                         "asked first, and your file is kept.")
+                    rep, tr("Install the source's copy over this one. You "
+                            "are asked first, and your file is kept."))
             lbl = tk.Label(top, text=text, font=self._font(10),
                            fg=colour or C_TEXT_DIM, bg=C_PANEL)
             lbl.pack(side="right", padx=self._px(8))
@@ -6209,12 +6295,12 @@ class EqUpdaterApp(tk.Tk):
             line = tk.Frame(box, bg=C_PANEL)
             line.pack(fill="x", padx=self._px(8), pady=(self._px(2), 0))
             if credit.get("author"):
-                tk.Label(line, text="By " + credit["author"],
+                tk.Label(line, text=tr("By {author}", author=credit["author"]),
                          font=self._font(9), fg=C_TEXT_DIM,
                          bg=C_PANEL).pack(side="left")
             if credit.get("homepage"):
                 sep = "  ·  " if credit.get("author") else ""
-                page = tk.Label(line, text=sep + "Project page",
+                page = tk.Label(line, text=sep + tr("Project page"),
                                 font=self._font(9, bold=True), fg=C_MOD_HL,
                                 bg=C_PANEL, cursor="hand2")
                 page.pack(side="left")
@@ -6264,7 +6350,7 @@ class EqUpdaterApp(tk.Tk):
         then overwrites it, because it is the source's own older copy. A
         replace is the user overruling a held-back state after a warning,
         and keeps their file beside the new one."""
-        data_dir = self._mpq_start(filename, "Downloading…")
+        data_dir = self._mpq_start(filename, tr("Downloading…"))
         if data_dir is None:
             return
         self._log_line(f"\nDownloading {label}…\n", "acct")
@@ -6305,13 +6391,13 @@ class EqUpdaterApp(tk.Tk):
         from tkinter import messagebox
         fname = row["file"]
         if not messagebox.askyesno(
-                "Replace %s?" % fname,
-                "%s will be replaced with the copy from:\n    %s\n\n"
-                "Your current file is not deleted. It is renamed to\n"
-                "    %s.<date>.bak\n"
-                "in the Data folder, where the game ignores it. Rename it "
-                "back to undo.\n\nReplace it?"
-                % (fname, mpq.describe_source(row["source"]), fname),
+                tr("Replace {name}?", name=fname),
+                tr("{file} will be replaced with the copy from:\n    {source}\n\n"
+                   "Your current file is not deleted. It is renamed to\n"
+                   "    {file}.<date>.bak\n"
+                   "in the Data folder, where the game ignores it. Rename it "
+                   "back to undo.\n\nReplace it?",
+                   file=fname, source=mpq.describe_source(row["source"])),
                 parent=self):
             return
         entry = row.get("entry")
@@ -6335,7 +6421,7 @@ class EqUpdaterApp(tk.Tk):
         and the pack is held as differing from its source. If the source
         cannot be reached, nothing is recorded: a link that was never
         checked would read as one that was."""
-        data_dir = self._mpq_start(filename, "Checking…")
+        data_dir = self._mpq_start(filename, tr("Checking…"))
         if data_dir is None:
             return
         where = mpq.describe_source(source)
@@ -6386,7 +6472,7 @@ class EqUpdaterApp(tk.Tk):
         hdr = tk.Frame(panel, bg=P_HDR, height=self._px(46))
         hdr.pack(fill="x")
         hdr.pack_propagate(False)
-        tk.Label(hdr, text="LINK TEXTURE PACK SOURCE",
+        tk.Label(hdr, text=tr("LINK TEXTURE PACK SOURCE"),
                  font=self._font(13, bold=True),
                  fg=C_PURPLE, bg=P_HDR).pack(side="left", padx=self._px(18))
         x_btn = tk.Label(hdr, text="✕", font=self._font(12),
@@ -6400,7 +6486,7 @@ class EqUpdaterApp(tk.Tk):
         body = tk.Frame(panel, bg=P_BG)
         body.pack(fill="both", expand=True, padx=self._px(22),
                   pady=(self._px(14), self._px(12)))
-        tk.Label(body, text="Where does %s come from?" % filename,
+        tk.Label(body, text=tr("Where does {file} come from?", file=filename),
                  font=self._font(10, bold=True), fg=C_GOLD,
                  bg=P_BG).pack(anchor="w")
 
@@ -6415,10 +6501,11 @@ class EqUpdaterApp(tk.Tk):
                            cursor="hand2").pack(anchor="w",
                                                 pady=(self._px(6), 0))
         for entry in MPQ_PATCHES:
-            radio("%s (%s) from the %s list"
-                  % (entry["name"], entry["file"], branding.APP_NAME),
+            radio(tr("{name} ({file}) from the {app} list",
+                     name=entry["name"], file=entry["file"],
+                     app=branding.APP_NAME),
                   "cat:" + entry["file"])
-        radio("Somewhere else:", "url")
+        radio(tr("Somewhere else:"), "url")
 
         url_var = tk.StringVar()
         ent = tk.Entry(body, textvariable=url_var, bg=P_INP, fg=C_TEXT,
@@ -6428,8 +6515,9 @@ class EqUpdaterApp(tk.Tk):
         ent.pack(fill="x", ipady=self._px(6), pady=(self._px(4), self._px(4)))
         ent.bind("<FocusIn>", lambda e: choice.set("url"))
         tk.Label(body,
-                 text="A GitHub or Codeberg repository or release download, "
-                      "or a dl.octowow.st link. Linking changes no files.",
+                 text=tr("A GitHub or Codeberg repository or release "
+                         "download, or a dl.octowow.st link. Linking changes "
+                         "no files."),
                  font=self._font(9), fg=C_TEXT_DIM, bg=P_BG,
                  wraplength=MW - self._px(50), justify="left").pack(anchor="w")
         err = tk.Label(body, text="", font=self._font(9), fg=C_ERR, bg=P_BG,
@@ -6449,7 +6537,7 @@ class EqUpdaterApp(tk.Tk):
             self._close_settings()
             self._mpq_link(filename, source)
 
-        btn = tk.Label(body, text="Link", font=self._font(11, bold=True),
+        btn = tk.Label(body, text=tr("Link"), font=self._font(11, bold=True),
                        fg=C_TEXT, bg=P_BDR, cursor="hand2",
                        padx=self._px(16), pady=self._px(7))
         btn.pack(anchor="e", pady=(self._px(6), 0))
@@ -6529,7 +6617,7 @@ class EqUpdaterApp(tk.Tk):
                     toc_path = os.path.join(dirp, f"{name}.toc")
                     if not os.path.exists(toc_path):
                         rec.update(status="invalid",
-                                   error="Missing .toc file")
+                                   error=N_("Missing .toc file"))
                         addons[name] = rec
                         continue
                     rec["toc"] = read_toc_file(toc_path)
@@ -6614,7 +6702,7 @@ class EqUpdaterApp(tk.Tk):
                     rec["remote_sha"] = remote
                     rec["installed_sha"] = saved.get("sha")
                     if decision.status is Status.UNVERIFIABLE and lookup_failed:
-                        rec["error"] = "Could not reach the addon's source"
+                        rec["error"] = N_("Could not reach the addon's source")
                     addons[name] = rec
 
             # Overlay install failures from this session: the rescan drops
@@ -6699,21 +6787,21 @@ class EqUpdaterApp(tk.Tk):
             self._addons_status["addons"].setdefault(rec["folder"], rec)
         self._render_addons()
         # PLAY is inactive while addons download/install, same as for mods.
-        self._set_btn_busy("Installing…")
-        self._status_var.set("Downloading addons…")
+        self._set_btn_busy(tr("Installing…"))
+        self._status_var.set(tr("Downloading addons…"))
 
         def worker():
             for rec in recs:
-                self.after(0, lambda n=rec["folder"]:
-                           self._status_var.set(f"Installing {n}…"))
+                self.after(0, lambda n=rec["folder"]: self._status_var.set(
+                    tr("Installing {name}…", name=n)))
                 try:
                     if not rec.get("git") or not is_allowed_git_url(rec["git"]):
-                        raise RuntimeError("Addon URL is not from an "
-                                           "allowed git host")
+                        raise RuntimeError(N_("Addon URL is not from an "
+                                              "allowed git host"))
                     sha = addon_remote_sha(rec["git"], rec.get("branch"),
                                            rec.get("ref"), raise_errors=True)
                     if not sha:
-                        raise RuntimeError("Could not resolve remote commit")
+                        raise RuntimeError(N_("Could not resolve remote commit"))
                     install_addon_files(client, rec["folder"], rec["git"], sha)
                     if rec["folder"] == "pfUI":
                         patch_pfui_default_profile(client)
@@ -6771,8 +6859,8 @@ class EqUpdaterApp(tk.Tk):
     def _addon_remove(self, folder: str):
         from tkinter import messagebox
         if not messagebox.askyesno(
-                "Remove addon",
-                f"Delete {folder} and all of its files?"):
+                tr("Remove addon"),
+                tr("Delete {folder} and all of its files?", folder=folder)):
             return
         client = self._game_path.get().strip()
         if not client or self._addons_busy:
@@ -6810,7 +6898,7 @@ class EqUpdaterApp(tk.Tk):
         hdr = tk.Frame(panel, bg=P_HDR, height=self._px(46))
         hdr.pack(fill="x")
         hdr.pack_propagate(False)
-        tk.Label(hdr, text="ADD CUSTOM GIT ADDON",
+        tk.Label(hdr, text=tr("ADD CUSTOM GIT ADDON"),
                  font=self._font(13, bold=True),
                  fg=C_PURPLE, bg=P_HDR).pack(side="left", padx=self._px(18))
         x_btn = tk.Label(hdr, text="✕", font=self._font(12),
@@ -6824,7 +6912,7 @@ class EqUpdaterApp(tk.Tk):
         body = tk.Frame(panel, bg=P_BG)
         body.pack(fill="both", expand=True, padx=self._px(22),
                   pady=(self._px(16), self._px(12)))
-        tk.Label(body, text="REPOSITORY URL",
+        tk.Label(body, text=tr("REPOSITORY URL"),
                  font=self._font(10, bold=True),
                  fg=C_GOLD, bg=P_BG).pack(anchor="w")
         url_var = tk.StringVar()
@@ -6834,7 +6922,8 @@ class EqUpdaterApp(tk.Tk):
                  highlightcolor=C_GOLD).pack(fill="x", ipady=self._px(7),
                                              pady=(self._px(6), self._px(6)))
         tk.Label(body,
-                 text="Allowed hosts: " + ", ".join(ADDON_GIT_HOSTS),
+                 text=tr("Allowed hosts: {hosts}",
+                         hosts=", ".join(ADDON_GIT_HOSTS)),
                  font=self._font(9), fg=C_TEXT_DIM, bg=P_BG).pack(anchor="w")
         err = tk.Label(body, text="", font=self._font(9),
                        fg=C_ERR, bg=P_BG)
@@ -6845,11 +6934,11 @@ class EqUpdaterApp(tk.Tk):
             if url.endswith(".git"):
                 url = url[:-4]
             if not is_allowed_git_url(url):
-                err.configure(text="URL must be https from an allowed host.")
+                err.configure(text=tr("URL must be https from an allowed host."))
                 return
             folder = url.rsplit("/", 1)[-1]
             if not folder or folder in (".", "..") or "\\" in folder:
-                err.configure(text="Could not derive addon folder name.")
+                err.configure(text=tr("Could not derive addon folder name."))
                 return
             self._close_settings()
             self._log_line(f"\nInstalling custom addon {folder}…\n", "acct")
@@ -6858,7 +6947,7 @@ class EqUpdaterApp(tk.Tk):
                                 "toc": {}, "description": None,
                                 "error": None, "custom": True}])
 
-        btn = tk.Label(body, text="Install", font=self._font(11, bold=True),
+        btn = tk.Label(body, text=tr("Install"), font=self._font(11, bold=True),
                        fg=C_TEXT, bg=P_BDR, cursor="hand2",
                        padx=self._px(16), pady=self._px(7))
         btn.pack(anchor="e", pady=(self._px(8), 0))
@@ -6941,9 +7030,9 @@ class EqUpdaterApp(tk.Tk):
                                       a["folder"].lower()))
 
         work = []
-        for title, rows in (("MANAGED", managed),
-                            ("INSTALLED MANUALLY", unmanaged),
-                            ("AVAILABLE", available)):
+        for title, rows in ((N_("MANAGED"), managed),
+                            (N_("INSTALLED MANUALLY"), unmanaged),
+                            (N_("AVAILABLE"), available)):
             work.append(("header", title, rows))
             if self._addon_sections_open.get(title, True):
                 work.extend(("row", rec) for rec in rows)
@@ -6978,7 +7067,7 @@ class EqUpdaterApp(tk.Tk):
                          font=self._font(14, bold=True),
                          fg=C_GOLD, bg=C_PANEL, cursor="hand2", width=2)
         arrow.pack(side="left")
-        lbl = tk.Label(hdr, text=title,
+        lbl = tk.Label(hdr, text=tr(title),
                        font=self._font(12, bold=True),
                        fg=C_GOLD, bg=C_PANEL, cursor="hand2")
         lbl.pack(side="left")
@@ -6993,8 +7082,8 @@ class EqUpdaterApp(tk.Tk):
         lbl.bind("<Button-1>", toggle)
 
         if is_open and not rows:
-            msg = ("Verifying…" if self._addons_status["state"] == "verifying"
-                   else "Nothing here.")
+            msg = (tr("Verifying…") if self._addons_status["state"] == "verifying"
+                   else tr("Nothing here."))
             tk.Label(f, text=msg, font=self._font(10), fg=C_TEXT_DIM,
                      bg=C_PANEL).pack(anchor="w", padx=self._px(8))
 
@@ -7005,7 +7094,8 @@ class EqUpdaterApp(tk.Tk):
 
         warnings = []
         if toc.get("Interface") and toc["Interface"] != "11200":
-            warnings.append(f"Made for client {toc['Interface']}")
+            warnings.append(tr("Made for client {version}",
+                               version=toc["Interface"]))
         # pfUI bundles its own modules, so its .toc dependencies aren't real
         # missing addons — never warn about them.
         if installed and rec["folder"] != "pfUI":
@@ -7015,7 +7105,8 @@ class EqUpdaterApp(tk.Tk):
             missing = [d for d in deps
                        if d not in self._addons_status["addons"]]
             if missing:
-                warnings.append("Missing deps: " + ", ".join(missing))
+                warnings.append(tr("Missing dependencies: {names}",
+                                   names=", ".join(missing)))
 
         row = tk.Frame(f, bg=C_PANEL)
         row.pack(fill="x", pady=self._px(3))
@@ -7056,9 +7147,9 @@ class EqUpdaterApp(tk.Tk):
                 rel.bind("<Enter>", lambda e, w=rel: w.configure(fg=C_GOLD))
                 rel.bind("<Leave>", lambda e, w=rel: w.configure(fg=C_TEXT_DIM))
                 self._set_tooltip(
-                    rel, "Stop managing this addon. The files stay exactly "
-                         "where they are; %s simply stops offering updates "
-                         "for it." % branding.APP_NAME)
+                    rel, tr("Stop managing this addon. The files stay exactly "
+                            "where they are; {app} simply stops offering "
+                            "updates for it.", app=branding.APP_NAME))
 
             # A recommended source that is not the one this was installed
             # from. Offered as a switch, never taken as an update - see
@@ -7076,9 +7167,10 @@ class EqUpdaterApp(tk.Tk):
                 sw.bind("<Enter>", lambda e, w=sw: w.configure(fg=C_GOLD_LT))
                 sw.bind("<Leave>", lambda e, w=sw: w.configure(fg="#d4b43c"))
                 self._set_tooltip(
-                    sw, "A different source is recommended for this addon:\n"
-                        "%s\n\nSwitching forks is a choice, not an update, so "
-                        "nothing happens until you ask." % suggested)
+                    sw, tr("A different source is recommended for this "
+                           "addon:\n{source}\n\nSwitching forks is a choice, "
+                           "not an update, so nothing happens until you ask.",
+                           source=suggested))
         else:
             # Download arrow drawn as a polygon — exact size and centering,
             # independent of any font, without inflating the row height.
@@ -7121,7 +7213,7 @@ class EqUpdaterApp(tk.Tk):
                         width=2, anchor="w")
         star.pack(side="left")
         if is_recommended:
-            self._add_tooltip(star, "Recommended addon")
+            self._add_tooltip(star, tr("Recommended addon"))
         title = toc.get("Title") or rec["folder"]
         for seg, col in parse_wow_colored(title)[:6]:
             tk.Label(name_f, text=seg, font=self._font(10, bold=True),
@@ -7134,7 +7226,7 @@ class EqUpdaterApp(tk.Tk):
                  anchor="w").pack(side="left", fill="x", expand=True)
 
         if rec.get("error"):
-            tk.Label(f, text=f"  ⚠  {rec['error']}",
+            tk.Label(f, text=f"  ⚠  {tr(rec['error'])}",
                      font=self._font(9), fg=C_ERR, bg=C_PANEL,
                      wraplength=self._px(840), justify="left",
                      anchor="w").pack(fill="x", pady=(0, self._px(3)))
@@ -7146,28 +7238,28 @@ class EqUpdaterApp(tk.Tk):
     #: offer to act reads as plain text in a muted colour: a state the user
     #: cannot act on is not drawn to look like a button.
     _ADDON_STATES = {
-        "upToDate":        ("Up to date", C_TEXT_DIM, ""),
-        "localNewer":      ("Local version newer", "#d4b43c",
-                            "The installed commit is ahead of the source's. "
-                            "EqUpdater will not roll it back."),
-        "modified":        ("Modified locally", "#d4b43c",
-                            "These files differ from the ones EqUpdater "
+        "upToDate":        (N_("Up to date"), C_TEXT_DIM, ""),
+        "localNewer":      (N_("Local version newer"), "#d4b43c",
+                            N_("The installed commit is ahead of the source's. "
+                            "EqUpdater will not roll it back.")),
+        "modified":        (N_("Modified locally"), "#d4b43c",
+                            N_("These files differ from the ones EqUpdater "
                             "installed. Automatic updates are held back so "
-                            "your changes survive."),
-        "differentSource": ("Different source", "#d4b43c",
-                            "Installed from a different repository than the "
+                            "your changes survive.")),
+        "differentSource": (N_("Different source"), "#d4b43c",
+                            N_("Installed from a different repository than the "
                             "one now recommended. Switching forks is a "
-                            "choice, not an update."),
-        "diverged":        ("Different revision", "#d4b43c",
-                            "The installed commit and the remote one do not "
+                            "choice, not an update.")),
+        "diverged":        (N_("Different revision"), "#d4b43c",
+                            N_("The installed commit and the remote one do not "
                             "contain each other - another branch, a fork, or "
-                            "rebased history."),
-        "unverifiable":    ("Unable to verify", C_TEXT_DIM,
-                            "Which side is newer could not be established, "
-                            "so nothing is replaced."),
-        "ignored":         ("Ignored", C_TEXT_DIM,
-                            "Excluded from updates at your request."),
-        "unknown":         ("Not versioned", C_TEXT_DIM, ""),
+                            "rebased history.")),
+        "unverifiable":    (N_("Unable to verify"), C_TEXT_DIM,
+                            N_("Which side is newer could not be established, "
+                            "so nothing is replaced.")),
+        "ignored":         (N_("Ignored"), C_TEXT_DIM,
+                            N_("Excluded from updates at your request.")),
+        "unknown":         (N_("Not versioned"), C_TEXT_DIM, ""),
     }
 
     def _addon_row_status(self, row, rec, installed, warnings):
@@ -7181,7 +7273,7 @@ class EqUpdaterApp(tk.Tk):
         status = rec.get("status")
 
         if status == "downloading":
-            tk.Label(row, text="downloading…", font=self._font(10),
+            tk.Label(row, text=tr("downloading…"), font=self._font(10),
                      fg=C_TEXT_DIM, bg=C_PANEL).pack(side="right",
                                                      padx=self._px(4))
             return
@@ -7189,7 +7281,7 @@ class EqUpdaterApp(tk.Tk):
         if status == "invalid" or rec.get("error"):
             # Short marker on the right; the full reason gets its own line
             # under the row (long messages would squeeze the description).
-            tk.Label(row, text="⛔ Addon error", font=self._font(10),
+            tk.Label(row, text="⛔ " + tr("Addon error"), font=self._font(10),
                      fg=C_ERR, bg=C_PANEL).pack(side="right", padx=self._px(4))
             return
 
@@ -7199,7 +7291,7 @@ class EqUpdaterApp(tk.Tk):
             # establishes that the catalogue copy and this copy are even the
             # same addon.
             if rec.get("suggested_git"):
-                btn = tk.Label(row, text="Manage",
+                btn = tk.Label(row, text=tr("Manage"),
                                font=self._font(10, bold=True),
                                fg=C_MOD_HL, bg=C_PANEL, cursor="hand2")
                 btn.pack(side="right", padx=self._px(4))
@@ -7207,19 +7299,19 @@ class EqUpdaterApp(tk.Tk):
                 btn.bind("<Enter>", lambda e, w=btn: w.configure(fg=C_GOLD_LT))
                 btn.bind("<Leave>", lambda e, w=btn: w.configure(fg=C_MOD_HL))
                 self._set_tooltip(
-                    btn, "Let %s update this addon from %s. Your current "
-                         "files are not changed now."
-                         % (branding.APP_NAME, rec["suggested_git"]))
-            lbl = tk.Label(row, text="Installed manually",
+                    btn, tr("Let {app} update this addon from {source}. Your "
+                            "current files are not changed now.",
+                            app=branding.APP_NAME, source=rec["suggested_git"]))
+            lbl = tk.Label(row, text=tr("Installed manually"),
                            font=self._font(10), fg=C_TEXT_DIM, bg=C_PANEL)
             lbl.pack(side="right", padx=self._px(4))
             self._set_tooltip(
-                lbl, "%s did not install this and will not change it."
-                     % branding.APP_NAME)
+                lbl, tr("{app} did not install this and will not change it.",
+                        app=branding.APP_NAME))
             return
 
         if status == "updateAvailable" and installed:
-            upd = tk.Label(row, text="Update", font=self._font(10, bold=True),
+            upd = tk.Label(row, text=tr("Update"), font=self._font(10, bold=True),
                            fg=C_GOLD, bg=C_PANEL, cursor="hand2")
             upd.pack(side="right", padx=self._px(4))
             upd.bind("<Button-1>", lambda e, r=rec: self._addon_apply([r]))
@@ -7240,12 +7332,13 @@ class EqUpdaterApp(tk.Tk):
         entry = self._ADDON_STATES.get(status)
         if entry:
             text, colour, tip = entry
+            text, tip = tr(text), (tr(tip) if tip else tip)
             # The way out of a held-back state, for somebody who has read
             # why it is held back and wants the remote copy anyway. Offered
             # beside the explanation rather than instead of it, and it warns
             # again before it does anything.
             if status in ("modified", "localNewer", "diverged"):
-                rep = tk.Label(row, text="Replace…",
+                rep = tk.Label(row, text=tr("Replace…"),
                                font=self._font(10), fg=C_TEXT_DIM,
                                bg=C_PANEL, cursor="hand2")
                 rep.pack(side="right", padx=self._px(4))
@@ -7254,14 +7347,14 @@ class EqUpdaterApp(tk.Tk):
                 rep.bind("<Enter>", lambda e, w=rep: w.configure(fg=C_ERR))
                 rep.bind("<Leave>", lambda e, w=rep: w.configure(fg=C_TEXT_DIM))
                 self._set_tooltip(
-                    rep, "Overwrite this addon with the latest from its "
-                         "source. A backup is taken first, and you are told "
-                         "exactly what will be lost.")
+                    rep, tr("Overwrite this addon with the latest from its "
+                            "source. A backup is taken first, and you are "
+                            "told exactly what will be lost."))
             lbl = tk.Label(row, text=text, font=self._font(10),
                            fg=colour, bg=C_PANEL)
             lbl.pack(side="right", padx=self._px(4))
             if rec.get("reason") and status not in ("upToDate", "unknown"):
-                tip = (tip + "\n\n" + str(rec["reason"])).strip()
+                tip = (tip + "\n\n" + tr(str(rec["reason"]))).strip()
             if tip:
                 self._set_tooltip(lbl, tip)
 
@@ -7286,15 +7379,15 @@ class EqUpdaterApp(tk.Tk):
         if not git:
             return
         if not messagebox.askyesno(
-                "Manage %s with %s?" % (folder, branding.APP_NAME),
-                "%s is installed and %s did not install it.\n\n"
-                "Managing it means %s will track:\n    %s\n\n"
-                "Your current files are not changed now. %s will tell you "
-                "when that source has a newer version, and will never "
-                "replace files you have edited without asking.\n\n"
-                "Manage it?"
-                % (folder, branding.APP_NAME, branding.APP_NAME, git,
-                   branding.APP_NAME)):
+                tr("Manage {name} with {app}?", name=folder,
+                   app=branding.APP_NAME),
+                tr("{name} is installed and {app} did not install it.\n\n"
+                   "Managing it means {app} will track:\n    {source}\n\n"
+                   "Your current files are not changed now. {app} will tell "
+                   "you when that source has a newer version, and will never "
+                   "replace files you have edited without asking.\n\n"
+                   "Manage it?", name=folder, app=branding.APP_NAME,
+                   source=git)):
             return
 
         client = self._game_path.get().strip()
@@ -7343,13 +7436,14 @@ class EqUpdaterApp(tk.Tk):
         from tkinter import messagebox
         current = (load_config().get("addons", {}) or {}).get(folder, {})
         if not messagebox.askyesno(
-                "Switch source for %s?" % folder,
-                "%s is currently tracked from:\n    %s\n\n"
-                "Switch to:\n    %s\n\n"
-                "This does not change any files now. The next update for "
-                "this addon will come from the new repository, which may be "
-                "a different project with different content.\n\nSwitch?"
-                % (folder, current.get("git") or "(none)", new_git)):
+                tr("Switch source for {name}?", name=folder),
+                tr("{name} is currently tracked from:\n    {current}\n\n"
+                   "Switch to:\n    {new}\n\n"
+                   "This does not change any files now. The next update for "
+                   "this addon will come from the new repository, which may "
+                   "be a different project with different content.\n\n"
+                   "Switch?", name=folder,
+                   current=current.get("git") or tr("(none)"), new=new_git)):
             return
 
         def _merge(c):
@@ -7380,10 +7474,10 @@ class EqUpdaterApp(tk.Tk):
         lbl = self._addons_right_lbl
         st  = self._addons_status
         if st["state"] == "verifying" or self._addons_busy:
-            lbl.configure(text="Checking…", fg=C_TEXT_DIM, cursor="arrow")
+            lbl.configure(text=tr("Checking…"), fg=C_TEXT_DIM, cursor="arrow")
         elif any(r["status"] == "updateAvailable"
                  for r in st["addons"].values()):
-            lbl.configure(text="Update all", fg=C_OK, cursor="hand2")
+            lbl.configure(text=tr("Update all"), fg=C_OK, cursor="hand2")
         else:
             # "Nothing to update" rather than "everything up to date": with
             # unmanaged or held-back addons on the page the second is not
@@ -7393,10 +7487,11 @@ class EqUpdaterApp(tk.Tk):
                                           "diverged", "differentSource",
                                           "unverifiable"))
             if held:
-                lbl.configure(text=f"Nothing to update · {held} held back",
+                lbl.configure(text=tr("Nothing to update · {count} held back",
+                                      count=held),
                               fg=C_TEXT_DIM, cursor="arrow")
             else:
-                lbl.configure(text="Everything up to date", fg=C_TEXT_DIM,
+                lbl.configure(text=tr("Everything up to date"), fg=C_TEXT_DIM,
                               cursor="arrow")
 
     # ── footer ────────────────────────────────────────────────────────────────
@@ -7415,7 +7510,7 @@ class EqUpdaterApp(tk.Tk):
                 var.trace_add("write", lambda *_a, k=key, v=var:
                               c.itemconfigure(self._foot_items[k], text=v.get()))
 
-        self._status_var = tk.StringVar(value="Ready to update")
+        self._status_var = tk.StringVar(value=tr("Ready to update"))
         text("status", self._status_var, text=self._status_var.get(),
              anchor="nw", fill=C_TEXT)
 
@@ -7425,7 +7520,7 @@ class EqUpdaterApp(tk.Tk):
         self._btn_glow = tk.Frame(c, bg="#5a4828")
         self._upd_btn = GradientButton(
             self._btn_glow, width=self._px(132), height=self._px(38),
-            text="UPDATE", palette=UPDATE_GRADIENT,
+            text=tr("UPDATE"), palette=UPDATE_GRADIENT,
             command=self._btn_click, bg=C_BG,
             font_factory=lambda: self._font(11, bold=True))
         self._upd_btn.pack(padx=self._px(2), pady=self._px(2))
@@ -7437,7 +7532,7 @@ class EqUpdaterApp(tk.Tk):
         self._all_glow = tk.Frame(c, bg=UPDALL_GLOW_OFF)
         self._all_btn = GradientButton(
             self._all_glow, width=self._px(132), height=self._px(38),
-            text="UPDATE ALL", palette=UPDATE_ALL_GRADIENT,
+            text=tr("UPDATE ALL"), palette=UPDATE_ALL_GRADIENT,
             command=self._update_all, bg=C_BG,
             font_factory=lambda: self._font(11, bold=True))
         self._all_btn.pack(padx=self._px(2), pady=self._px(2))
@@ -7479,7 +7574,18 @@ class EqUpdaterApp(tk.Tk):
         x = self._px(40)
         status_y = y0 + self._px(6)
         btn_y = status_y + line + self._px(6)
-        glow_w = self._px(132) + 2 * self._px(2)
+        # Both buttons as wide as the longest word either can show, in this
+        # language and face ("ACTUALIZAR TODO" outgrew 132 px), and never so
+        # wide that they reach the progress bar.
+        btn_font = tkfont.Font(font=self._font(11, bold=True))
+        widest = max(btn_font.measure(tr(t)) for t in (
+            "UPDATE", "UPDATE ALL", "PLAY", "Installing…", "Patching…",
+            "Checking…", "Verifying…", "Updating…"))
+        btn_w = min(self._px(170), max(self._px(132), widest + self._px(20)))
+        for b in (getattr(self, "_upd_btn", None), getattr(self, "_all_btn", None)):
+            if b is not None:
+                b.set_width(btn_w)
+        glow_w = btn_w + 2 * self._px(2)
         glow_h = self._px(38) + 2 * self._px(2)
         btn_bottom = btn_y + glow_h
 
@@ -7578,7 +7684,7 @@ class EqUpdaterApp(tk.Tk):
         intact."""
         self._running = False
         self._client_ready = False
-        self._status_var.set("Update available!")
+        self._status_var.set(tr("Update available!"))
         self._set_btn_update()
 
     def _prompt_av_exclusion(self):
@@ -7586,12 +7692,12 @@ class EqUpdaterApp(tk.Tk):
         exclusions (some mods can be mistakenly flagged by antivirus)."""
         from tkinter import messagebox
         if messagebox.askyesno(
-                "Game folder changed",
-                "It is highly recommended to add the game folder to your "
-                "antivirus exclusions. Antivirus software may incorrectly "
-                "detect some mods as threats and prevent them from being "
-                "downloaded or installed properly.\n\n"
-                "Do you want to add the game folder to Defender exclusions?",
+                tr("Game folder changed"),
+                tr("It is highly recommended to add the game folder to your "
+                   "antivirus exclusions. Antivirus software may incorrectly "
+                   "detect some mods as threats and prevent them from being "
+                   "downloaded or installed properly.\n\n"
+                   "Do you want to add the game folder to Defender exclusions?"),
                 parent=self):
             self._allow_through_antivirus()
 
@@ -7647,7 +7753,7 @@ class EqUpdaterApp(tk.Tk):
         hdr = tk.Frame(panel, bg=P_HDR, height=self._px(46))
         hdr.pack(fill="x")
         hdr.pack_propagate(False)
-        tk.Label(hdr, text="SETTINGS", font=self._font(13, bold=True),
+        tk.Label(hdr, text=tr("SETTINGS"), font=self._font(13, bold=True),
                  fg=C_PURPLE, bg=P_HDR).pack(side="left", padx=self._px(18))
         x_btn = tk.Label(hdr, text="✕", font=self._font(12),
                          fg=C_TEXT_DIM, bg=P_HDR, cursor="hand2")
@@ -7664,10 +7770,10 @@ class EqUpdaterApp(tk.Tk):
 
         loc_row = tk.Frame(body, bg=P_BG)
         loc_row.pack(fill="x")
-        tk.Label(loc_row, text="GAME FOLDER",
+        tk.Label(loc_row, text=tr("GAME FOLDER"),
                  font=self._font(10, bold=True),
                  fg=C_GOLD, bg=P_BG).pack(side="left")
-        opn = tk.Label(loc_row, text="Open folder", font=self._font(9),
+        opn = tk.Label(loc_row, text=tr("Open folder"), font=self._font(9),
                        fg=C_TEXT_DIM, bg=P_BG, cursor="hand2")
         opn.pack(side="left", padx=(self._px(16), 0))
         opn.bind("<Button-1>", lambda e: self._open_client_folder())
@@ -7684,7 +7790,7 @@ class EqUpdaterApp(tk.Tk):
                        highlightthickness=1, highlightbackground=P_BDR,
                        highlightcolor=P_BDR)
         ent.pack(side="left", fill="x", expand=True, ipady=self._px(7))
-        chg = tk.Label(path_row, text="Change",
+        chg = tk.Label(path_row, text=tr("Change"),
                        font=self._font(10, bold=True),
                        fg=C_TEXT, bg=P_BDR, cursor="hand2",
                        padx=self._px(16), pady=self._px(7))
@@ -7705,16 +7811,16 @@ class EqUpdaterApp(tk.Tk):
         rcol = tk.Frame(cols, bg=P_BG)
         rcol.grid(row=0, column=1, sticky="nw")
 
-        tk.Label(lcol, text="DOWNLOAD MIRROR",
+        tk.Label(lcol, text=tr("DOWNLOAD MIRROR"),
                  font=self._font(10, bold=True),
                  fg=C_GOLD, bg=P_BG).pack(anchor="w", pady=(0, self._px(4)))
         mir = tk.Frame(lcol, bg=P_BG)
         mir.pack(anchor="w")
         tk.Label(mir, text="●", font=self._font(9),
                  fg=C_OK, bg=P_BG).pack(side="left")
-        tk.Label(mir, text=" Iceland", font=self._font(10, bold=True),
+        tk.Label(mir, text=" " + tr("Iceland"), font=self._font(10, bold=True),
                  fg=C_TEXT, bg=P_BG).pack(side="left")
-        self._mirror_status_lbl = tk.Label(mir, text="checking…",
+        self._mirror_status_lbl = tk.Label(mir, text=tr("checking…"),
                                            font=self._font(9),
                                            fg=C_TEXT_DIM, bg=P_BG)
         self._mirror_status_lbl.pack(side="left", padx=(self._px(8), 0))
@@ -7726,7 +7832,7 @@ class EqUpdaterApp(tk.Tk):
         rf.bind("<Leave>",    lambda e: rf.configure(fg=C_TEXT_DIM))
         self._check_mirror_status()
 
-        tk.Label(lcol, text="TROUBLESHOOTING",
+        tk.Label(lcol, text=tr("TROUBLESHOOTING"),
                  font=self._font(10, bold=True),
                  fg=C_GOLD, bg=P_BG).pack(anchor="w", pady=(self._px(22), 0))
 
@@ -7746,29 +7852,30 @@ class EqUpdaterApp(tk.Tk):
                 w.bind("<Enter>", lambda e: tl.configure(fg=C_GOLD))
                 w.bind("<Leave>", lambda e: tl.configure(fg=C_TEXT))
 
-        _titem("✓", "Verify game files", self._settings_verify)
-        _titem("☰", "Show logs", self._show_logs)
-        _titem("⛊", "Add game folder to Defender exclusions",
+        _titem("✓", tr("Verify game files"), self._settings_verify)
+        _titem("☰", tr("Show logs"), self._show_logs)
+        _titem("⛊", tr("Add game folder to Defender exclusions"),
                self._allow_through_antivirus)
 
-        tk.Label(lcol, text="SUPPORT ME",
+        tk.Label(lcol, text=tr("SUPPORT ME"),
                  font=self._font(10, bold=True),
                  fg=C_GOLD, bg=P_BG).pack(anchor="w", pady=(self._px(22), 0))
-        _titem("☕", "Buy Me a Coffee",
+        _titem("☕", tr("Buy Me a Coffee"),
                lambda: self._open_url("https://ko-fi.com/equadis"),
                icon_color="#e8615f")
 
-        tk.Label(rcol, text="GENERAL",
+        tk.Label(rcol, text=tr("GENERAL"),
                  font=self._font(10, bold=True),
                  fg=C_GOLD, bg=P_BG).pack(anchor="w")
-        tk.Checkbutton(rcol, text=" Clear WDB on game launch",
+        tk.Checkbutton(rcol, text=" " + tr("Clear WDB on game launch"),
                        variable=self._clear_wdb_var,
                        command=self._toggle_clear_wdb,
                        font=self._font(10), fg=C_TEXT, bg=P_BG,
                        activebackground=P_BG, activeforeground=C_TEXT,
                        selectcolor=P_INP, highlightthickness=0, bd=0,
                        cursor="hand2").pack(anchor="w", pady=(self._px(10), 0))
-        tk.Checkbutton(rcol, text=f" Minimize {branding.APP_TITLE} on game launch",
+        tk.Checkbutton(rcol, text=" " + tr("Minimize {app} on game launch",
+                                                 app=branding.APP_TITLE),
                        variable=self._close_on_launch_var,
                        command=self._toggle_close_on_launch,
                        font=self._font(10), fg=C_TEXT, bg=P_BG,
@@ -7776,7 +7883,7 @@ class EqUpdaterApp(tk.Tk):
                        selectcolor=P_INP, highlightthickness=0, bd=0,
                        cursor="hand2").pack(anchor="w", pady=(self._px(10), 0))
         cb_auto_mods = tk.Checkbutton(
-            rcol, text=" Install essential mods",
+            rcol, text=" " + tr("Install essential mods"),
             variable=self._auto_mods_var, command=self._toggle_auto_mods,
             font=self._font(10), fg=C_TEXT, bg=P_BG,
             activebackground=P_BG, activeforeground=C_TEXT,
@@ -7784,10 +7891,10 @@ class EqUpdaterApp(tk.Tk):
         cb_auto_mods.pack(anchor="w", pady=(self._px(10), 0))
         self._add_tooltip(
             cb_auto_mods,
-            "Off by default. When on, the essential mods (VanillaFixes "
-            "and the DLLs it loads) are installed wherever they are "
-            "missing. Mods already in the client are never replaced.")
-        tk.Checkbutton(rcol, text=" Install recommended addons",
+            tr("Off by default. When on, the essential mods (VanillaFixes "
+               "and the DLLs it loads) are installed wherever they are "
+               "missing. Mods already in the client are never replaced."))
+        tk.Checkbutton(rcol, text=" " + tr("Install recommended addons"),
                        variable=self._auto_addons_var,
                        command=self._toggle_auto_addons,
                        font=self._font(10), fg=C_TEXT, bg=P_BG,
@@ -7795,7 +7902,7 @@ class EqUpdaterApp(tk.Tk):
                        selectcolor=P_INP, highlightthickness=0, bd=0,
                        cursor="hand2").pack(anchor="w", pady=(self._px(10), 0))
         cb_animated_bg = tk.Checkbutton(
-            rcol, text=" Animated background",
+            rcol, text=" " + tr("Animated background"),
             variable=self._animated_bg_var,
             command=self._toggle_animated_background,
             font=self._font(10), fg=C_TEXT, bg=P_BG,
@@ -7804,13 +7911,13 @@ class EqUpdaterApp(tk.Tk):
         cb_animated_bg.pack(anchor="w", pady=(self._px(10), 0))
         self._add_tooltip(
             cb_animated_bg,
-            "Moving bubbles behind the window. Off shows a still image and "
-            "uses less CPU.")
+            tr("Moving bubbles behind the window. Off shows a still image "
+               "and uses less CPU."))
 
         # FONT: its own section under GENERAL. The panel grows to fit its
         # content (_fit_settings_panel), so a larger face cannot push these
         # rows out of reach.
-        font_lbl = tk.Label(rcol, text="FONT",
+        font_lbl = tk.Label(rcol, text=tr("FONT"),
                             font=self._font(10, bold=True),
                             fg=C_GOLD, bg=P_BG)
         font_lbl.pack(anchor="w", pady=(self._px(20), 0))
@@ -7826,7 +7933,7 @@ class EqUpdaterApp(tk.Tk):
         row_h = 2 + 2 * max(-(-cap // 2) + desc for _a, cap, desc in ink.values())
 
         def _font_row(value, label, note=None, available=True):
-            shown = label if available else f"{label} (not installed)"
+            shown = label if available else tr("{font} (not installed)", font=label)
             row = tk.Frame(rcol, bg=P_BG, height=row_h)
             rb = tk.Radiobutton(
                 row, text="", value=value,
@@ -7855,19 +7962,19 @@ class EqUpdaterApp(tk.Tk):
             if available:
                 name.bind("<Button-1>", lambda _e: rb.invoke())
             if note:
-                self._add_tooltip(rb, note)
-                self._add_tooltip(name, note)
+                self._add_tooltip(rb, tr(note))
+                self._add_tooltip(name, tr(note))
             return rb
 
         _font_row("arial", "Arial",
-                  "Simple sans-serif.",
+                  N_("Simple sans-serif."),
                   self._fonts.arial_available)
         _font_row("friz", "Friz Quadrata",
-                  "Warcraft-style font.",
+                  N_("Warcraft-style font."),
                   self._fonts.friz_available)
         _font_row(
             "opendyslexic", "OpenDyslexic",
-            "Dyslexic-friendly font.",
+            N_("Dyslexic-friendly font."),
             self._fonts.dyslexic_available)
 
         # Settings is created after the main-window font pass, so apply the
@@ -7946,7 +8053,7 @@ class EqUpdaterApp(tk.Tk):
         cur     = self._game_path.get()
         initial = cur if os.path.isdir(cur) else os.path.expanduser("~")
         chosen  = filedialog.askdirectory(
-            title="Select game client folder",
+            title=tr("Select game client folder"),
             initialdir=initial, mustexist=False)
         if chosen:
             # normpath → backslashes; fires the folder-change reset
@@ -7983,20 +8090,20 @@ class EqUpdaterApp(tk.Tk):
             return
         from tkinter import messagebox
         messagebox.showinfo(
-            "Downloading the game",
-            f"{branding.APP_TITLE} downloads the game with aria2c, the same tool the "
-            "official launcher uses.\n\n"
-            "You may be asked to allow aria2c through the firewall. You can "
-            "safely reject the request, but download speeds may be slightly "
-            "lower.\n\n"
-            "This message is shown only once.",
+            tr("Downloading the game"),
+            tr("{app} downloads the game with aria2c, the same tool the "
+               "official launcher uses.\n\n"
+               "You may be asked to allow aria2c through the firewall. You can "
+               "safely reject the request, but download speeds may be slightly "
+               "lower.\n\n"
+               "This message is shown only once.", app=branding.APP_TITLE),
             parent=self)
         self._cfg = update_config(
             lambda c: c.__setitem__("aria2_firewall_notice_shown", True))
 
     def _check_mirror_status(self):
         lbl = self._mirror_status_lbl
-        lbl.configure(text="checking…", fg=C_TEXT_DIM)
+        lbl.configure(text=tr("checking…"), fg=C_TEXT_DIM)
 
         def worker():
             ok = False
@@ -8011,7 +8118,7 @@ class EqUpdaterApp(tk.Tk):
 
             def upd():
                 try:
-                    lbl.configure(text="online" if ok else "offline",
+                    lbl.configure(text=tr("online") if ok else tr("offline"),
                                   fg=C_OK if ok else C_ERR)
                 except tk.TclError:
                     pass
@@ -8095,8 +8202,8 @@ class EqUpdaterApp(tk.Tk):
         if not pending:
             return
         self._log_line("\nInstalling essential mods...\n", "acct")
-        self._set_btn_busy("Installing…")
-        self._status_var.set("Downloading mods…")
+        self._set_btn_busy(tr("Installing…"))
+        self._status_var.set(tr("Downloading mods…"))
         threading.Thread(target=self._apply_mods_worker,
                          args=(out,), daemon=True).start()
 
@@ -8144,7 +8251,7 @@ class EqUpdaterApp(tk.Tk):
                 self._logwin_text = None
 
         win = tk.Toplevel(self)
-        win.title(f"{branding.APP_TITLE} — Logs")
+        win.title(tr("{app} — Logs", app=branding.APP_TITLE))
         LW, LH = self._px(760), self._px(420)
         sw, sh = win.winfo_screenwidth(), win.winfo_screenheight()
         win.geometry(f"{LW}x{LH}+{(sw - LW) // 2}+{(sh - LH) // 2}")
@@ -8152,7 +8259,7 @@ class EqUpdaterApp(tk.Tk):
 
         top = tk.Frame(win, bg=C_BG)
         top.pack(fill="x", padx=self._px(12), pady=(self._px(10), self._px(4)))
-        tk.Label(top, text="SESSION LOG", font=self._font(9, bold=True),
+        tk.Label(top, text=tr("SESSION LOG"), font=self._font(9, bold=True),
                  fg=C_GOLD, bg=C_BG).pack(side="left")
 
         outer = tk.Frame(win, bg=C_BG)
@@ -8238,8 +8345,7 @@ class EqUpdaterApp(tk.Tk):
 
         lines = []
         if doing:
-            lines.append("%d update%s will be installed:"
-                         % (len(doing), "" if len(doing) == 1 else "s"))
+            lines.append(tr("Updates to install: {count}", count=len(doing)))
             for p in doing:
                 if p.local and p.remote:
                     lines.append("    %s   %s \u2192 %s"
@@ -8248,22 +8354,22 @@ class EqUpdaterApp(tk.Tk):
                     lines.append("    %s" % p.component_id)
             lines.append("")
         else:
-            lines.append("Nothing can be safely updated right now.")
+            lines.append(tr("Nothing can be safely updated right now."))
             lines.append("")
 
-        lines.append("Not being changed:")
+        lines.append(tr("Not being changed:"))
         for p in held:
             lines.append("    %s" % p.component_id)
-            lines.append("        %s" % p.reason)
+            lines.append("        %s" % tr(str(p.reason)))
         lines.append("")
-        lines.append("Anything listed under \u201cnot being changed\u201d "
-                     "stays exactly as it is. Each one can still be dealt "
-                     "with individually from its own tab.")
+        lines.append(tr("Anything listed under \u201cnot being changed\u201d "
+                        "stays exactly as it is. Each one can still be dealt "
+                        "with individually from its own tab."))
 
         if not doing:
-            messagebox.showinfo("Update All", "\n".join(lines))
+            messagebox.showinfo(tr("Update All"), "\n".join(lines))
             return False
-        return messagebox.askokcancel("Update All", "\n".join(lines))
+        return messagebox.askokcancel(tr("Update All"), "\n".join(lines))
 
     def _update_all(self):
         """Update everything EqUpdater manages and can prove is behind.
@@ -8300,8 +8406,8 @@ class EqUpdaterApp(tk.Tk):
         self._refresh_update_all_btn()
         if mods > 0:
             self._update_all_chain = addons > 0
-            self._set_btn_busy("Installing\u2026")
-            self._status_var.set("Downloading mods\u2026")
+            self._set_btn_busy(tr("Installing\u2026"))
+            self._status_var.set(tr("Downloading mods\u2026"))
             threading.Thread(target=self._apply_mods_worker,
                              args=(out,), daemon=True).start()
         elif addons > 0:
@@ -8329,20 +8435,21 @@ class EqUpdaterApp(tk.Tk):
             return
 
         why = {
-            "modified": "Your local changes to this addon will be lost.",
-            "localNewer": "The installed copy is NEWER than the source's. "
-                          "Replacing it is a downgrade.",
-            "diverged": "The installed copy came from different history - "
-                        "another branch or fork. Its contents may differ "
-                        "substantially.",
+            "modified": tr("Your local changes to this addon will be lost."),
+            "localNewer": tr("The installed copy is NEWER than the source's. "
+                             "Replacing it is a downgrade."),
+            "diverged": tr("The installed copy came from different history - "
+                           "another branch or fork. Its contents may differ "
+                           "substantially."),
         }.get(rec.get("status"),
-              "The installed copy will be replaced.")
+              tr("The installed copy will be replaced."))
 
         if not messagebox.askokcancel(
-                "Replace %s?" % folder,
-                "%s\n\nA copy of the current folder is saved to "
-                "%s first.\n\nReplace it with the latest from:\n    %s"
-                % (why, BACKUP_DIR, rec["git"])):
+                tr("Replace {name}?", name=folder),
+                why + "\n\n"
+                + tr("A copy of the current folder is saved to {backups} "
+                     "first.\n\nReplace it with the latest from:\n    {source}",
+                     backups=BACKUP_DIR, source=rec["git"])):
             return
 
         dest = backup_component(
@@ -8371,20 +8478,23 @@ class EqUpdaterApp(tk.Tk):
         state = load_config().get("mods", {}).get(mod_id, {})
         live = next((m for m in self._mods_state if m["id"] == mod_id), None)
         decision = mod_plan(mod, state, live, client)
-        remote = decision.remote or "the repository version"
+        remote = decision.remote or tr("the repository version")
 
         note = ""
         if decision.status is Status.LOCAL_NEWER:
-            note = ("\n\nThis is a DOWNGRADE: %s is installed and %s is what "
-                    "the source offers." % (decision.local, decision.remote))
+            note = "\n\n" + tr("This is a DOWNGRADE: {local} is installed and "
+                               "{remote} is what the source offers.",
+                               local=decision.local, remote=decision.remote)
         elif decision.status is Status.MODIFIED:
-            note = "\n\nThe files here differ from the ones EqUpdater installed."
+            note = "\n\n" + tr("The files here differ from the ones EqUpdater "
+                               "installed.")
 
         if not messagebox.askokcancel(
-                "Replace %s?" % mod["name"],
-                "Install %s over the copy already here.%s\n\n"
-                "The current files are backed up to %s first."
-                % (remote, note, BACKUP_DIR)):
+                tr("Replace {name}?", name=mod["name"]),
+                tr("Install {version} over the copy already here.",
+                   version=remote) + note + "\n\n"
+                + tr("The current files are backed up to {backups} first.",
+                     backups=BACKUP_DIR)):
             return
 
         for rel in (state.get("installed_files")
@@ -8393,20 +8503,20 @@ class EqUpdaterApp(tk.Tk):
 
         self._log_line("\nReplacing %s at your request.\n" % mod["name"],
                        "acct")
-        self._set_btn_busy("Installing\u2026")
+        self._set_btn_busy(tr("Installing\u2026"))
         threading.Thread(target=self._apply_mods_worker,
                          args=(client, mod_id, True), daemon=True).start()
 
     def _set_btn_play(self):
         self._btn_mode = "play"
-        self._upd_btn.set_text("PLAY")
+        self._upd_btn.set_text(tr("PLAY"))
         self._upd_btn.set_palette(PLAY_GRADIENT)
         self._upd_btn.set_enabled(True)
         self._btn_glow.configure(bg="#29472c")
 
     def _set_btn_update(self):
         self._btn_mode = "update"
-        self._upd_btn.set_text("UPDATE")
+        self._upd_btn.set_text(tr("UPDATE"))
         self._upd_btn.set_palette(UPDATE_GRADIENT)
         self._upd_btn.set_enabled(True)
         self._btn_glow.configure(bg="#5a4828")
@@ -8431,19 +8541,19 @@ class EqUpdaterApp(tk.Tk):
         # guards against a stray call during the mods→addons setup chain or a
         # post-install verify flipping the button back on mid-download.
         if self._addons_installing:
-            self._set_btn_busy("Installing…")
-            self._status_var.set("Downloading addons…")
+            self._set_btn_busy(tr("Installing…"))
+            self._status_var.set(tr("Downloading addons…"))
             return
         if not self._client_ready:
-            self._status_var.set("Update available!")
+            self._status_var.set(tr("Update available!"))
             self._set_btn_update()
             return
         if self._mods_have_errors():
-            self._set_btn_busy("PLAY")
-            self._status_var.set("Mod errors — check MODS tab")
+            self._set_btn_busy(tr("PLAY"))
+            self._status_var.set(tr("Mod errors — check MODS tab"))
         else:
             self._set_btn_play()
-            self._status_var.set("Everything up to date!")
+            self._status_var.set(tr("Everything up to date!"))
         self._refresh_update_all_btn()
 
     def _btn_click(self):
@@ -8502,12 +8612,12 @@ class EqUpdaterApp(tk.Tk):
                 lambda c: c.pop("dxvk_notice_pending", None))
             from tkinter import messagebox
             messagebox.showinfo(
-                "DXVK mod first launch",
-                "Initial shader compilation may cause temporary in-game "
-                "stuttering during the first launch. This is a normal process "
-                "while the game builds its shader cache.\n\n"
-                "Users with AMD GPUs experiencing stability issues can switch "
-                "to DXVK 2.5.3",
+                tr("DXVK mod first launch"),
+                tr("Initial shader compilation may cause temporary in-game "
+                   "stuttering during the first launch. This is a normal "
+                   "process while the game builds its shader cache.\n\n"
+                   "Users with AMD GPUs experiencing stability issues can "
+                   "switch to DXVK 2.5.3"),
                 parent=self)
 
         if self._cfg.get("clear_wdb_on_launch", False):
@@ -8526,8 +8636,8 @@ class EqUpdaterApp(tk.Tk):
                                  creationflags=flags, close_fds=True)
             self._log_line(f"Launched {exe_lbl}!\n", "ok")
             # Briefly disable PLAY so a double-click can't spawn two clients.
-            self._set_btn_busy("PLAY")
-            self._status_var.set("Launching...")
+            self._set_btn_busy(tr("PLAY"))
+            self._status_var.set(tr("Launching..."))
             # Optionally minimize (close) the updater to the taskbar shortly after launch
             if self._cfg.get("close_on_launch", False):
                 self.after(1000, self.iconify) # self._on_close and return
@@ -8548,8 +8658,8 @@ class EqUpdaterApp(tk.Tk):
         if prev is not None:
             prev.cancel()
         self._running = True
-        self._set_btn_busy("Checking…")
-        self._status_var.set("Checking for updates…")
+        self._set_btn_busy(tr("Checking…"))
+        self._status_var.set(tr("Checking for updates…"))
         self._log_q  = queue.Queue()
         self._prog_q = queue.Queue()
         worker = VerifyWorker(out, self._log_q, self._prog_q)
@@ -8578,9 +8688,9 @@ class EqUpdaterApp(tk.Tk):
         self._log_line(f"\nGame folder: {out}\n", "dim")
 
         self._running = True
-        self._set_btn_busy("Verifying…" if check_integrity else "Updating…")
-        self._status_var.set("Verifying game files…" if check_integrity
-                             else "Updating game files…")
+        self._set_btn_busy(tr("Verifying…") if check_integrity else tr("Updating…"))
+        self._status_var.set(tr("Verifying game files…") if check_integrity
+                             else tr("Updating game files…"))
         self._draw_progress(0.0)
         self._prog_label_var.set("")
 
@@ -8609,7 +8719,7 @@ class EqUpdaterApp(tk.Tk):
                 self._maybe_install_default_addons()
         else:
             self._client_ready = False
-            self._status_var.set("Update failed — check the log")
+            self._status_var.set(tr("Update failed — check the log"))
             self._draw_progress(0.0)
             self._set_btn_update()
 
@@ -8639,7 +8749,7 @@ class EqUpdaterApp(tk.Tk):
                 elif msg == "__UPDATE_NEEDED__":
                     self._running = False
                     self._client_ready = False
-                    self._status_var.set("Update available!")
+                    self._status_var.set(tr("Update available!"))
                     self._draw_progress(0.0)
                     self._set_btn_update()
                 elif msg.startswith("__VERSION__"):
@@ -8668,11 +8778,11 @@ class EqUpdaterApp(tk.Tk):
             val, lbl = latest[0], latest[1]
             status = latest[2] if len(latest) > 2 else None
             self._draw_progress(val)
-            self._prog_label_var.set(lbl)
+            self._prog_label_var.set(tr(lbl) if lbl else lbl)
             if status:
-                self._status_var.set(status)
-                self._set_btn_busy("Verifying…" if status.startswith("Verifying")
-                                   else "Updating…")
+                self._status_var.set(tr(status))
+                self._set_btn_busy(tr("Verifying…") if status.startswith("Verifying")
+                                   else tr("Updating…"))
 
         if not getattr(self, "_destroying", False):
             try:

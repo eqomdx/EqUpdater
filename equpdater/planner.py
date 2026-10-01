@@ -18,6 +18,7 @@ ownership before staleness, and every "I don't know" before every "go".
 
 from __future__ import annotations
 
+from .i18n import N_
 from .gitcompare import Ancestry, same_repo
 from .hashing import unchanged
 from .states import Action, Plan, Status
@@ -171,11 +172,11 @@ def plan(c: Component) -> Plan:
         # back -- they may have removed it on purpose. Offered as a button,
         # never swept.
         return made(Action.REQUIRES_CONFIRMATION, Status.MISSING_FILES,
-                    "installed files are missing; reinstall to restore them")
+                    N_("installed files are missing; reinstall to restore them"))
 
     if c.tracks_hash and not unchanged(c.recorded_hash, c.current_hash):
         return made(Action.SKIP_MODIFIED, Status.MODIFIED,
-                    "local files differ from the version EqUpdater installed")
+                    N_("local files differ from the version EqUpdater installed"))
 
     # ── 4. the source is not the source it came from ─────────────────────────
     #
@@ -192,7 +193,7 @@ def plan(c: Component) -> Plan:
         # Could not reach the source. An error resolving the latest version
         # must never be the reason files get replaced.
         return made(Action.SKIP_UNVERIFIABLE, Status.UNVERIFIABLE,
-                    "could not determine the latest version")
+                    N_("could not determine the latest version"))
 
     if c.ancestry is not None:
         action, status = _by_ancestry(c)
@@ -208,7 +209,7 @@ def plan(c: Component) -> Plan:
 
     p = made(action, status)
     if action is Action.UPDATE:
-        p.reason = "a newer version is available"
+        p.reason = N_("a newer version is available")
     return p
 
 

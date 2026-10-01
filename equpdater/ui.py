@@ -740,6 +740,12 @@ class GradientButton(tk.Canvas):
         self._text = text
         self._paint()
 
+    def set_width(self, width: int) -> None:
+        if int(width) != self._width_px:
+            self._width_px = int(width)
+            self.configure(width=self._width_px)
+            self._paint()
+
     def set_enabled(self, enabled: bool) -> None:
         self._enabled = bool(enabled)
         self.configure(cursor="hand2" if self._enabled else "arrow")

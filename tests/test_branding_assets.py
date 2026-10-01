@@ -30,8 +30,8 @@ class TestBrandingAssets(unittest.TestCase):
         path = os.path.join(ROOT, "equpdater", "app.py")
         with open(path, encoding="utf-8") as f:
             source = f.read()
-        self.assertIn('text="SUPPORT ME"', source)
-        self.assertNotIn('text="SUPPORT EQUPDATER"', source)
+        self.assertIn('text=tr("SUPPORT ME")', source)
+        self.assertNotIn('SUPPORT EQUPDATER', source)
 
     def test_opendyslexic_scale_stays_readable(self):
         from equpdater.ui import FONT_SIZE_SCALE
