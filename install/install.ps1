@@ -245,59 +245,6 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Ok "PyInstaller, certifi and Pillow ready"
 
-# Import the user-supplied UI font archives into EqUpdater's private per-user
-# font directory. No administrator rights and no system-wide font install.
-# The app also repeats this discovery at runtime, but doing it here means the
-# first packaged launch already has the fonts available.
-Write-Step "Importing EqUpdater UI fonts (Friz Quadrata / Arial / OpenDyslexic)"
-$fontDest = Join-Path $env:LOCALAPPDATA "EqUpdater\fonts"
-New-Item -ItemType Directory -Force -Path $fontDest | Out-Null
-$fontPatterns = @(
-    "friz-quadrata*.zip", "friz*.zip",
-    "arial*.zip",
-    "opendyslexic*.zip"
-)
-$fontSearchRoots = @(
-    $projectDir,
-    (Join-Path $env:USERPROFILE "Downloads"),
-    (Join-Path $env:USERPROFILE "Desktop"),
-    (Join-Path $env:USERPROFILE "Documents")
-)
-$fontArchives = @()
-foreach ($root in $fontSearchRoots) {
-    if (-not (Test-Path $root)) { continue }
-    foreach ($pattern in $fontPatterns) {
-        $fontArchives += Get-ChildItem -Path $root -Filter $pattern -File `
-            -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
-    }
-}
-$fontArchives = $fontArchives | Sort-Object -Unique
-$fontImported = 0
-foreach ($archive in $fontArchives) {
-    $tmp = Join-Path $env:TEMP ("EqUpdaterFonts-" + [guid]::NewGuid().ToString("N"))
-    try {
-        New-Item -ItemType Directory -Force -Path $tmp | Out-Null
-        Expand-Archive -Path $archive -DestinationPath $tmp -Force
-        Get-ChildItem -Path $tmp -Recurse -File -ErrorAction SilentlyContinue |
-            Where-Object { $_.Extension -match '^\.(ttf|otf)$' -and
-                           -not $_.Name.StartsWith('._') -and
-                           $_.FullName -notmatch '\\__MACOSX\\' } |
-            ForEach-Object {
-                Copy-Item $_.FullName (Join-Path $fontDest $_.Name) -Force
-                $script:fontImported++
-            }
-    } catch {
-        Write-Host "  Font archive skipped: $archive ($_)" -ForegroundColor Yellow
-    } finally {
-        Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
-    }
-}
-if ($fontImported -gt 0) {
-    Write-Ok "imported $fontImported font files into $fontDest"
-} else {
-    Write-Host "  No font archives found. EqUpdater will also check Downloads/Desktop at launch." -ForegroundColor Yellow
-}
-
 if ($RunTests) {
     # Developers only. The same gate as `python build.py --release` and CI:
     # tools/check.py prints each failing test with its traceback (or, if the

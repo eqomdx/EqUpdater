@@ -107,7 +107,7 @@ confirmed, and skips the rest.
 - Animated underwater background (Settings → **Animated background**; off
   uses a still image and almost no CPU).
 - Fonts: **Arial** (default), **Friz Quadrata** or **OpenDyslexic**, switched
-  live in Settings.
+  live in Settings. All three come with EqUpdater; nothing to install.
 - Dark title bar to match.
 
 ---
@@ -159,6 +159,9 @@ EqUpdater is a derivative work of **Octo Updater**.
 Much of what EqUpdater does — the client sync, the MPQ engine and the addon
 installer — is the original author's work. Full attribution is in
 [NOTICE](NOTICE); licence terms are in [LICENSE](LICENSE).
+
+The bundled fonts keep their own licences; see
+[fonts/README.txt](fonts/README.txt).
 
 Octo Raid Visuals is made by
 [Rook](https://octowow.st/git/Rook/RaidVisuals-OctoWoW).

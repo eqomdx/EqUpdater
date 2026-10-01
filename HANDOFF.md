@@ -78,20 +78,23 @@ OpenDyslexic currently uses a `0.92` size multiplier because 1.00 overflowed fix
 
 EqUpdater privately registers `.ttf` / `.otf` files on Windows using `AddFontResourceExW(..., FR_PRIVATE, ...)`; it does not need an administrator/system-wide font install.
 
-The user supplied these original font archives during development:
+**The fonts ship with EqUpdater** (2026-10-01). `fonts/` holds Friz
+Quadrata (Regular, BoldItalic) and OpenDyslexic 0.990 (four styles) with its
+OFL licence; `build.py` packs the folder into `_internal/fonts`, and
+`_bundled_font_paths()` registers it plus anything dropped into
+`%LOCALAPPDATA%\EqUpdater\fonts`. Arial is not shipped: it comes with Windows.
+Friz Quadrata is commercial (URW); Ollie has permission to ship it, and
+`fonts/README.txt` says it is not covered by any EqUpdater licence.
 
-- `friz-quadrata.zip`
-  - SHA-256 `54f39851b404db8eba76c80036c0e05517b18937c5e8edbebd71bf253cea3de8`
-- `arial.zip`
-  - SHA-256 `7fc73d5da7bedf99fa53f02f55a46eebd0c6332de90235683c7c568e721fc20f`
-- `opendyslexic-0.92.zip`
-  - SHA-256 `fdca7495b639878ab0489ff7ecf4e8e3f350e5f9c2de63f8ee9d6214ead75a15`
+The old route -- the installer and the app fishing `friz*.zip`,
+`arial*.zip`, `opendyslexic*.zip` out of Downloads, Desktop and Documents --
+is gone. It left users without fonts whenever the zips were not there.
 
-The returned source package does not redistribute font binaries. Instead:
+Settings draws each font's name in that font (`FontManager.preview_font`);
+`apply_tree` skips widgets marked `keeps_own_font`, so the list keeps its
+faces whichever font is selected.
 
-- `install/install.ps1` automatically searches the project directory, Downloads, Desktop and Documents for those archive patterns and extracts their `.ttf/.otf` files to `%LOCALAPPDATA%\EqUpdater\fonts` before building.
-- `equpdater/ui.py` repeats archive discovery at runtime in the project/app directory, EqUpdater app-data directory, Downloads and Desktop.
-- `FontManager` detects the actual installed/privately registered family name before enabling a font choice.
+`FontManager` still detects each family's real name before enabling a choice.
 
 Embedded family names verified during this work:
 

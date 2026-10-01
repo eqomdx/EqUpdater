@@ -62,7 +62,6 @@ class TestBrandingAssets(unittest.TestCase):
         try:
             with mock.patch.object(ui.os, "name", "nt"), \
                  mock.patch.object(ctypes, "WinDLL", FakeDLL, create=True), \
-                 mock.patch.object(ui, "_extract_local_font_archives", lambda: None), \
                  mock.patch.object(ui, "_bundled_font_paths", lambda: [font]), \
                  mock.patch.object(ui, "_REGISTERED_PRIVATE_FONTS", set()):
                 ui._register_private_fonts()
@@ -72,27 +71,28 @@ class TestBrandingAssets(unittest.TestCase):
         self.assertFalse([c for c in calls if c[1].startswith(("SendMessage",
                                                                 "PostMessage"))])
 
-    def test_mac_metadata_stubs_are_not_imported_as_fonts(self):
-        """The supplied OpenDyslexic archive carries __MACOSX/._*.otf stubs."""
-        import shutil
-        import tempfile
-        import zipfile
-        from unittest import mock
+    def test_fonts_ship_with_the_app(self):
+        """Every choice works on a fresh PC: the faces are in the source tree,
+        build.py packs that folder, and the app registers what is in it."""
+        fonts = os.path.join(ROOT, "fonts")
+        for name in ("FrizQuadrata-Regular.ttf", "OpenDyslexic-Regular.otf",
+                     "OpenDyslexic-Bold.otf", "OpenDyslexic-OFL.txt"):
+            self.assertTrue(os.path.isfile(os.path.join(fonts, name)), name)
+        with open(os.path.join(ROOT, "build.py"), encoding="utf-8") as f:
+            self.assertIn('"--add-data", FONTS_DIR', f.read())
         from equpdater import ui
-        tmp = tempfile.mkdtemp(prefix="equ-fonts-")
-        try:
-            with zipfile.ZipFile(os.path.join(tmp, "opendyslexic-0.92.zip"), "w") as zf:
-                zf.writestr("OpenDyslexic-Regular.otf", b"font")
-                zf.writestr("__MACOSX/._OpenDyslexic-Regular.otf", b"stub")
-            data = os.path.join(tmp, "data")
-            with mock.patch.object(ui.branding, "app_dir", lambda: tmp), \
-                 mock.patch.object(ui.branding, "app_data_dir", lambda *a: data), \
-                 mock.patch.object(ui.os.path, "expanduser", lambda p: tmp):
-                ui._extract_local_font_archives()
-            self.assertEqual(os.listdir(os.path.join(data, "fonts")),
-                             ["OpenDyslexic-Regular.otf"])
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
+        shipped = {os.path.basename(p) for p in ui._bundled_font_paths()}
+        self.assertIn("FrizQuadrata-Regular.ttf", shipped)
+        self.assertIn("OpenDyslexic-Regular.otf", shipped)
+
+    def test_no_hunting_through_the_users_folders(self):
+        """Fonts used to be fished out of zips in Downloads, Desktop and
+        Documents. They ship now; nothing should go looking."""
+        from equpdater import ui
+        self.assertFalse(hasattr(ui, "_extract_local_font_archives"))
+        with open(os.path.join(ROOT, "install", "install.ps1"),
+                  encoding="utf-8") as f:
+            self.assertNotIn("font archive", f.read().lower())
 
 
 if __name__ == "__main__":

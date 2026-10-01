@@ -8,13 +8,11 @@ buttons.
 
 from __future__ import annotations
 
-import glob
 import os
 import queue
 import sys
 import threading
 import time
-import zipfile
 import tkinter as tk
 import tkinter.font as tkfont
 from dataclasses import dataclass
@@ -88,9 +86,8 @@ def _bundled_font_paths() -> list[str]:
     if meipass:
         bases.append(meipass)
     bases.append(branding.app_dir())
-    # Also support user-supplied fonts without requiring an app rebuild. This
-    # is especially useful for OpenDyslexic: dropping its .otf files into
-    # %LOCALAPPDATA%\EqUpdater\fonts makes the selector work on next launch.
+    # The fonts ship in the app's own fonts folder. Files dropped into
+    # %LOCALAPPDATA%\EqUpdater\fonts are registered too, on next launch.
     bases.append(branding.app_data_dir())
     seen = set()
     for base in bases:
@@ -108,56 +105,6 @@ def _bundled_font_paths() -> list[str]:
     return paths
 
 
-def _extract_local_font_archives() -> None:
-    """Import user-supplied font archives placed beside EqUpdater.
-
-    Font binaries are not part of EqUpdater itself.  If the user already has
-    one of the supported font archives, dropping it beside the app/project is
-    enough: the relevant .ttf/.otf files are copied into the user's EqUpdater
-    data directory and can then be registered privately for this process.
-    """
-    dest = os.path.join(branding.app_data_dir(), "fonts")
-    patterns = (
-        "opendyslexic*.zip",
-        "friz-quadrata*.zip",
-        "friz*.zip",
-        "arial*.zip",
-    )
-    archives = []
-    search_bases = [branding.app_dir(), branding.app_data_dir()]
-    home = os.path.expanduser("~")
-    for extra in (os.path.join(home, "Downloads"), os.path.join(home, "Desktop"), os.path.join(home, "Documents")):
-        if extra not in search_bases:
-            search_bases.append(extra)
-    for base in search_bases:
-        for pattern in patterns:
-            archives.extend(glob.glob(os.path.join(base, pattern)))
-    if not archives:
-        return
-    try:
-        os.makedirs(dest, exist_ok=True)
-    except OSError:
-        return
-    for archive in sorted(set(archives)):
-        try:
-            with zipfile.ZipFile(archive) as zf:
-                for info in zf.infolist():
-                    name = os.path.basename(info.filename)
-                    if not name or not name.lower().endswith((".ttf", ".otf")):
-                        continue
-                    # Archives zipped on a Mac carry __MACOSX/._<font> metadata
-                    # stubs. They end in .otf but are not fonts.
-                    if name.startswith("._") or "__MACOSX/" in info.filename:
-                        continue
-                    target = os.path.join(dest, name)
-                    if os.path.exists(target):
-                        continue
-                    with zf.open(info) as src, open(target, "wb") as out:
-                        out.write(src.read())
-        except (OSError, zipfile.BadZipFile, KeyError):
-            continue
-
-
 def _register_private_fonts() -> None:
     """Register bundled font files for the current process on Windows.
 
@@ -168,7 +115,6 @@ def _register_private_fonts() -> None:
     """
     if os.name != "nt":
         return
-    _extract_local_font_archives()
     try:
         import ctypes
         from ctypes import wintypes
@@ -242,6 +188,14 @@ class FontManager:
                 return choice
         return None
 
+    def preview_font(self, choice: str, size: int) -> tuple:
+        """The font that shows what ``choice`` looks like -- its own family at
+        its own scale -- whatever is selected now. A face that is not
+        installed previews in the fallback."""
+        family = {"friz": self.friz, "arial": self.arial,
+                  "opendyslexic": self.open_dyslexic}.get(choice)
+        return (family or self.fallback, self._scaled_size(size, choice))
+
     def _scaled_size(self, logical_size: int | float, choice: str | None = None) -> int:
         selected = choice or self.choice
         scale = FONT_SIZE_SCALE.get(selected, 1.0)
@@ -286,6 +240,10 @@ class FontManager:
         Fixed-width technical text stays fixed-width.
         """
         try:
+            # A widget that shows a particular face on purpose (the font
+            # list in Settings) keeps it whatever is selected.
+            if getattr(widget, "keeps_own_font", False):
+                raise ValueError("fixed font")
             if "font" in widget.keys():
                 current = widget.cget("font")
                 f = tkfont.Font(root=self.root, font=current)

@@ -533,6 +533,69 @@ class TestAnimatedBackgroundSetting(unittest.TestCase):
 
 
 @unittest.skipUnless(HAVE_TK, "no display")
+class TestFontList(unittest.TestCase):
+    """Settings' font list: every face is available out of the box, and each
+    name is drawn in its own face whichever one is selected."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="equ-fonts-")
+        os.environ["LOCALAPPDATA"] = cls.tmp
+        os.environ["XDG_DATA_HOME"] = cls.tmp
+        for mod in [m for m in list(sys.modules) if m.startswith("equpdater")]:
+            del sys.modules[mod]
+        from equpdater import app
+        import tkinter.font as tkfont
+        cls.tkfont = tkfont
+        cls.app = app.EqUpdaterApp()
+        for _ in range(8):
+            cls.app.update()
+
+    @classmethod
+    def tearDownClass(cls):
+        _close_app(cls.app)
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def rows(self):
+        found = []
+
+        def walk(w):
+            if getattr(w, "keeps_own_font", False):
+                found.append(w)
+            for c in w.winfo_children():
+                walk(c)
+        walk(self.app)
+        return {w.cget("value"): self.tkfont.Font(
+                    root=self.app, font=w.cget("font")).actual("family")
+                for w in found}
+
+    def test_every_face_ships(self):
+        """No zip to find, nothing to install: a fresh profile has all three."""
+        f = self.app._fonts
+        self.assertTrue(f.arial_available)
+        self.assertTrue(f.friz_available)
+        self.assertTrue(f.dyslexic_available)
+
+    def test_each_name_is_drawn_in_its_own_face(self):
+        f = self.app._fonts
+        expected = {"arial": f.arial, "friz": f.friz,
+                    "opendyslexic": f.open_dyslexic}
+        if self.app._settings_overlay is None:
+            self.app._open_settings()
+        self.app.update()
+        try:
+            self.assertEqual(self.rows(), expected)
+            for choice in ("opendyslexic", "friz", "arial"):
+                self.app._font_choice_var.set(choice)
+                self.app._change_font_choice()
+                self.app.update()
+                self.assertEqual(self.rows(), expected, choice)
+        finally:
+            self.app._font_choice_var.set("arial")
+            self.app._change_font_choice()
+
+
+@unittest.skipUnless(HAVE_TK, "no display")
 class TestNewsCadence(unittest.TestCase):
     """The forum is read once at launch and once per refresh click. Never on
     a tab switch, never on a timer, never twice at once."""

@@ -7818,16 +7818,20 @@ class EqUpdaterApp(tk.Tk):
                           "Arial is the default. Changes apply live.")
 
         def _font_row(value, label, note=None, available=True):
+            # Each name is drawn in its own face, so the list previews what
+            # choosing it looks like, whichever is selected now.
             shown = label if available else f"{label} (not installed)"
             rb = tk.Radiobutton(
                 rcol, text=f" {shown}", value=value,
                 variable=self._font_choice_var,
                 command=self._change_font_choice,
-                font=self._font(10), fg=C_TEXT if available else C_TEXT_DIM, bg=P_BG,
+                font=self._fonts.preview_font(value, 10),
+                fg=C_TEXT if available else C_TEXT_DIM, bg=P_BG,
                 activebackground=P_BG, activeforeground=C_TEXT,
                 selectcolor=P_INP, highlightthickness=0, bd=0,
                 state="normal" if available else "disabled",
                 cursor="hand2" if available else "arrow")
+            rb.keeps_own_font = True
             rb.pack(anchor="w", pady=(self._px(8), 0))
             if note:
                 self._add_tooltip(rb, note)
@@ -7841,9 +7845,7 @@ class EqUpdaterApp(tk.Tk):
                   self._fonts.friz_available)
         _font_row(
             "opendyslexic", "OpenDyslexic",
-            "Dyslexic-friendly reading option. If it is unavailable, install "
-            "OpenDyslexic or place its .otf files in "
-            "%LOCALAPPDATA%\\EqUpdater\\fonts and restart EqUpdater.",
+            "Dyslexic-friendly font.",
             self._fonts.dyslexic_available)
 
         # Settings is created after the main-window font pass, so apply the
