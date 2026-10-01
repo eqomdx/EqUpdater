@@ -681,9 +681,12 @@ class TestLanguage(unittest.TestCase):
 
     def test_the_window_speaks_the_game_language(self):
         self.assertEqual(self.i18n.language(), "deDE")
-        self.assertEqual(self.app._status_var.get(),
-                         self.i18n.tr("Ready to update"))
-        self.assertNotEqual(self.app._status_var.get(), "Ready to update")
+        # Either, depending on whether the start-up check has answered yet:
+        # what matters is that the status line is in German.
+        german = {self.i18n.tr("Ready to update"),
+                  self.i18n.tr("Update available!")}
+        self.assertNotIn("Ready to update", german)
+        self.assertIn(self.app._status_var.get(), german)
 
     def test_same_language_asks_nothing(self):
         self.assertEqual(self.ask(), [])
@@ -695,9 +698,45 @@ class TestLanguage(unittest.TestCase):
         # Declined: the window carries on in the language it was drawn in.
         self.assertEqual(self.i18n.language(), "deDE")
 
-    def test_chinese_game_means_english_window(self):
+    def test_chinese_is_offered_in_chinese(self):
         self.m.save_tweaks_config({**self.m.TWEAKS_DEFAULTS, "locale": "zhCN"})
-        self.assertEqual(self.ask(), ["Restart EqUpdater?"])
+        self.assertEqual(self.ask(), ["重启 EqUpdater？"])
+
+    def test_font_section_greyed_only_in_chinese(self):
+        """Chinese letters come from Windows' own font whatever is picked,
+        so in Chinese the font list is shown but cannot be used."""
+        def font_dots():
+            found = []
+
+            def walk(w):
+                if getattr(w, "font_choice", None):
+                    found.extend(c for c in w.master.winfo_children()
+                                 if isinstance(c, tk.Radiobutton))
+                for c in w.winfo_children():
+                    walk(c)
+            walk(self.app)
+            return found
+
+        def drop_settings():
+            # Not _close_settings: closing is "confirm", which runs the
+            # game-folder checks. Only the drawing is under test here.
+            if self.app._settings_overlay is not None:
+                self.app._settings_overlay.destroy()
+                self.app._settings_overlay = None
+
+        for lang, state in (("deDE", "normal"), ("zhCN", "disabled")):
+            self.i18n.set_language(lang)
+            drop_settings()
+            self.app._open_settings()
+            self.app.update()
+            try:
+                dots = font_dots()
+                self.assertEqual(len(dots), 3)
+                self.assertEqual({str(d.cget("state")) for d in dots},
+                                 {state}, lang)
+            finally:
+                drop_settings()
+                self.i18n.set_language("deDE")
 
     def shown(self):
         return {name for name, w in (("apply", self.app._tweaks_apply_btn),

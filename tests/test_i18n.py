@@ -80,16 +80,24 @@ class TestTranslations(unittest.TestCase):
     def test_game_language_picks_the_ui_language(self):
         self.assertEqual(i18n.ui_language("deDE"), "deDE")
         self.assertEqual(i18n.ui_language("ptBR"), "ptBR")
+        self.assertEqual(i18n.ui_language("zhCN"), "zhCN")
         # No translation: English, never a half-translated window.
-        self.assertEqual(i18n.ui_language("zhCN"), "enUS")
+        self.assertEqual(i18n.ui_language("koKR"), "enUS")
         self.assertEqual(i18n.ui_language("nonsense"), "enUS")
+
+    def test_font_choice_greyed_only_where_no_font_has_the_letters(self):
+        for code in ("enUS", "deDE", "ruRU", "esES", "ptBR"):
+            i18n.set_language(code)
+            self.assertTrue(i18n.font_choice_matters(), code)
+        i18n.set_language("zhCN")
+        self.assertFalse(i18n.font_choice_matters())
 
     def test_tr_translates_and_fills_in(self):
         i18n.set_language("deDE")
         self.assertNotEqual(i18n.tr("Update available!"), "Update available!")
         out = i18n.tr("Delete {folder} and all of its files?", folder="pfUI")
         self.assertIn("pfUI", out)
-        i18n.set_language("zhCN")
+        i18n.set_language("koKR")
         self.assertEqual(i18n.tr("Update available!"), "Update available!")
 
     def test_unknown_text_passes_through(self):

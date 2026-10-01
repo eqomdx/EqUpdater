@@ -1,9 +1,9 @@
 """EqUpdater's own words in the player's language.
 
 EqUpdater speaks the language the game is set to (Tweaks -> Game Language).
-A game language with no translation here -- Chinese -- leaves EqUpdater in
-English. The language is fixed for the life of the window; changing it
-restarts EqUpdater (see ``EqUpdaterApp._offer_language_restart``).
+A game language with no translation here leaves EqUpdater in English. The
+language is fixed for the life of the window; changing it restarts
+EqUpdater (see ``EqUpdaterApp._offer_language_restart``).
 
 Every message is looked up by its English text, so the English in the code
 stays readable and a missing translation shows English, never a blank.
@@ -24,7 +24,7 @@ language, or a translation's placeholders differ from the English.
 
 from __future__ import annotations
 
-from .locales import de, es, pt_br, ru
+from .locales import de, es, pt_br, ru, zh_cn
 
 #: Game locale code -> that language's translations. A code not listed here
 #: shows English.
@@ -33,7 +33,13 @@ TRANSLATIONS = {
     "esES": es.STRINGS,
     "ptBR": pt_br.STRINGS,
     "ruRU": ru.STRINGS,
+    "zhCN": zh_cn.STRINGS,
 }
+
+#: Languages whose letters none of EqUpdater's fonts carry. Windows draws
+#: them in its own font for that script, so the FONT choice in Settings
+#: would change nothing and is greyed out.
+SYSTEM_FONT_LANGUAGES = frozenset({"zhCN"})
 
 _language = "enUS"
 _strings: dict = {}
@@ -53,6 +59,10 @@ def set_language(game_locale: str) -> None:
 
 def language() -> str:
     return _language
+
+
+def font_choice_matters() -> bool:
+    return _language not in SYSTEM_FONT_LANGUAGES
 
 
 def tr(text: str, **values) -> str:

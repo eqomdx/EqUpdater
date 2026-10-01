@@ -110,8 +110,8 @@ confirmed, and skips the rest.
   live in Settings. All three come with EqUpdater; nothing to install.
 - Dark title bar to match.
 - In your language: EqUpdater follows **Tweaks → Game Language** —
-  English, Deutsch, Русский, Español or Português (BR). Chinese stays
-  English. Changing the language offers a restart.
+  English, Deutsch, Русский, 中文 (简体), Español or Português (BR).
+  Changing the language offers a restart.
 
 ---
 

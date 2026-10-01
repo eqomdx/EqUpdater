@@ -7922,9 +7922,12 @@ class EqUpdaterApp(tk.Tk):
         # FONT: its own section under GENERAL. The panel grows to fit its
         # content (_fit_settings_panel), so a larger face cannot push these
         # rows out of reach.
+        # Chinese is drawn in Windows' own Chinese font whichever face is
+        # chosen here, so in Chinese the section is shown greyed out.
+        fonts_matter = i18n.font_choice_matters()
         font_lbl = tk.Label(rcol, text=tr("FONT"),
                             font=self._font(10, bold=True),
-                            fg=C_GOLD, bg=P_BG)
+                            fg=C_GOLD if fonts_matter else C_TEXT_DIM, bg=P_BG)
         font_lbl.pack(anchor="w", pady=(self._px(20), 0))
 
         # Each name is drawn in its own face, so the list previews what
@@ -7939,6 +7942,7 @@ class EqUpdaterApp(tk.Tk):
 
         def _font_row(value, label, note=None, available=True):
             shown = label if available else tr("{font} (not installed)", font=label)
+            available = available and fonts_matter
             row = tk.Frame(rcol, bg=P_BG, height=row_h)
             rb = tk.Radiobutton(
                 row, text="", value=value,
