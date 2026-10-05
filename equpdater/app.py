@@ -77,9 +77,11 @@ DOWNLOAD_TIMEOUT = 10    # seconds without any data before a transfer aborts
 # read-only.
 APP_DIR = branding.app_dir()
 
-# First-run default game folder, anchored to the app dir (not the CWD, which
-# varies with how the app was launched).
-DEFAULT_GAME_DIR = os.path.join(APP_DIR, "OctoWoW")
+# First-run default game folder: <home>/Games/OctoWoW, on every platform.
+# Never inside the app's own folder: since 2.0.6 that folder is
+# %LOCALAPPDATA%\Programs\EqUpdater and an update replaces it, and on Linux
+# it is the AppImage's read-only mount, gone when the app closes.
+DEFAULT_GAME_DIR = os.path.join(os.path.expanduser("~"), "Games", "OctoWoW")
 
 # News is read straight from the public OctoWoW forum by this PC
 # (equpdater/news.py): forum 2 is Announcements, forum 4 is Patch Notes and

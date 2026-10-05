@@ -80,13 +80,41 @@ def _remove(path: str) -> bool:
         return False
 
 
+def carry_over(old: str, install_dir: str) -> bool:
+    """Move into the new installation everything in the old one that is not
+    part of EqUpdater itself, and say whether all of it moved.
+
+    The app folder is the app's, but a player's files can still end up in
+    it -- in 2.0.6 and earlier the first-run default game folder was
+    <app folder>\\OctoWoW. Deleting the old folder must never delete those:
+    an update that wipes the game client is the worst thing an updater can
+    do. Only what the new build itself has (EqUpdater.exe, _internal) is
+    replaced."""
+    ok = True
+    for name in os.listdir(old):
+        if os.path.exists(os.path.join(install_dir, name)):
+            continue
+        try:
+            shutil.move(os.path.join(old, name), os.path.join(install_dir, name))
+        except OSError:
+            ok = False
+    return ok
+
+
+def _retire(old: str, install_dir: str) -> None:
+    """Delete the replaced copy once the player's files are out of it. If
+    any could not be moved, keep it: the next run tries again."""
+    if carry_over(old, install_dir):
+        _remove(old)
+
+
 def repair(install_dir: str) -> None:
     """Finish or undo a replacement an earlier run did not complete."""
     new, old = install_dir + ".new", install_dir + ".old"
     if not os.path.isdir(install_dir) and os.path.isdir(old):
         os.rename(old, install_dir)          # it stopped between steps 2 and 3
     if os.path.isdir(old):
-        _remove(old)
+        _retire(old, install_dir)
     if os.path.isdir(new):
         _remove(new)
 
@@ -137,7 +165,9 @@ def deploy(build_dir: str, install_dir: str | None = None,
         raise DeployError(f"Could not put the new version in place ({e}). "
                           "The previous version is unchanged.") from e
     if had_old:
-        _remove(old)        # if something holds it, the next run removes it
+        # The player's own files in the old folder come across first; if
+        # something holds the old copy, the next run finishes the job.
+        _retire(old, install_dir)
     return os.path.join(install_dir, EXE)
 
 

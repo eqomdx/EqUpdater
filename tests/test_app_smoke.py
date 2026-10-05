@@ -121,6 +121,14 @@ class TestAppStarts(unittest.TestCase):
     def test_settings_live_under_the_new_name(self):
         self.assertIn("EqUpdater", self.app_mod.CONFIG_FILE)
 
+    def test_default_game_folder_is_not_inside_the_app(self):
+        """An update replaces the app's folder (and an AppImage's is a
+        read-only mount): a game there would be deleted or unwritable."""
+        game = os.path.normcase(os.path.abspath(self.app_mod.DEFAULT_GAME_DIR))
+        app_dir = os.path.normcase(os.path.abspath(self.app_mod.APP_DIR))
+        self.assertFalse(game.startswith(app_dir + os.sep), game)
+        self.assertEqual(os.path.basename(game).lower(), "octowow")
+
     def test_the_window_carries_the_product_icon(self):
         self.assertIsNotNone(getattr(self.app, "_window_icon_photo", None))
 

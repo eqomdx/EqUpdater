@@ -86,6 +86,37 @@ class TestInstallFolder(Sandbox):
         self.assertEqual(os.listdir(self.state), ["config.json"])
         self.assertEqual(self.leftovers(), [])
 
+    def test_a_game_inside_the_app_folder_survives_the_update(self):
+        """2.0.6 and earlier offered <app folder>\\OctoWoW as the game folder.
+        An update replaces the app folder; it must not take the client with
+        it -- or anything else the player put there."""
+        deploy.deploy(self.build("2.0.6"), self.install)
+        game = os.path.join(self.install, "OctoWoW")
+        os.makedirs(os.path.join(game, "Data"))
+        with open(os.path.join(game, "WoW.exe"), "w") as f:
+            f.write("the client")
+        with open(os.path.join(self.install, "notes.txt"), "w") as f:
+            f.write("mine")
+        deploy.deploy(self.build("2.0.7"), self.install)
+        self.assertEqual(installed_version(self.install), "2.0.7")
+        with open(os.path.join(game, "WoW.exe")) as f:
+            self.assertEqual(f.read(), "the client")
+        self.assertTrue(os.path.isdir(os.path.join(game, "Data")))
+        self.assertTrue(os.path.isfile(os.path.join(self.install, "notes.txt")))
+        self.assertEqual(self.leftovers(), [])
+
+    def test_a_leftover_old_copy_gives_back_the_players_files(self):
+        """An earlier run that could not delete EqUpdater.old: the next one
+        moves the player's files out of it before removing it."""
+        deploy.deploy(self.build("2.0.6"), self.install)
+        old = self.install + ".old"
+        make_build(old, "2.0.5")
+        os.makedirs(os.path.join(old, "OctoWoW"))
+        deploy.repair(self.install)
+        self.assertTrue(os.path.isdir(os.path.join(self.install, "OctoWoW")))
+        self.assertEqual(installed_version(self.install), "2.0.6")
+        self.assertEqual(self.leftovers(), [])
+
     def test_the_old_download_folder_is_left_alone(self):
         old = self.build("2.0.4")
         deploy.deploy(self.build("2.0.5"), self.install)
