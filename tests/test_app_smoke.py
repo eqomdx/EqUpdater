@@ -296,11 +296,11 @@ class TestAnimatedBackground(unittest.TestCase):
         self.assertEqual(_wait_for_animation_threads(), [],
                          "a bg-animation worker outlived its test")
 
-    def gif(self, frames, name="t.gif"):
+    def gif(self, frames, name="t.gif", duration=30):
         path = os.path.join(self.tmp, name)
         imgs = [self.Image.new("RGB", (32, 18), c) for c in frames]
         imgs[0].save(path, save_all=True, append_images=imgs[1:],
-                     duration=30, loop=0)
+                     duration=duration, loop=0)
         return path
 
     def run_for(self, anim, ms, sample=None):
@@ -316,10 +316,17 @@ class TestAnimatedBackground(unittest.TestCase):
         self.assertTrue(anim.stop(wait=3.0), "bg-animation worker did not exit")
 
     def test_plays_every_frame_and_loops(self):
+        """Every frame, in order, then round again.
+
+        Sampled every 10 ms, so a frame shown for less than that between two
+        samples is missed -- which a loaded CI machine does produce (it once
+        dropped the second pass's first frame). So frames last 80 ms, strict
+        order is asserted on the first pass, and "round again" is the
+        sequence wrapping back to an earlier frame, not one exact frame."""
         seen = []
         anim = self.ui.AnimatedBackground(
-            self.root, self.canvas, self.item, self.gif(self.COLOURS),
-            40, 30, darken=1.0)
+            self.root, self.canvas, self.item,
+            self.gif(self.COLOURS, duration=80), 40, 30, darken=1.0)
 
         shown = []
 
@@ -330,11 +337,13 @@ class TestAnimatedBackground(unittest.TestCase):
                     seen.append(rgb)
                 shown.append(self.canvas.itemcget(self.item, "image")
                              == str(anim.photo))
-        self.run_for(anim, 700, sample)
+        self.run_for(anim, 1200, sample)
         self.assertIsNone(anim.error)
         self.assertEqual(set(seen), set(self.COLOURS))
-        self.assertGreater(len(seen), len(self.COLOURS))      # came round again
-        self.assertEqual(seen[:4], self.COLOURS + [self.COLOURS[0]])
+        self.assertEqual(seen[:3], self.COLOURS)              # in order
+        order = [self.COLOURS.index(c) for c in seen]
+        self.assertTrue(any(b < a for a, b in zip(order, order[1:])),
+                        f"never came round again: {seen}")
         self.assertTrue(shown and all(shown))                 # drawn on the canvas
         self.assertIsNone(anim.photo)                         # released on stop
 
