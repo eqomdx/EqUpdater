@@ -329,7 +329,19 @@ def cover_background(path: str, width: int, height: int, *, darken: float = 0.92
 def photo_image(image, master=None):
     if ImageTk is None or image is None:
         return None
-    return ImageTk.PhotoImage(image, master=master)
+    try:
+        return ImageTk.PhotoImage(image, master=master)
+    except Exception:
+        # PIL's Tk binding can be missing (frozen build, odd Linux Tk).
+        # Degrade to a plain Tk PhotoImage via PNG rather than abort start-up.
+        try:
+            import base64, io
+            buf = io.BytesIO()
+            image.convert("RGBA").save(buf, "PNG")
+            return tk.PhotoImage(master=master,
+                                 data=base64.b64encode(buf.getvalue()))
+        except Exception:
+            return None
 
 
 def style_title_bar(window, *, caption: str | None = None,

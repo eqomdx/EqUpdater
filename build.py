@@ -142,7 +142,11 @@ def main() -> None:
            # The package is imported by name from the entry script, and
            # PyInstaller's analysis does not always follow that; naming it is
            # cheap insurance.
-           "--hidden-import", "equpdater.app"]
+           "--hidden-import", "equpdater.app",
+           # ImageTk finds its Tk binding through this module, which is
+           # imported dynamically; without it every PhotoImage fails in a
+           # frozen build (seen on Linux).
+           "--hidden-import", "PIL._tkinter_finder"]
 
     if os.path.exists(ICON):
         # --icon brands the .exe *file*. --add-data puts the same file inside
