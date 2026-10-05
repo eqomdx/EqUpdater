@@ -34,9 +34,24 @@ the build to hand to other people. A plain build -- what install.ps1 runs on
 a user's own PC -- does not, because a GUI or timing test behaving
 differently on one machine must not stop somebody installing the program.
 
+**One source, two platforms.** The same command builds the Windows
+program on Windows and the Linux one on Linux (PyInstaller builds for the
+platform it runs on). The release artifacts are made from those builds:
+
+- Windows: ``--setup`` packs the folder build into one installer,
+  dist/EqUpdater-vX.Y.Z-Windows.exe (equpdater/installer.py), which installs
+  it to %LOCALAPPDATA%\\Programs\\EqUpdater and starts it. The player runs a
+  single file; the app itself stays a folder build.
+- Linux: tools/build_appimage.py wraps the folder build, a pinned static
+  aria2c and the desktop entry into dist/EqUpdater-vX.Y.Z-Linux-x86_64.AppImage.
+
+Both are built by GitHub Actions from the same tagged commit
+(.github/workflows/release.yml).
+
 Usage:
-    python build.py             # dist/EqUpdater/EqUpdater.exe  (recommended)
+    python build.py             # dist/EqUpdater/EqUpdater[.exe]  (recommended)
     python build.py --release   # the same, only after the test suite passes
+    python build.py --setup     # Windows: also the release installer .exe
     python build.py --onefile   # one portable file; needs %TEMP% space to run
 """
 
@@ -53,6 +68,7 @@ sys.path.insert(0, HERE)
 from equpdater import branding  # noqa: E402
 
 NAME = branding.APP_NAME
+WINDOWS = os.name == "nt"
 ICON = os.path.join(HERE, "icon.ico")
 ICON_PNG = os.path.join(HERE, "icon.png")
 BACKGROUNDS = [os.path.join(HERE, branding.BACKGROUND_STATIC),
@@ -63,6 +79,7 @@ FONTS_DIR = os.path.join(HERE, "fonts")
 # package, and the relative imports in equpdater/__main__.py raise
 # ImportError there before a window ever appears. See EqUpdater.py.
 ENTRY = os.path.join(HERE, f"{NAME}.py")
+SETUP_ENTRY = os.path.join(HERE, f"{NAME}Setup.py")
 
 DIST = os.path.join(HERE, "dist")
 WORK = os.path.join(HERE, "build")
@@ -111,8 +128,47 @@ def explain_antivirus_interruption() -> None:
         print(ANTIVIRUS_HINT.format(exe=exe, folder=HERE))
 
 
+def release_name(platform_tag: str, ext: str) -> str:
+    """EqUpdater-v2.1.0-Windows.exe, EqUpdater-v2.1.0-Linux-x86_64.AppImage."""
+    return f"{NAME}-v{branding.APP_VERSION}-{platform_tag}{ext}"
+
+
+def build_setup(app_folder: str) -> str:
+    """Windows: pack the folder build into the one-file release installer."""
+    import zipfile
+    from equpdater.installer import PAYLOAD
+    os.makedirs(WORK, exist_ok=True)
+    payload = os.path.join(WORK, PAYLOAD)
+    with zipfile.ZipFile(payload, "w", zipfile.ZIP_DEFLATED) as zf:
+        for folder, _dirs, files in os.walk(app_folder):
+            for name in files:
+                path = os.path.join(folder, name)
+                zf.write(path, os.path.relpath(path, app_folder))
+    name = release_name("Windows", "")
+    cmd = [sys.executable, "-m", "PyInstaller", "--onefile", "--windowed",
+           "--name", name, "--noconfirm",
+           "--distpath", DIST, "--workpath", os.path.join(WORK, "setup"),
+           "--specpath", WORK,
+           "--add-data", payload + os.pathsep + ".",
+           "--add-data", ICON_PNG + os.pathsep + "."]
+    if os.path.exists(ICON):
+        cmd += ["--icon", ICON]
+    cmd.append(SETUP_ENTRY)
+    print(f"Building the installer {name}.exe...")
+    run(cmd)
+    built = os.path.join(DIST, name + ".exe")
+    if not os.path.exists(built):
+        raise SystemExit(f"PyInstaller reported success but {built} is missing")
+    print(f"\n  {built}  ({os.path.getsize(built) // (1024 * 1024)} MB)")
+    return built
+
+
 def main() -> None:
     onefile = "--onefile" in sys.argv
+    setup = "--setup" in sys.argv
+    if setup and (not WINDOWS or onefile):
+        raise SystemExit("--setup builds the Windows installer, from the "
+                         "folder build, on Windows.")
 
     if "--release" in sys.argv:
         sys.path.insert(0, os.path.join(HERE, "tools"))
@@ -124,12 +180,12 @@ def main() -> None:
         if not passed:
             raise SystemExit("The test suite failed. Not building a release.")
 
-    try:
-        import PyInstaller  # noqa: F401
-    except ImportError:
-        raise SystemExit(
-            "PyInstaller is not installed.\n"
-            "    python -m pip install --user pyinstaller certifi pillow")
+    import importlib.util
+    for needed in ("PyInstaller", "certifi", "PIL"):
+        if importlib.util.find_spec(needed) is None:
+            raise SystemExit(
+                f"{needed} is not installed.\n"
+                "    python -m pip install --user pyinstaller certifi pillow")
 
     cmd = [sys.executable, "-m", "PyInstaller",
            "--onefile" if onefile else "--onedir",
@@ -142,14 +198,23 @@ def main() -> None:
            # The package is imported by name from the entry script, and
            # PyInstaller's analysis does not always follow that; naming it is
            # cheap insurance.
-           "--hidden-import", "equpdater.app"]
+           "--hidden-import", "equpdater.app",
+           # certifi's cacert.pem is data, not code. Collected explicitly:
+           # without it a build verifies TLS against whatever the host
+           # offers -- an empty store under Wine, a missing path on another
+           # Linux distribution -- and fails certificate checks.
+           "--collect-data", "certifi"]
+    if not WINDOWS:
+        cmd.append("--strip")
 
-    if os.path.exists(ICON):
+    if os.path.exists(ICON) and WINDOWS:
         # --icon brands the .exe *file*. --add-data puts the same file inside
         # the build, because that is what the running *window* reads (see
         # branding.icon_candidates). Doing only the first leaves an app with
         # the right icon in Explorer and Tk's feather on the taskbar.
-        cmd += ["--icon", ICON, "--add-data", ICON + os.pathsep + "."]
+        cmd += ["--icon", ICON]
+    if os.path.exists(ICON):
+        cmd += ["--add-data", ICON + os.pathsep + "."]
     if os.path.exists(ICON_PNG):
         cmd += ["--add-data", ICON_PNG + os.pathsep + "."]
     for background in BACKGROUNDS:
@@ -163,7 +228,7 @@ def main() -> None:
     print(f"Building {NAME} {branding.APP_VERSION}  ({kind})...")
     run(cmd)
 
-    exe_name = NAME + (".exe" if os.name == "nt" else "")
+    exe_name = NAME + (".exe" if WINDOWS else "")
     if onefile:
         built = os.path.join(DIST, exe_name)
     else:
@@ -193,6 +258,8 @@ def main() -> None:
         print("\n  Run the executable from inside that folder - it needs the "
               "\n  _internal directory beside it. Move the whole folder, "
               "never\n  the .exe on its own.")
+        if setup:
+            build_setup(os.path.dirname(built))
 
     print("\nDone.")
 

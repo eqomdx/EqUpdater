@@ -5,20 +5,19 @@ The bug behind it: 2.0.5 was built in its own download folder while the
 desktop shortcut went on opening the 2.0.4 one.
 """
 
-import importlib.util
 import io
 import os
 import shutil
+import sys
 import tempfile
 import unittest
 from contextlib import redirect_stdout
 from unittest import mock
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-_spec = importlib.util.spec_from_file_location(
-    "deploy", os.path.join(ROOT, "install", "deploy.py"))
-deploy = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(deploy)
+sys.path.insert(0, ROOT)
+
+from equpdater import deploy  # noqa: E402
 
 ON_WINDOWS = os.name == "nt" and shutil.which("powershell") is not None
 

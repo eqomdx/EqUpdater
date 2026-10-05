@@ -286,6 +286,26 @@ STRINGS = {
     "Updating {name}…": "正在更新 {name}…",
     "Updating…": "正在更新…",
     "Valid URL. Click Install to continue.": "链接有效。点击“安装”继续。",
+    "Cannot start the game":
+        "无法启动游戏",
+    "{app} found no way to run the Windows game client. Install Wine, or set a launch command in Settings → Game launcher.":
+        "{app} 找不到运行 Windows 游戏客户端的方法。请安装 Wine，或在 设置 → 游戏启动方式 中设置启动命令。",
+    "GAME LAUNCHER":
+        "游戏启动方式",
+    "Launch command":
+        "启动命令",
+    "Leave empty to use Wine, or UMU if Wine is not installed. {exe} stands for the game's path; without it, the path is added at the end.":
+        "留空则使用 Wine；未安装 Wine 时使用 UMU。{exe} 代表游戏的路径；如果命令中没有它，路径会加在命令末尾。",
+    "Wine prefix":
+        "Wine 前缀",
+    "Optional. The Wine prefix the game runs in; passed as WINEPREFIX.":
+        "可选。游戏运行所在的 Wine 前缀；作为 WINEPREFIX 传递。",
+    "Using your launch command.":
+        "正在使用你的启动命令。",
+    "Automatic: {runner}":
+        "自动：{runner}",
+    "Automatic: nothing found. Install Wine, or set a launch command.":
+        "自动：未找到。请安装 Wine，或设置启动命令。",
     "Verify game files": "校验游戏文件",
     "Verifying game files…": "正在校验游戏文件…",
     "Verifying…": "正在校验…",

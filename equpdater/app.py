@@ -42,7 +42,7 @@ from functools import cache
 import tkinter as tk
 from tkinter import filedialog
 
-from . import branding, i18n, mpq
+from . import branding, i18n, mpq, platforms
 from .i18n import N_, tr
 from .config import (APP_DATA_DIR, BACKUP_DIR, CONFIG_FILE, bootstrap_config,
                      ensure_dir, load_config, new_addon_record,
@@ -55,7 +55,7 @@ from .planner import (Component, plan, skipped_notably,
 from .states import Action, Plan, Status
 from .news import (ANNOUNCEMENTS_FORUM_ID, CHANGELOG_FORUM_ID,
                    fetch_latest_post, fetch_topic_list, is_challenge_page)
-from .ui import (AnimatedBackground, FontManager, GradientButton,
+from .ui import (AnimatedBackground, FontManager, GradientButton, prepare_fonts,
                  GradientPalette, apply_edge_fades, cover_background,
                  BackdropCanvas, blend, edge_fade_layers, photo_image,
                  style_title_bar)
@@ -143,32 +143,75 @@ BUSY_GRADIENT = GradientPalette(
     disabled_top="#293a53", disabled_bottom="#1b2a40",
     border="#304966", disabled_fg=C_TEXT_DIM)
 
-FONT_MONO   = ("Consolas", 9)
+FONT_MONO   = ("Consolas", 9) if platforms.WINDOWS else ("Monospace", 9)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
 #  Secure networking
 # ──────────────────────────────────────────────────────────────────────────────
 
-# Hardened TLS: verify the server certificate against the system trust store,
-# require the hostname to match, and refuse anything below TLS 1.2. This is
-# the primary defence against a man-in-the-middle tampering with downloads.
-SSL_CTX = ssl.create_default_context()
-SSL_CTX.check_hostname = True
-SSL_CTX.verify_mode = ssl.CERT_REQUIRED
-# Trust certifi's curated roots *in addition to* the system store, so a stale
-# or incomplete Windows root store (Python's ssl uses a static snapshot and
-# never triggers Windows' on-demand root update) can't break verification.
-# If certifi isn't bundled, fall back to the system store alone.
-try:
-    import certifi
-    SSL_CTX.load_verify_locations(certifi.where())
-except Exception:
-    pass
-try:
-    SSL_CTX.minimum_version = ssl.TLSVersion.TLSv1_2
-except (AttributeError, ValueError):
-    pass
+#: System CA bundles on Linux distributions, by family. Used besides certifi:
+#: a frozen build's own OpenSSL looks for the build machine's paths, which
+#: another distribution need not have.
+SYSTEM_CA_BUNDLES = (
+    "/etc/ssl/certs/ca-certificates.crt",                  # Debian, Ubuntu, Arch
+    "/etc/pki/tls/certs/ca-bundle.crt",                    # Fedora, RHEL
+    "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem",   # Fedora, newer
+    "/etc/ssl/ca-bundle.pem",                              # openSUSE
+    "/etc/ssl/cert.pem",                                   # Alpine, others
+)
+
+
+def ca_bundles() -> list:
+    """The CA bundles EqUpdater trusts, besides the system's own store.
+
+    certifi's curated roots always: on Windows, Python's ssl reads a static
+    snapshot of the root store and never triggers Windows' on-demand root
+    update, and under Wine that store is empty. In a frozen build certifi's
+    file is looked for directly in the bundle as well, so a packaging quirk
+    in certifi's own lookup cannot quietly leave the app with no roots.
+    On Linux the distribution's bundle is added too."""
+    found = []
+    try:
+        import certifi
+        found.append(certifi.where())
+    except Exception:
+        pass
+    bundle = getattr(sys, "_MEIPASS", None)
+    if bundle:
+        found.append(os.path.join(bundle, "certifi", "cacert.pem"))
+    if not platforms.WINDOWS:
+        found.extend(SYSTEM_CA_BUNDLES)
+    out = []
+    for path in found:
+        if path and os.path.isfile(path) and path not in out:
+            out.append(path)
+    return out
+
+
+def make_ssl_context():
+    """(context, CA files loaded). Hardened TLS: the server certificate is
+    verified, the hostname must match, and nothing below TLS 1.2 is
+    accepted -- the primary defence against a man-in-the-middle tampering
+    with downloads. Never relaxed for any platform."""
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = True
+    ctx.verify_mode = ssl.CERT_REQUIRED
+    loaded = []
+    for path in ca_bundles():
+        try:
+            ctx.load_verify_locations(path)
+            loaded.append(path)
+        except (OSError, ssl.SSLError):
+            continue
+    try:
+        ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+    except (AttributeError, ValueError):
+        pass
+    return ctx, loaded
+
+
+SSL_CTX, CA_SOURCES = make_ssl_context()
 
 # Binaries may only be fetched from these hosts. TLS already stops a MITM from
 # impersonating them; this additionally stops a tampered API response from
@@ -308,8 +351,10 @@ def fmt_speed(bytes_per_sec: float) -> str:
 
 CLIENT_TORRENT_URL = "https://dl.octowow.st/download/client.torrent"
 
-# Pinned aria2 Windows build. aria2 is GPLv2+, fetched and run unmodified; only
-# aria2c.exe is used. The sha256 is of the release .zip (verified once).
+# aria2 is GPLv2+, run unmodified. Windows: the pinned official build below,
+# fetched on first use and checked against its sha256 (of the release .zip).
+# Linux: a native aria2c -- the AppImage carries a pinned static build (see
+# tools/build_appimage.py), otherwise the system's (platforms.find_aria2c).
 ARIA2_ZIP_URL    = ("https://github.com/aria2/aria2/releases/download/"
                     "release-1.37.0/aria2-1.37.0-win-32bit-build1.zip")
 ARIA2_ZIP_SHA256 = "35f6514cc5dd7e98a87b3c4c2d25a0754b9b063dbe59bc0f22d483464f61e5b6"
@@ -367,14 +412,22 @@ def locale_patches(locale: str):
     ]
 
 
-_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+_NO_WINDOW = platforms.no_window_flags()
 
 
 def ensure_aria2c(log_fn=log) -> str:
-    """Return the path to aria2c.exe, downloading + checksum-verifying it into
-    APP_DATA_DIR on first use. Raises on failure."""
-    if os.path.exists(ARIA2C_PATH):
-        return ARIA2C_PATH
+    """Return the aria2c to run. Windows: aria2c.exe, downloaded and
+    checksum-verified into APP_DATA_DIR on first use. Linux: a native
+    aria2c, the AppImage's own or the system's -- never the Windows build
+    under Wine. Raises on failure."""
+    found = platforms.find_aria2c(APP_DATA_DIR)
+    if found:
+        return found
+    if not platforms.WINDOWS:
+        raise RuntimeError(
+            "aria2c was not found. The EqUpdater AppImage includes it; "
+            "running from source, install aria2 (for example "
+            "'sudo apt install aria2' or 'sudo dnf install aria2').")
     log_fn("Fetching aria2c (one-time, ~2.5 MB)…", "acct")
     req = urllib.request.Request(ARIA2_ZIP_URL, headers={"User-Agent": UA})
     with secure_urlopen(req, timeout=60, allowed_hosts=ALLOWED_DOWNLOAD_HOSTS) as r:
@@ -832,9 +885,10 @@ def read_pristine_wow(client_dir: str) -> bytes:
 
 
 def _ensure_torrent_junction(client_dir: str) -> str:
-    """Point <staging>/client at client_dir via an NTFS junction (no admin) so
-    aria2 writes the torrent's files straight into the real client dir. Returns
-    the staging dir to pass as aria2 --dir."""
+    """Point <staging>/client at client_dir through a directory link (an NTFS
+    junction on Windows, no admin needed; a symlink on Linux) so aria2 writes
+    the torrent's files straight into the real client dir. Returns the
+    staging dir to pass as aria2 --dir."""
     staging = TORRENT_STAGING_DIR
     ensure_dir(staging)
     link   = os.path.join(staging, TORRENT_NAME)
@@ -854,11 +908,7 @@ def _ensure_torrent_junction(client_dir: str) -> str:
             os.remove(link)
         except OSError:
             pass
-    r = subprocess.run(["cmd", "/c", "mklink", "/J", link, target],
-                       capture_output=True, text=True, creationflags=_NO_WINDOW)
-    if not os.path.isdir(link):
-        raise RuntimeError("could not create download junction: "
-                           + (r.stderr or r.stdout or "").strip())
+    platforms.link_dir(link, target)
     return staging
 
 
@@ -1002,36 +1052,31 @@ def run_aria2c(client_dir, select_files=None, check_integrity=False,
 
 
 def client_exe_locked(out_dir: str) -> bool:
-    """True when WoW.exe in *out_dir* cannot be opened for writing.
+    """True when WoW.exe in *out_dir* must not be written now.
 
-    Asked by trying to open WoW.exe for writing rather than by listing
-    processes, because the question that matters is not "is a program called
-    WoW running somewhere" -- it is "can I write *this* file". Windows locks a
-    running image against writing, so the answer is exact for the file we are
-    about to patch, it needs no extra dependency, and it is right when the
-    player is running a second install from another folder.
+    Windows: asked by trying to open WoW.exe for writing rather than by
+    listing processes, because the question that matters is not "is a
+    program called WoW running somewhere" -- it is "can I write *this*
+    file". Windows locks a running image against writing, so the answer is
+    exact for the file we are about to patch, it needs no extra dependency,
+    and it is right when the player is running a second install from
+    another folder. "r+b" does not truncate, where the "wb" the patcher
+    itself uses would.
 
-    Read-write is opened and closed without writing a byte; "r+b" does not
-    truncate, where the "wb" the patcher itself uses would.
+    Linux locks nothing: a game running under Wine would simply be
+    overwritten. There the processes are asked whether this client's
+    WoW.exe is running, and a read-only WoW.exe counts as well -- see
+    platforms.client_in_use.
 
-    Named for what it tests rather than for the usual cause. A running game is
-    why this is nearly always true, but a read-only file is the same answer to
-    the same question, and the message below says both rather than asserting the
-    one it cannot know.
+    Named for what it tests rather than for the usual cause. A running game
+    is why this is nearly always true, but a read-only file is the same
+    answer to the same question, and the message below says both rather
+    than asserting the one it cannot know.
     """
     exe = os.path.join(out_dir, "WoW.exe")
     if not os.path.exists(exe):
         return False
-
-    try:
-        with open(exe, "r+b"):
-            return False
-    except PermissionError:
-        return True
-    except OSError:
-        # Anything else -- a missing drive, a permissions problem of its own --
-        # is not this question, and refusing to update over it would be a guess.
-        return False
+    return platforms.client_in_use(out_dir)
 
 
 CLOSE_THE_GAME = ("WoW.exe cannot be written. Close World of Warcraft if it is "
@@ -3367,6 +3412,9 @@ class EqUpdaterApp(tk.Tk):
         # Give EqUpdater its own Windows taskbar identity before Tk creates
         # the native window. This prevents Windows from grouping it under an
         # older Octo/EqUpdater shortcut and reusing that cached taskbar icon.
+        # Fonts first: on Linux fontconfig reads its configuration when the
+        # first Tk window opens, which is the next line but one.
+        prepare_fonts()
         if os.name == "nt":
             try:
                 import ctypes
@@ -4901,14 +4949,10 @@ class EqUpdaterApp(tk.Tk):
 
     def _restart(self):
         """Start a fresh EqUpdater, then close this one."""
-        if getattr(sys, "frozen", False):
-            cmd = [sys.executable]
-        else:
-            cmd = [sys.executable, os.path.join(branding.app_dir(), "EqUpdater.py")]
+        cmd = platforms.self_command(
+            os.path.join(branding.app_dir(), "EqUpdater.py"))
         try:
-            subprocess.Popen(cmd, cwd=branding.app_dir(),
-                             creationflags=getattr(subprocess, "DETACHED_PROCESS", 0),
-                             close_fds=True)
+            platforms.spawn_detached(cmd, cwd=os.path.expanduser("~"))
         except OSError as e:
             self._log_line(f"Could not restart: {e}\n", "err")
             return
@@ -5447,8 +5491,10 @@ class EqUpdaterApp(tk.Tk):
             self._apply_btn.pack_forget()
 
     def _open_url(self, url: str):
-        import webbrowser
-        webbrowser.open(url)
+        try:
+            platforms.open_url(url)
+        except OSError as e:
+            self._log_line(f"Could not open {url}: {e}\n", "err")
 
     #: What each planner status offers on a mod row: the label, its colour,
     #: whether clicking it does anything, and the tooltip that explains it.
@@ -8052,8 +8098,11 @@ class EqUpdaterApp(tk.Tk):
 
         _titem("✓", tr("Verify game files"), self._settings_verify)
         _titem("☰", tr("Show logs"), self._show_logs)
-        _titem("⛊", tr("Add game folder to Defender exclusions"),
-               self._allow_through_antivirus)
+        if platforms.WINDOWS:
+            _titem("⛊", tr("Add game folder to Defender exclusions"),
+                   self._allow_through_antivirus)
+        else:
+            self._build_game_launcher_settings(lcol, P_BG, P_INP, P_BDR)
 
         tk.Label(lcol, text=tr("SUPPORT ME"),
                  font=self._font(10, bold=True),
@@ -8185,6 +8234,64 @@ class EqUpdaterApp(tk.Tk):
         self._settings_panel = (panel, MW, MH)
         self._fit_settings_panel(panel, MW, MH)
 
+    def _build_game_launcher_settings(self, parent, bg, inp, bdr):
+        """Linux: how PLAY starts the Windows game client. Empty fields mean
+        automatic (Wine, else UMU); a launch command covers Proton, Lutris,
+        Faugus or anything else. Saved as typed."""
+        tk.Label(parent, text=tr("GAME LAUNCHER"),
+                 font=self._font(10, bold=True),
+                 fg=C_GOLD, bg=bg).pack(anchor="w", pady=(self._px(22), 0))
+        saved = load_config().get("game_launcher") or {}
+
+        def field(key, label, tip):
+            tk.Label(parent, text=label, font=self._font(9), fg=C_TEXT,
+                     bg=bg).pack(anchor="w", pady=(self._px(8), 0))
+            var = tk.StringVar(value=saved.get(key, ""))
+            ent = tk.Entry(parent, textvariable=var, bg=inp, fg=C_TEXT,
+                           insertbackground=C_GOLD, relief="flat",
+                           font=FONT_MONO, width=36, highlightthickness=1,
+                           highlightbackground=bdr, highlightcolor=C_GOLD)
+            ent.pack(anchor="w", fill="x", ipady=self._px(3))
+            self._add_tooltip(ent, tip)
+
+            def store(*_a, k=key, v=var):
+                value = v.get().strip()
+
+                def merge(c):
+                    launcher = c.setdefault("game_launcher", {})
+                    launcher[k] = value
+                self._cfg = update_config(merge)
+                show_runner()
+            var.trace_add("write", store)
+            return var
+
+        field("launch_command", tr("Launch command"),
+              tr("Leave empty to use Wine, or UMU if Wine is not installed. "
+                 "{exe} stands for the game's path; without it, the path is "
+                 "added at the end."))
+        field("wine_prefix", tr("Wine prefix"),
+              tr("Optional. The Wine prefix the game runs in; passed as "
+                 "WINEPREFIX."))
+        runner = tk.Label(parent, text="", font=self._font(9), fg=C_TEXT_DIM,
+                          bg=bg, justify="left", wraplength=self._px(360))
+        runner.pack(anchor="w", pady=(self._px(4), 0))
+
+        def show_runner():
+            launcher = load_config().get("game_launcher") or {}
+            if (launcher.get("launch_command") or "").strip():
+                text = tr("Using your launch command.")
+            else:
+                name, path = platforms.detect_runner()
+                text = (tr("Automatic: {runner}", runner=f"{name} ({path})")
+                        if name else
+                        tr("Automatic: nothing found. Install Wine, or set "
+                           "a launch command."))
+            try:
+                runner.configure(text=text)
+            except tk.TclError:
+                pass
+        show_runner()
+
     def _fit_settings_panel(self, panel, min_w: int, min_h: int):
         """Grow the Settings panel to what its content needs, up to the
         window. OpenDyslexic sets far wider and taller than Friz at the same
@@ -8234,22 +8341,20 @@ class EqUpdaterApp(tk.Tk):
         # added one via Settings since the last reconcile. Reset after, so a
         # later reconcile (e.g. another folder change) offers it again.
         if needs_reconcile:
-            if not self._av_excluded:
+            if not self._av_excluded and platforms.WINDOWS:
                 self._prompt_av_exclusion()
             self._av_excluded = False
 
     def _open_client_folder(self):
-        import subprocess
         path = os.path.normpath(self._game_path.get().strip())
-        if os.path.isdir(path):
-            # Explicit explorer.exe, not os.startfile: ShellExecute resolves
-            # extensionless paths against PATHEXT/.lnk, so a Desktop shortcut
-            # named like the folder (e.g. "OctoWoW.lnk") gets *executed*
-            # instead of the folder being opened.
-            subprocess.Popen(["explorer.exe", path])
-            self._log_line(f"Opened folder: {path}\n", "dim")
-        else:
+        if not os.path.isdir(path):
             self._log_line(f"Folder not found: {path}\n", "err")
+            return
+        try:
+            platforms.open_folder(path)
+            self._log_line(f"Opened folder: {path}\n", "dim")
+        except OSError as e:
+            self._log_line(f"Could not open {path}: {e}\n", "err")
 
     def _settings_change_dir(self):
         cur     = self._game_path.get()
@@ -8288,7 +8393,7 @@ class EqUpdaterApp(tk.Tk):
         aria2c downloader may trigger a Windows Firewall prompt — so it doesn't
         look sketchy to a non-technical user. Purely informational; tracked in
         the config so it appears only once."""
-        if self._cfg.get("aria2_firewall_notice_shown"):
+        if self._cfg.get("aria2_firewall_notice_shown") or not platforms.WINDOWS:
             return
         from tkinter import messagebox
         messagebox.showinfo(
@@ -8770,8 +8875,9 @@ class EqUpdaterApp(tk.Tk):
     def _launch_game(self):
         """Launch the game detached.
         If VanillaFixes is installed use VanillaFixes.exe (it injects dlls then
-        starts WoW.exe itself). Otherwise fall back to WoW.exe directly."""
-        import subprocess
+        starts WoW.exe itself). Otherwise fall back to WoW.exe directly. On
+        Linux either one is started through the game runner (see
+        platforms.launch_plan)."""
         client_dir = self._game_path.get().strip()
         cfg        = load_config()
 
@@ -8825,21 +8931,30 @@ class EqUpdaterApp(tk.Tk):
                    "switch to DXVK 2.5.3"),
                 parent=self)
 
+        # How to start it: the executable itself on Windows; on Linux the
+        # player's launch command, else Wine, else UMU (platforms.launch_plan).
+        plan = platforms.launch_plan(client_dir, exe,
+                                     load_config().get("game_launcher"))
+        if not plan.ok:
+            from tkinter import messagebox
+            self._log_line("No way to run the Windows game client was found "
+                           "(no launch command set, no wine or umu-run on "
+                           "PATH).\n", "err")
+            messagebox.showerror(
+                tr("Cannot start the game"),
+                tr("{app} found no way to run the Windows game client. "
+                   "Install Wine, or set a launch command in Settings \u2192 "
+                   "Game launcher.", app=branding.APP_NAME),
+                parent=self)
+            return
+
         if self._cfg.get("clear_wdb_on_launch", False):
             remove_wdb(client_dir)
 
         try:
-            flags = (getattr(subprocess, "DETACHED_PROCESS", 0)
-                     | getattr(subprocess, "CREATE_BREAKAWAY_FROM_JOB", 0))
-            try:
-                subprocess.Popen([exe], cwd=client_dir,
-                                 creationflags=flags, close_fds=True)
-            except OSError:
-                # The job object doesn't permit breakaway — retry without it.
-                flags &= ~getattr(subprocess, "CREATE_BREAKAWAY_FROM_JOB", 0)
-                subprocess.Popen([exe], cwd=client_dir,
-                                 creationflags=flags, close_fds=True)
-            self._log_line(f"Launched {exe_lbl}!\n", "ok")
+            platforms.spawn_detached(plan.argv, cwd=plan.cwd, env=plan.env)
+            how = "" if plan.runner == "windows" else f" with {plan.runner}"
+            self._log_line(f"Launched {exe_lbl}{how}!\n", "ok")
             # Briefly disable PLAY so a double-click can't spawn two clients.
             self._set_btn_busy(tr("PLAY"))
             self._status_var.set(tr("Launching..."))

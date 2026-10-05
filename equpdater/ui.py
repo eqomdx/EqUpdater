@@ -35,6 +35,11 @@ ARIAL_FAMILIES = (
     "Arial",
     "Arial MT",
     "ArialMT",
+    # Linux rarely has Arial. Liberation Sans and Arimo are metric-compatible
+    # with it (same widths, so layouts measured in Arial still fit).
+    "Liberation Sans",
+    "Arimo",
+    "DejaVu Sans",
 )
 OPEN_DYSLEXIC_FAMILIES = (
     "OpenDyslexic",
@@ -42,7 +47,10 @@ OPEN_DYSLEXIC_FAMILIES = (
     "Open Dyslexic",
 )
 FALLBACK_FAMILY = "Georgia"
-MONO_FAMILIES = {"consolas", "courier", "courier new", "monospace"}
+FALLBACK_FAMILIES = (FALLBACK_FAMILY, "Times New Roman", "Liberation Serif",
+                     "DejaVu Serif", "TkDefaultFont")
+MONO_FAMILIES = {"consolas", "courier", "courier new", "monospace",
+                 "dejavu sans mono", "liberation mono"}
 
 FONT_CHOICES = {
     "friz": FRIZ_FAMILIES,
@@ -121,15 +129,73 @@ def _font_file_for(choice: str) -> str | None:
     return (regular or matches or [None])[0]
 
 
+def fontconfig_file(font_dirs: list, system_conf: str, cache: str) -> str:
+    """A fontconfig configuration: the system's own (included) plus
+    EqUpdater's font folders."""
+    from xml.sax.saxutils import escape
+    lines = ['<?xml version="1.0"?>',
+             '<!DOCTYPE fontconfig SYSTEM "fonts.dtd">',
+             "<fontconfig>",
+             f'  <include ignore_missing="yes">{escape(system_conf)}</include>']
+    lines += [f"  <dir>{escape(d)}</dir>" for d in font_dirs]
+    lines += [f"  <cachedir>{escape(cache)}</cachedir>", "</fontconfig>", ""]
+    return "\n".join(lines)
+
+
+def _register_fonts_with_fontconfig() -> None:
+    """Linux: make the bundled fonts visible to Tk without installing them.
+
+    Tk draws with Xft, which finds fonts through fontconfig, and fontconfig
+    reads its configuration once -- when the first window opens. So before
+    that, FONTCONFIG_FILE is pointed at a small file that includes the
+    system's configuration and adds EqUpdater's font folders. Nothing is
+    written to the player's font folders, and programs EqUpdater starts get
+    their own FONTCONFIG_FILE back (platforms.child_env)."""
+    from . import platforms
+    if os.environ.get("EQUPDATER_FONTCONFIG"):
+        return
+    dirs = []
+    for path in _bundled_font_paths():
+        folder = os.path.dirname(path)
+        if folder not in dirs:
+            dirs.append(folder)
+    if not dirs:
+        return
+    system_conf = (os.environ.get("FONTCONFIG_FILE")
+                   or "/etc/fonts/fonts.conf")
+    data = branding.app_data_dir()
+    conf = os.path.join(data, "fontconfig", "fonts.conf")
+    cache = os.path.join(os.environ.get("XDG_CACHE_HOME")
+                         or os.path.join(os.path.expanduser("~"), ".cache"),
+                         "equpdater-fontconfig")
+    try:
+        os.makedirs(os.path.dirname(conf), exist_ok=True)
+        with open(conf, "w", encoding="utf-8") as f:
+            f.write(fontconfig_file(dirs, system_conf, cache))
+    except OSError:
+        return
+    platforms.own_env("FONTCONFIG_FILE", conf)
+    os.environ["EQUPDATER_FONTCONFIG"] = conf
+
+
+def prepare_fonts() -> None:
+    """Make the bundled fonts available to Tk. Call before the first Tk
+    window exists: fontconfig (Linux) reads its configuration then."""
+    _register_private_fonts()
+
+
 def _register_private_fonts() -> None:
-    """Register bundled font files for the current process on Windows.
+    """Register bundled font files for the current process.
 
     Tk can only select a family name that the OS knows about.  Shipping the
     font files beside the app is therefore not enough on Windows unless they
     are registered with GDI first.  ``FR_PRIVATE`` keeps the registration
-    process-local rather than installing anything system-wide.
+    process-local rather than installing anything system-wide. On Linux the
+    same is done through fontconfig (_register_fonts_with_fontconfig).
     """
     if os.name != "nt":
+        if sys.platform.startswith("linux"):
+            _register_fonts_with_fontconfig()
         return
     try:
         import ctypes
@@ -172,7 +238,7 @@ class FontManager:
         self.friz = _first_installed(root, FRIZ_FAMILIES)
         self.arial = _first_installed(root, ARIAL_FAMILIES)
         self.open_dyslexic = _first_installed(root, OPEN_DYSLEXIC_FAMILIES)
-        self.fallback = _first_installed(root, (FALLBACK_FAMILY, "Times New Roman", "TkDefaultFont")) or FALLBACK_FAMILY
+        self.fallback = _first_installed(root, FALLBACK_FAMILIES) or FALLBACK_FAMILY
         self.choice = "arial"
         self.set_choice(choice)
 

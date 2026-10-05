@@ -286,6 +286,26 @@ STRINGS = {
     "Updating {name}…": "Atualizando {name}…",
     "Updating…": "Atualizando…",
     "Valid URL. Click Install to continue.": "URL válida. Clique em Instalar para continuar.",
+    "Cannot start the game":
+        "Não foi possível iniciar o jogo",
+    "{app} found no way to run the Windows game client. Install Wine, or set a launch command in Settings → Game launcher.":
+        "O {app} não encontrou uma forma de executar o cliente Windows do jogo. Instale o Wine ou defina um comando de inicialização em Configurações → Inicialização do jogo.",
+    "GAME LAUNCHER":
+        "INICIALIZAÇÃO DO JOGO",
+    "Launch command":
+        "Comando de inicialização",
+    "Leave empty to use Wine, or UMU if Wine is not installed. {exe} stands for the game's path; without it, the path is added at the end.":
+        "Deixe vazio para usar o Wine, ou o UMU se o Wine não estiver instalado. {exe} representa o caminho do jogo; sem ele, o caminho é adicionado ao final.",
+    "Wine prefix":
+        "Prefixo do Wine",
+    "Optional. The Wine prefix the game runs in; passed as WINEPREFIX.":
+        "Opcional. O prefixo do Wine em que o jogo roda; passado como WINEPREFIX.",
+    "Using your launch command.":
+        "Usando o seu comando de inicialização.",
+    "Automatic: {runner}":
+        "Automático: {runner}",
+    "Automatic: nothing found. Install Wine, or set a launch command.":
+        "Automático: nada encontrado. Instale o Wine ou defina um comando de inicialização.",
     "Verify game files": "Verificar arquivos do jogo",
     "Verifying game files…": "Verificando arquivos do jogo…",
     "Verifying…": "Verificando…",
