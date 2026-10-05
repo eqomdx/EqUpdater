@@ -23,33 +23,57 @@
 
 ## Install
 
-**Close World of Warcraft first.**
+Download the latest release from the
+[**Releases page**](https://github.com/eqomdx/EqUpdater/releases/latest).
+Nothing else is needed: no Python, no build tools.
 
-1. Download this repository (**Code → Download ZIP**) and extract it.
-2. Double-click **`install/INSTALL.cmd`**.
-3. Launch EqUpdater from the desktop shortcut it offers.
+### Windows
 
-The installer sets up Python if you need it, builds EqUpdater and installs
-it to one permanent place:
+1. Download **`EqUpdater-vX.Y.Z-Windows.exe`**.
+2. Run it. It installs EqUpdater to
+   `%LOCALAPPDATA%\Programs\EqUpdater`, adds it to the Start menu (and,
+   if you like, the desktop), and starts it.
 
-    %LOCALAPPDATA%\Programs\EqUpdater\EqUpdater.exe
+No administrator rights are needed, and it never touches your game folder.
 
-It never touches your game folder, and no administrator rights are needed.
+**Updating:** download the newer `EqUpdater-vX.Y.Z-Windows.exe` and run it
+(close EqUpdater first). It replaces the app in that same place and points
+every EqUpdater shortcut there. Your settings, managed mods and addons, and
+backups live separately in `%LOCALAPPDATA%\EqUpdater` and are kept. If
+anything goes wrong part-way, the version you had stays in place.
 
-### Updating
+### Linux
 
-Download the new version, extract it anywhere and run its
-`install/INSTALL.cmd` the same way. The new version **replaces** the old one
-in that same place - versions no longer live in folders of their own - and
-every EqUpdater shortcut (desktop, Start menu, taskbar) is pointed at it,
-including shortcuts an older version made into its own download folder.
-Close EqUpdater first. Your settings, managed mods and addons, and backups
-live separately in `%LOCALAPPDATA%\EqUpdater` and are kept. If anything goes
-wrong part-way, the version you had stays in place; running the installer
-again is always safe.
+1. Download **`EqUpdater-vX.Y.Z-Linux-x86_64.AppImage`**.
+2. Make it executable and run it:
 
-Once installed, the folder you extracted (and any older version's folder) is
-not used any more and can be deleted.
+   ```sh
+   chmod +x EqUpdater-vX.Y.Z-Linux-x86_64.AppImage
+   ./EqUpdater-vX.Y.Z-Linux-x86_64.AppImage
+   ```
+
+EqUpdater runs natively on Linux (x86_64; Ubuntu 22.04 and newer, Mint,
+Fedora, Arch and others). The AppImage carries everything it needs,
+including the `aria2c` the client download uses. Settings live in
+`~/.local/share/EqUpdater`. **Updating:** download the newer AppImage and
+run that one instead.
+
+The OctoWoW client itself is a Windows program, so **PLAY needs a way to
+run Windows games: Wine, Proton or UMU.** By default EqUpdater uses `wine`
+if it is installed, otherwise `umu-run`. To use anything else - a
+particular Proton, Lutris, Faugus, a custom Wine prefix - open
+**Settings → Game launcher**:
+
+- **Launch command** - the command that starts the game. `{exe}` stands
+  for the path of `WoW.exe` (or `VanillaFixes.exe`); without `{exe}` the
+  path is added at the end. `{dir}` is the game folder. Examples:
+  `wine`, `gamemoderun wine {exe}`, `umu-run`,
+  `/path/to/proton run`.
+- **Wine prefix** - passed as `WINEPREFIX`; leave it empty for the default.
+
+Everything else - updates, mods, addons, texture packs, tweaks, the
+`WoW.exe` patch - works the same as on Windows. Keep the game anywhere,
+for example `~/Games/OctoWoW` or inside a Wine prefix.
 
 ---
 
@@ -125,7 +149,7 @@ confirmed, and skips the rest.
   uses a still image and almost no CPU).
 - Fonts: **Arial** (default), **Friz Quadrata** or **OpenDyslexic**, switched
   live in Settings. All three come with EqUpdater; nothing to install.
-- Dark title bar to match.
+- Dark title bar to match (Windows).
 - In your language: English, Deutsch, Русский, 中文 (简体), Español or
   Português (BR). The first launch asks; after that it is **Tweaks →
   Language**, which sets both the game's language and EqUpdater's.
@@ -141,15 +165,29 @@ configuration is **copied, never moved**, so going back costs nothing.
 
 ---
 
-## Running from source
+## Building from source (developers)
+
+One codebase builds both platforms. With Python 3.10 or newer:
 
 ```sh
 python -m pip install pillow pyinstaller certifi
-python -m equpdater          # run it
-python build.py              # build dist/EqUpdater/EqUpdater.exe
+python -m equpdater              # run it from source
+python build.py                  # dist/EqUpdater/ - the folder build for this OS
+python build.py --setup          # Windows: also the release installer .exe
+python3 tools/build_appimage.py  # Linux: the release AppImage
 ```
 
-Python 3.10 or newer. On Linux, run it from source the same way.
+On Windows, `install/INSTALL.cmd` does the same from a downloaded source
+tree (installs Python if needed, builds, installs to
+`%LOCALAPPDATA%\Programs\EqUpdater`). Running from source on Linux needs
+Tk (`python3-tk`) and `aria2` from your distribution.
+
+Releases are built by GitHub Actions (`.github/workflows/release.yml`):
+publishing a release for tag `vX.Y.Z` builds, tests and attaches
+`EqUpdater-vX.Y.Z-Windows.exe` and
+`EqUpdater-vX.Y.Z-Linux-x86_64.AppImage`, both from that commit.
+Platform differences live in `equpdater/platforms.py`; everything else is
+shared.
 
 ### Tests
 
@@ -158,8 +196,9 @@ python tools/check.py           # the whole suite; prints only what failed
 python build.py --release       # builds only if the suite passes
 ```
 
-The suite guards EqUpdater's safety rules. It runs in CI on every change and
-before every release build; it is not part of installing.
+The suite guards EqUpdater's safety rules. It runs in CI on Windows and
+Linux for every change and before every release build; it is not part of
+installing.
 
 ---
 

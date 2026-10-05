@@ -115,11 +115,20 @@ def _bundled_font_paths() -> list[str]:
 
 def _font_file_for(choice: str) -> str | None:
     """The regular-weight file of a font choice: shipped with EqUpdater, or
-    Windows' own Arial."""
+    the system's Arial -- Windows' own, or on Linux its metric-compatible
+    stand-in (see ARIAL_FAMILIES)."""
     if choice == "arial":
-        path = os.path.join(os.environ.get("WINDIR", r"C:\Windows"),
-                            "Fonts", "arial.ttf")
-        return path if os.path.isfile(path) else None
+        if os.name == "nt":
+            candidates = [os.path.join(os.environ.get("WINDIR", r"C:\Windows"),
+                                       "Fonts", "arial.ttf")]
+        else:
+            candidates = [os.path.join(root, sub, name)
+                          for root in ("/usr/share/fonts", "/usr/local/share/fonts")
+                          for sub in ("truetype/liberation", "liberation-sans",
+                                      "liberation", "TTF", "truetype/msttcorefonts")
+                          for name in ("LiberationSans-Regular.ttf", "arial.ttf",
+                                       "Arial.ttf")]
+        return next((p for p in candidates if os.path.isfile(p)), None)
     prefix = {"friz": "frizquadrata", "opendyslexic": "opendyslexic"}.get(choice)
     if not prefix:
         return None
