@@ -5,12 +5,11 @@ place, which is how the tests, a source checkout and PyInstaller all start
 it. Keeping it separate means app.py has no `if __name__` block competing
 with the frozen entry script."""
 
-from .app import EqUpdaterApp, _enable_dpi_awareness
+from .app import run
 
 
 def main() -> None:
-    _enable_dpi_awareness()
-    EqUpdaterApp().mainloop()
+    run()
 
 
 if __name__ == "__main__":

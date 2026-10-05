@@ -4028,7 +4028,13 @@ class EqUpdaterApp(tk.Tk):
         win.protocol("WM_DELETE_WINDOW", win.destroy)
         win.lift()
         win.focus_force()
-        win.grab_set()
+        # A grab on a window the window manager has not mapped yet raises
+        # TclError ("window not viewable") on Linux and killed start-up.
+        try:
+            win.wait_visibility()
+            win.grab_set()
+        except tk.TclError:
+            pass
         self._language_prompt = win
         self.wait_window(win)
         self._language_prompt = None
@@ -9029,7 +9035,30 @@ def _enable_dpi_awareness():
         pass
 
 
+def run() -> None:
+    """Start the app; any uncaught error is written to crash.log in the data
+    directory (a windowed or desktop-launched app has no console)."""
+    import traceback
+
+    def _dump(text):
+        try:
+            os.makedirs(APP_DATA_DIR, exist_ok=True)
+            with open(os.path.join(APP_DATA_DIR, "crash.log"), "a",
+                      encoding="utf-8") as f:
+                f.write(text + "\n")
+        except Exception:
+            pass
+        sys.stderr.write(text + "\n")
+
+    tk.Tk.report_callback_exception = (
+        lambda self, *a: _dump("".join(traceback.format_exception(*a))))
+    try:
+        _enable_dpi_awareness()
+        EqUpdaterApp().mainloop()
+    except BaseException:
+        _dump(traceback.format_exc())
+        raise
+
+
 if __name__ == "__main__":
-    _enable_dpi_awareness()
-    app = EqUpdaterApp()
-    app.mainloop()
+    run()

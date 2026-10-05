@@ -10,12 +10,11 @@ So the frozen build starts here instead, with an absolute import.
 `python -m equpdater` still goes through `equpdater/__main__.py`.
 """
 
-from equpdater.app import EqUpdaterApp, _enable_dpi_awareness
+from equpdater.app import run
 
 
 def main() -> None:
-    _enable_dpi_awareness()
-    EqUpdaterApp().mainloop()
+    run()
 
 
 if __name__ == "__main__":
