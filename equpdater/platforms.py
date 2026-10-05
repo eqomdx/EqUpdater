@@ -172,23 +172,30 @@ def link_dir(link: str, target: str) -> None:
 #  aria2c
 # ──────────────────────────────────────────────────────────────────────────────
 
-#: The aria2c executable's name on this platform.
-ARIA2C = "aria2c.exe" if WINDOWS else "aria2c"
+def aria2c_name() -> str:
+    """The aria2c executable's file name on this platform.
+
+    A function, not a constant: every platform decision in this module reads
+    WINDOWS/LINUX when it is made, so nothing here can disagree with them --
+    a name fixed at import time would (the tests switch platforms, and a
+    constant computed on Linux stayed "aria2c" inside a Windows branch)."""
+    return "aria2c.exe" if WINDOWS else "aria2c"
 
 
 def bundled_aria2c() -> list:
     """Where a packaged build carries its own aria2c: beside the executable
     (the AppImage puts it in usr/bin next to EqUpdater), in the AppImage's
     usr/bin, or inside the PyInstaller bundle."""
+    name = aria2c_name()
     places = []
     if frozen():
-        places.append(os.path.join(os.path.dirname(sys.executable), ARIA2C))
+        places.append(os.path.join(os.path.dirname(sys.executable), name))
     appdir = os.environ.get("APPDIR")
     if appdir:
-        places.append(os.path.join(appdir, "usr", "bin", ARIA2C))
+        places.append(os.path.join(appdir, "usr", "bin", name))
     bundle = getattr(sys, "_MEIPASS", None)
     if bundle:
-        places.append(os.path.join(bundle, ARIA2C))
+        places.append(os.path.join(bundle, name))
     return places
 
 
@@ -200,12 +207,12 @@ def find_aria2c(app_data_dir: str) -> str | None:
     Linux: a native aria2c -- the AppImage's own first, then the system's.
     A Windows aria2c.exe is never run under Wine."""
     if WINDOWS:
-        path = os.path.join(app_data_dir, ARIA2C)
+        path = os.path.join(app_data_dir, aria2c_name())
         return path if os.path.isfile(path) else None
     for path in bundled_aria2c():
         if os.path.isfile(path) and os.access(path, os.X_OK):
             return path
-    return shutil.which(ARIA2C)
+    return shutil.which(aria2c_name())
 
 
 # ──────────────────────────────────────────────────────────────────────────────

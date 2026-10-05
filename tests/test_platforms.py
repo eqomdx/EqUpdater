@@ -176,6 +176,18 @@ class TestLaunching(unittest.TestCase):
 
 
 class TestAria2(unittest.TestCase):
+    def test_the_name_follows_the_platform_flag(self):
+        """Decided when asked, not when the module was imported: on a Linux
+        machine switched to Windows (and the other way round) the name must
+        agree with the branch being taken."""
+        with On("windows") as platforms:
+            self.assertEqual(platforms.aria2c_name(), "aria2c.exe")
+        with On("linux") as platforms:
+            self.assertEqual(platforms.aria2c_name(), "aria2c")
+        _app, platforms = modules()
+        self.assertFalse(hasattr(platforms, "ARIA2C"),
+                         "a platform-dependent constant fixed at import time")
+
     def test_windows_uses_the_pinned_download(self):
         with tempfile.TemporaryDirectory() as data:
             with On("windows") as platforms:
@@ -192,7 +204,6 @@ class TestAria2(unittest.TestCase):
                 f.write("#!/bin/sh\n")
             os.chmod(bundled, 0o755)
             with On("linux") as platforms, \
-                    mock.patch.object(platforms, "ARIA2C", "aria2c"), \
                     mock.patch.object(platforms.shutil, "which", lambda n: "/usr/bin/aria2c"), \
                     mock.patch.object(platforms.os, "access", lambda p, m: True), \
                     mock.patch.dict(os.environ, {"APPDIR": appdir}):
@@ -200,9 +211,9 @@ class TestAria2(unittest.TestCase):
 
     def test_linux_falls_back_to_the_system_one(self):
         with On("linux") as platforms, \
-                mock.patch.object(platforms, "ARIA2C", "aria2c"), \
                 mock.patch.object(platforms, "bundled_aria2c", lambda: []), \
-                mock.patch.object(platforms.shutil, "which", lambda n: "/usr/bin/aria2c"):
+                mock.patch.object(platforms.shutil, "which",
+                                  lambda n: "/usr/bin/aria2c" if n == "aria2c" else None):
             self.assertEqual(platforms.find_aria2c("/unused"), "/usr/bin/aria2c")
 
     def test_linux_without_aria2c_explains(self):
