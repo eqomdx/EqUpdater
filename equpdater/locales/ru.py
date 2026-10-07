@@ -305,6 +305,19 @@ STRINGS = {
         "Автоматически: {runner}",
     "Automatic: nothing found. Install Wine, or set a launch command.":
         "Автоматически: ничего не найдено. Установите Wine или укажите команду запуска.",
+    "Environment variables":
+        "Переменные окружения",
+    "Optional. One NAME=value per line, given only to the game when PLAY starts it - for example DXVK_HUD=fps.":
+        "Необязательно. По одной NAME=значение в строке; передаются только игре, когда её запускает PLAY, — например DXVK_HUD=fps.",
+    "Line {line}: write it as NAME=value.":
+        "Строка {line}: запишите в виде NAME=значение.",
+    "Line {line}: a name starts with a letter or _ and has only letters, digits and _.":
+        "Строка {line}: имя начинается с буквы или _ и содержит только буквы, цифры и _.",
+    "Line {line}: the value contains a character that cannot be used.":
+        "Строка {line}: значение содержит недопустимый символ.",
+    "Fix the environment variables in Settings → Game launcher:\n\n{problems}":
+        "Исправьте переменные окружения в Настройки → Запуск игры:\n\n{problems}",
+    "Game launcher…": "Запуск игры…",
     "Verify game files": "Проверить файлы игры",
     "Verifying game files…": "Проверка файлов игры…",
     "Verifying…": "Проверка…",

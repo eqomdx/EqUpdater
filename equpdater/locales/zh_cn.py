@@ -306,6 +306,19 @@ STRINGS = {
         "自动：{runner}",
     "Automatic: nothing found. Install Wine, or set a launch command.":
         "自动：未找到。请安装 Wine，或设置启动命令。",
+    "Environment variables":
+        "环境变量",
+    "Optional. One NAME=value per line, given only to the game when PLAY starts it - for example DXVK_HUD=fps.":
+        "可选。每行一个 NAME=值，仅在 PLAY 启动游戏时传给游戏，例如 DXVK_HUD=fps。",
+    "Line {line}: write it as NAME=value.":
+        "第 {line} 行：请写成 NAME=值 的形式。",
+    "Line {line}: a name starts with a letter or _ and has only letters, digits and _.":
+        "第 {line} 行：名称须以字母或 _ 开头，且只能包含字母、数字和 _。",
+    "Line {line}: the value contains a character that cannot be used.":
+        "第 {line} 行：值中包含无法使用的字符。",
+    "Fix the environment variables in Settings → Game launcher:\n\n{problems}":
+        "请在 设置 → 游戏启动方式 中修正环境变量：\n\n{problems}",
+    "Game launcher…": "游戏启动方式…",
     "Verify game files": "校验游戏文件",
     "Verifying game files…": "正在校验游戏文件…",
     "Verifying…": "正在校验…",

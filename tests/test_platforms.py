@@ -175,6 +175,152 @@ class TestLaunching(unittest.TestCase):
         self.assertEqual(popen.call_args.kwargs["cwd"], self.DIR)
 
 
+class TestGameEnvironment(unittest.TestCase):
+    """Settings -> Game launcher -> Environment variables: one NAME=value per
+    line, given to the game only."""
+
+    EXE = TestLaunching.EXE
+    DIR = TestLaunching.DIR
+
+    def parse(self, text):
+        _app, platforms = modules()
+        return platforms.parse_env_lines(text)
+
+    def plan(self, settings, found=("wine",), on="linux"):
+        _app, platforms = modules()
+        which = lambda name: f"/usr/bin/{name}" if name in found else None  # noqa: E731
+        with On(on):
+            return platforms.launch_plan(self.DIR, self.EXE, settings, which=which)
+
+    def test_lines_become_variables(self):
+        text = ("DXVK_HUD=fps\n"
+                "\n"
+                "   \n"
+                "  PROTON_LOG = 1\n"
+                "WINEDLLOVERRIDES=d3d9=n,b;dxgi=n\n"
+                "_UNDERSCORED=a value with  spaces \n"
+                "EMPTY=\r\n"
+                "DXVK_HUD=fps,frametimes\n")
+        self.assertEqual(self.parse(text), ({
+            "DXVK_HUD": "fps,frametimes",            # the later line wins
+            "PROTON_LOG": " 1",                      # name trimmed, value as typed
+            "WINEDLLOVERRIDES": "d3d9=n,b;dxgi=n",   # '=' inside the value
+            "_UNDERSCORED": "a value with  spaces ",
+            "EMPTY": "",
+        }, []))
+
+    def test_empty_configuration(self):
+        for text in (None, "", "\n\n", "   \n\t\n"):
+            with self.subTest(text=text):
+                self.assertEqual(self.parse(text), ({}, []))
+
+    def test_every_bad_line_is_reported_with_its_number(self):
+        text = ("GOOD=1\n"
+                "no equals sign\n"
+                "1BAD=x\n"
+                "BAD-NAME=x\n"
+                "=nameless\n"
+                "  =x\n"
+                "SP ACE=x\n"
+                "export FOO=x\n"
+                "$(rm -rf ~)=x\n"
+                "NUL=a\0b\n"
+                "ÜBER=x\n")
+        variables, problems = self.parse(text)
+        self.assertEqual(variables, {"GOOD": "1"})
+        self.assertEqual(problems, [
+            (2, "no_equals"), (3, "bad_name"), (4, "bad_name"),
+            (5, "bad_name"), (6, "bad_name"), (7, "bad_name"),
+            (8, "bad_name"), (9, "bad_name"), (10, "nul"), (11, "bad_name")])
+
+    def test_values_are_never_expanded(self):
+        variables, _ = self.parse("A=$HOME\nB=`id`\nC=$(id)\nD=~/x\nE=%PATH%\n")
+        self.assertEqual(variables, {"A": "$HOME", "B": "`id`", "C": "$(id)",
+                                     "D": "~/x", "E": "%PATH%"})
+
+    def test_they_reach_the_game_on_linux(self):
+        for settings in ({"env_vars": "DXVK_HUD=fps\nA=b=c"},
+                         {"env_vars": "DXVK_HUD=fps\nA=b=c",
+                          "launch_command": "gamemoderun wine {exe}"}):
+            with self.subTest(settings=settings):
+                plan = self.plan(settings, found=("wine", "umu-run"))
+                self.assertTrue(plan.ok)
+                self.assertEqual(plan.env["DXVK_HUD"], "fps")
+                self.assertEqual(plan.env["A"], "b=c")
+
+    def test_they_reach_the_game_on_windows(self):
+        plan = self.plan({"env_vars": "DXVK_HUD=fps"}, on="windows")
+        self.assertEqual(plan.argv, [self.EXE])
+        self.assertEqual(plan.env["DXVK_HUD"], "fps")
+        self.assertEqual(plan.env.get("PATH"), os.environ.get("PATH"))
+
+    def test_merged_into_a_copy_of_the_environment(self):
+        """Everything EqUpdater's own environment has is kept, the game gets
+        the extra variables, and EqUpdater's environment is not touched."""
+        before = dict(os.environ)
+        with mock.patch.dict(os.environ, {"EQU_TEST_KEEP": "kept",
+                                          "EQU_TEST_OVERRIDE": "old"}):
+            plan = self.plan({"env_vars": "EQU_TEST_NEW=1\nEQU_TEST_OVERRIDE=new"})
+            self.assertEqual(plan.env["EQU_TEST_KEEP"], "kept")
+            self.assertEqual(plan.env["EQU_TEST_NEW"], "1")
+            self.assertEqual(plan.env["EQU_TEST_OVERRIDE"], "new")
+            self.assertNotIn("EQU_TEST_NEW", os.environ)
+            self.assertEqual(os.environ["EQU_TEST_OVERRIDE"], "old")
+            self.assertIsNot(plan.env, os.environ)
+        self.assertEqual(dict(os.environ), before)
+
+    def test_a_line_here_wins_over_the_defaults(self):
+        plan = self.plan({"env_vars": "GAMEID=umu-12345\nWINEPREFIX=/pfx",
+                          "wine_prefix": "/other"}, found=("umu-run",))
+        self.assertEqual(plan.env["GAMEID"], "umu-12345")
+        self.assertEqual(plan.env["WINEPREFIX"], "/pfx")
+
+    def test_empty_leaves_launching_exactly_as_it_was(self):
+        for empty in ({}, {"env_vars": ""}, {"env_vars": "\n  \n"}):
+            with self.subTest(settings=empty):
+                self.assertEqual(self.plan(empty, on="windows"),
+                                 self.plan({}, on="windows"))
+                self.assertIsNone(self.plan(empty, on="windows").env)
+                self.assertEqual(self.plan(empty, found=("umu-run",)),
+                                 self.plan({}, found=("umu-run",)))
+
+    def test_a_bad_line_stops_the_launch(self):
+        for on in ("linux", "windows"):
+            with self.subTest(on=on):
+                plan = self.plan({"env_vars": "GOOD=1\nnot a variable"}, on=on)
+                self.assertFalse(plan.ok)
+                self.assertEqual(plan.argv, [])
+                self.assertEqual(plan.env_problems, [(2, "no_equals")])
+
+    def test_spawned_without_a_shell(self):
+        plan = self.plan({"env_vars": "X=$(touch /tmp/pwned)",
+                          "launch_command": "wine {exe}"})
+        _app, platforms = modules()
+        with On("linux"), mock.patch.object(platforms.subprocess, "Popen") as popen:
+            platforms.spawn_detached(plan.argv, cwd=plan.cwd, env=plan.env)
+        kwargs = popen.call_args.kwargs
+        self.assertFalse(kwargs.get("shell", False))
+        self.assertEqual(popen.call_args[0][0], ["wine", self.EXE])
+        self.assertEqual(kwargs["env"]["X"], "$(touch /tmp/pwned)")
+
+    def test_problems_are_explained_in_every_language(self):
+        app, _platforms = modules()
+        problems = [(2, "no_equals"), (3, "bad_name"), (4, "nul")]
+        english = app.env_problem_text(problems)
+        try:
+            for lang in ("deDE", "ruRU", "zhCN", "esES", "ptBR"):
+                with self.subTest(lang=lang):
+                    app.i18n.set_language(lang)
+                    text = app.env_problem_text(problems)
+                    self.assertNotEqual(text, english)
+                    lines = text.split("\n")
+                    self.assertEqual(len(lines), 3)
+                    for number, line in zip((2, 3, 4), lines):
+                        self.assertIn(str(number), line)
+        finally:
+            app.i18n.set_language("enUS")
+
+
 class TestAria2(unittest.TestCase):
     def test_the_name_follows_the_platform_flag(self):
         """Decided when asked, not when the module was imported: on a Linux

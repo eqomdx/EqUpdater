@@ -70,6 +70,12 @@ particular Proton, Lutris, Faugus, a custom Wine prefix - open
   `wine`, `gamemoderun wine {exe}`, `umu-run`,
   `/path/to/proton run`.
 - **Wine prefix** - passed as `WINEPREFIX`; leave it empty for the default.
+- **Environment variables** - one `NAME=value` per line, for example
+  `DXVK_HUD=fps` or `PROTON_LOG=1`. They are given to the game only, when
+  PLAY starts it, and win over anything set above. The value is passed
+  exactly as typed (spaces and `=` included; nothing is expanded or run).
+  A line EqUpdater cannot use is pointed out straight away, and PLAY will
+  not start the game until it is fixed.
 
 Everything else - updates, mods, addons, texture packs, tweaks, the
 `WoW.exe` patch - works the same as on Windows. Keep the game anywhere,
@@ -122,7 +128,9 @@ confirmed, and skips the rest.
 - ★ **Recommended** addons, a wider list of maintained community versions,
   and search.
 - Add any addon from **GitHub, GitLab, Gitea, Codeberg and OctoWoW Git**
-  (`https://octowow.st/git/<owner>/<repo>`).
+  (`https://octowow.st/git/<owner>/<repo>`). OctoWoW Git links written
+  without `https://`, or on its other address `git.octowow.st/git/...`, are
+  read as that same canonical link; no other address is rewritten.
 - Knows the difference between newer, older and modified — a different
   commit is not assumed to be an update.
 - Switch an addon to another fork, ignore updates for one, or stop managing it.
@@ -166,6 +174,14 @@ configuration is **copied, never moved**, so going back costs nothing.
 ---
 
 ## Building from source (developers)
+
+> **Testing EqUpdater? Do not build it yourself.** Use the files GitHub
+> Actions builds: `EqUpdater-vX.Y.Z-Windows.exe` (the installer) and
+> `EqUpdater-vX.Y.Z-Linux-x86_64.AppImage` - from a release, or for a pull
+> request from its **Release** workflow run's artifacts. Those are what
+> users get. A manual `python build.py` makes a developer folder
+> (`dist/EqUpdater/`: `EqUpdater.exe` beside an `_internal` folder), which
+> is not the installer and does not install, update or fix shortcuts.
 
 One codebase builds both platforms. With Python 3.10 or newer:
 

@@ -306,6 +306,19 @@ STRINGS = {
         "Automático: {runner}",
     "Automatic: nothing found. Install Wine, or set a launch command.":
         "Automático: nada encontrado. Instale o Wine ou defina um comando de inicialização.",
+    "Environment variables":
+        "Variáveis de ambiente",
+    "Optional. One NAME=value per line, given only to the game when PLAY starts it - for example DXVK_HUD=fps.":
+        "Opcional. Uma NAME=valor por linha; só o jogo as recebe, quando o PLAY o inicia — por exemplo DXVK_HUD=fps.",
+    "Line {line}: write it as NAME=value.":
+        "Linha {line}: escreva como NAME=valor.",
+    "Line {line}: a name starts with a letter or _ and has only letters, digits and _.":
+        "Linha {line}: um nome começa com uma letra ou _ e tem apenas letras, dígitos e _.",
+    "Line {line}: the value contains a character that cannot be used.":
+        "Linha {line}: o valor contém um caractere que não pode ser usado.",
+    "Fix the environment variables in Settings → Game launcher:\n\n{problems}":
+        "Corrija as variáveis de ambiente em Configurações → Inicialização do jogo:\n\n{problems}",
+    "Game launcher…": "Inicialização do jogo…",
     "Verify game files": "Verificar arquivos do jogo",
     "Verifying game files…": "Verificando arquivos do jogo…",
     "Verifying…": "Verificando…",

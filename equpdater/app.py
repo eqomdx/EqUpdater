@@ -47,8 +47,9 @@ from .i18n import N_, tr
 from .config import (APP_DATA_DIR, BACKUP_DIR, CONFIG_FILE, bootstrap_config,
                      ensure_dir, load_config, new_addon_record,
                      new_mod_record, update_config)
-from .gitcompare import (GIT_HOSTS, Ancestry, ancestry, forge_named,
-                         repo_ref, same_repo, short as short_sha)
+from .gitcompare import (GIT_HOSTS, Ancestry, ancestry, canonical_repo_url,
+                         forge_named, repo_ref, same_repo,
+                         short as short_sha)
 from .hashing import files_hash, folder_hash
 from .planner import (Component, plan, skipped_notably,
                       updatable)
@@ -2623,7 +2624,7 @@ def addons_path(client_dir: str) -> str:
 def check_custom_addon_url(text: str):
     """(repository URL, folder, None) for a link the custom-addon dialog
     can install, or (None, None, message) saying why not."""
-    url = (text or "").strip().rstrip("/")
+    url = canonical_repo_url((text or "").strip()).rstrip("/")
     if url.lower().endswith(".git"):
         url = url[:-4]
     if not is_allowed_git_url(url):
@@ -2632,6 +2633,33 @@ def check_custom_addon_url(text: str):
     if not folder or folder in (".", "..") or "\\" in folder:
         return None, None, N_("Could not derive addon folder name.")
     return url, folder, None
+
+
+#: What is wrong with a line of the Game launcher's environment variables,
+#: by platforms.parse_env_lines reason.
+ENV_PROBLEMS = {
+    "no_equals": N_("Line {line}: write it as NAME=value."),
+    "bad_name":  N_("Line {line}: a name starts with a letter or _ and has "
+                    "only letters, digits and _."),
+    "nul":       N_("Line {line}: the value contains a character that "
+                    "cannot be used."),
+}
+
+
+def env_problem_text(problems) -> str:
+    """One translated line per unusable environment variable line."""
+    return "\n".join(tr(ENV_PROBLEMS[reason], line=number)
+                     for number, reason in problems)
+
+
+def addon_install_source(git):
+    """The URL an addon is installed from, and recorded as its source: the
+    canonical form of ``git``. Raises when it is not a repository on an
+    allowed host -- the check is the same one, made on the canonical URL."""
+    url = canonical_repo_url(git) if git else git
+    if not url or not is_allowed_git_url(url):
+        raise RuntimeError(N_("Addon URL is not from an allowed git host"))
+    return url
 
 
 def is_allowed_git_url(url: str) -> bool:
@@ -6812,8 +6840,12 @@ class EqUpdaterApp(tk.Tk):
                 catalog = (load_config().get("addons_catalog_cache", {})
                            .get("catalog") or [])
 
+            # The catalogue writes some OctoWoW Git sources under another
+            # name for the same forge; read them as the canonical URL so
+            # they validate, and are saved, as octowow.st/git.
             available = [{"folder": a.get("name"), "status": "available",
-                          "git": a.get("git"), "branch": a.get("branch"),
+                          "git": canonical_repo_url(a.get("git")),
+                          "branch": a.get("branch"),
                           "ref": a.get("ref"), "toc": a.get("toc") or {},
                           "description": a.get("description"), "error": None}
                          for a in catalog
@@ -6877,7 +6909,8 @@ class EqUpdaterApp(tk.Tk):
                         # manually installed addon and putting a different
                         # copy there. It is shown, its .toc is read, a
                         # possible source is offered, and nothing is touched.
-                        rec.update(git=saved.get("git") if saved else None,
+                        rec.update(git=canonical_repo_url(saved.get("git"))
+                                   if saved else None,
                                    status="unmanaged")
                         addons[name] = rec
                         continue
@@ -6887,7 +6920,7 @@ class EqUpdaterApp(tk.Tk):
                     # current preference. Asking a different fork for "the
                     # latest commit" and comparing it with ours is not a
                     # question with a meaningful answer.
-                    rec.update(git=saved.get("git"),
+                    rec.update(git=canonical_repo_url(saved.get("git")),
                                branch=saved.get("branch"),
                                ref=saved.get("ref"),
                                custom=saved.get("custom_source",
@@ -7028,9 +7061,7 @@ class EqUpdaterApp(tk.Tk):
                 self.after(0, lambda n=rec["folder"]: self._status_var.set(
                     tr("Installing {name}…", name=n)))
                 try:
-                    if not rec.get("git") or not is_allowed_git_url(rec["git"]):
-                        raise RuntimeError(N_("Addon URL is not from an "
-                                              "allowed git host"))
+                    rec["git"] = addon_install_source(rec.get("git"))
                     sha = addon_remote_sha(rec["git"], rec.get("branch"),
                                            rec.get("ref"), raise_errors=True)
                     if not sha:
@@ -8102,7 +8133,7 @@ class EqUpdaterApp(tk.Tk):
             _titem("⛊", tr("Add game folder to Defender exclusions"),
                    self._allow_through_antivirus)
         else:
-            self._build_game_launcher_settings(lcol, P_BG, P_INP, P_BDR)
+            _titem("⚙", tr("Game launcher…"), self._open_game_launcher)
 
         tk.Label(lcol, text=tr("SUPPORT ME"),
                  font=self._font(10, bold=True),
@@ -8234,18 +8265,64 @@ class EqUpdaterApp(tk.Tk):
         self._settings_panel = (panel, MW, MH)
         self._fit_settings_panel(panel, MW, MH)
 
+    def _open_game_launcher(self):
+        """Linux: Settings -> Game launcher, in a panel of its own over
+        Settings. Its fields do not fit in Settings' left column: with
+        OpenDyslexic they pushed the bottom of that column out of the panel."""
+        if self._settings_overlay is None:
+            return
+        old = getattr(self, "_launcher_overlay", None)
+        if old is not None and old.winfo_exists():
+            return
+        P_BG, P_HDR, P_BDR, P_INP = C_PANEL, C_HDR, C_PANEL_BDR, "#0f0b16"
+        shade = tk.Frame(self._settings_overlay, bg="#0a0a0e")
+        shade.place(x=0, y=0, relwidth=1, relheight=1)
+        self._launcher_overlay = shade
+
+        def close():
+            self._launcher_overlay = None
+            try:
+                shade.destroy()
+            except tk.TclError:
+                pass
+            if self._settings_overlay is not None:
+                self.bind("<Escape>", lambda e: self._close_settings())
+        shade.bind("<Button-1>", lambda e: close())
+        self.bind("<Escape>", lambda e: close())
+
+        panel = tk.Frame(shade, bg=P_BG, highlightthickness=1,
+                         highlightbackground=P_BDR, highlightcolor=P_BDR)
+        hdr = tk.Frame(panel, bg=P_HDR, height=self._px(46))
+        hdr.pack(fill="x")
+        hdr.pack_propagate(False)
+        tk.Label(hdr, text=tr("GAME LAUNCHER"), font=self._font(13, bold=True),
+                 fg=C_PURPLE, bg=P_HDR).pack(side="left", padx=self._px(18))
+        x_btn = tk.Label(hdr, text="✕", font=self._font(12),
+                         fg=C_TEXT_DIM, bg=P_HDR, cursor="hand2")
+        x_btn.pack(side="right", padx=self._px(16))
+        x_btn.bind("<Button-1>", lambda e: close())
+        x_btn.bind("<Enter>",    lambda e: x_btn.configure(fg=C_TEXT))
+        x_btn.bind("<Leave>",    lambda e: x_btn.configure(fg=C_TEXT_DIM))
+        tk.Frame(panel, bg=P_BDR, height=self._px(1)).pack(fill="x")
+        body = tk.Frame(panel, bg=P_BG)
+        body.pack(fill="both", expand=True, padx=self._px(22),
+                  pady=(self._px(8), self._px(18)))
+        self._build_game_launcher_settings(body, P_BG, P_INP, P_BDR)
+
+        # Centred at its natural height, so it grows when an error line
+        # appears under the environment variables instead of clipping it.
+        panel.place(relx=0.5, rely=0.5, anchor="center",
+                    width=min(self._px(560), WIN_W - 2 * self._px(10)))
+
     def _build_game_launcher_settings(self, parent, bg, inp, bdr):
         """Linux: how PLAY starts the Windows game client. Empty fields mean
         automatic (Wine, else UMU); a launch command covers Proton, Lutris,
         Faugus or anything else. Saved as typed."""
-        tk.Label(parent, text=tr("GAME LAUNCHER"),
-                 font=self._font(10, bold=True),
-                 fg=C_GOLD, bg=bg).pack(anchor="w", pady=(self._px(22), 0))
         saved = load_config().get("game_launcher") or {}
 
         def field(key, label, tip):
             tk.Label(parent, text=label, font=self._font(9), fg=C_TEXT,
-                     bg=bg).pack(anchor="w", pady=(self._px(8), 0))
+                     bg=bg).pack(anchor="w", pady=(self._px(10), 0))
             var = tk.StringVar(value=saved.get(key, ""))
             ent = tk.Entry(parent, textvariable=var, bg=inp, fg=C_TEXT,
                            insertbackground=C_GOLD, relief="flat",
@@ -8273,8 +8350,54 @@ class EqUpdaterApp(tk.Tk):
               tr("Optional. The Wine prefix the game runs in; passed as "
                  "WINEPREFIX."))
         runner = tk.Label(parent, text="", font=self._font(9), fg=C_TEXT_DIM,
-                          bg=bg, justify="left", wraplength=self._px(360))
+                          bg=bg, justify="left", wraplength=self._px(500))
         runner.pack(anchor="w", pady=(self._px(4), 0))
+
+        # Environment variables for the game only: one NAME=value per line,
+        # saved as typed. A line that cannot be used is named here at once,
+        # and PLAY refuses to start without it rather than dropping it.
+        tk.Label(parent, text=tr("Environment variables"), font=self._font(9),
+                 fg=C_TEXT, bg=bg).pack(anchor="w", pady=(self._px(8), 0))
+        env_box = tk.Text(parent, height=3, width=36, wrap="none", bg=inp,
+                          fg=C_TEXT, insertbackground=C_GOLD, relief="flat",
+                          font=FONT_MONO, highlightthickness=1,
+                          highlightbackground=bdr, highlightcolor=C_GOLD,
+                          undo=True)
+        env_box.insert("1.0", saved.get("env_vars", ""))
+        env_box.edit_modified(False)
+        env_box.pack(anchor="w", fill="x")
+        self._add_tooltip(env_box, tr(
+            "Optional. One NAME=value per line, given only to the game when "
+            "PLAY starts it - for example DXVK_HUD=fps."))
+        env_error = tk.Label(parent, text="", font=self._font(9), fg=C_ERR,
+                             bg=bg, justify="left", wraplength=self._px(500))
+        self._env_vars_box, self._env_vars_error = env_box, env_error
+
+        def show_env_problems(text):
+            _vars, problems = platforms.parse_env_lines(text)
+            try:
+                if problems:
+                    env_error.configure(text=env_problem_text(problems))
+                    env_error.pack(anchor="w", after=env_box,
+                                   pady=(self._px(2), 0))
+                else:
+                    env_error.configure(text="")
+                    env_error.pack_forget()
+            except tk.TclError:
+                pass
+
+        def store_env(_event=None):
+            if not env_box.edit_modified():
+                return
+            env_box.edit_modified(False)
+            text = env_box.get("1.0", "end-1c")
+
+            def merge(c):
+                c.setdefault("game_launcher", {})["env_vars"] = text
+            self._cfg = update_config(merge)
+            show_env_problems(text)
+        env_box.bind("<<Modified>>", store_env)
+        show_env_problems(saved.get("env_vars", ""))
 
         def show_runner():
             launcher = load_config().get("game_launcher") or {}
@@ -8305,6 +8428,7 @@ class EqUpdaterApp(tk.Tk):
 
     def _close_settings(self):
         self.unbind("<Escape>")
+        self._launcher_overlay = None         # destroyed with the overlay
         if self._settings_overlay is not None:
             self._settings_overlay.destroy()
             self._settings_overlay = None
@@ -8935,6 +9059,18 @@ class EqUpdaterApp(tk.Tk):
         # player's launch command, else Wine, else UMU (platforms.launch_plan).
         plan = platforms.launch_plan(client_dir, exe,
                                      load_config().get("game_launcher"))
+        if plan.env_problems:
+            from tkinter import messagebox
+            self._log_line("Not launched: the game launcher's environment "
+                           "variables have lines that cannot be used.\n",
+                           "err")
+            messagebox.showerror(
+                tr("Cannot start the game"),
+                tr("Fix the environment variables in Settings → Game "
+                   "launcher:\n\n{problems}",
+                   problems=env_problem_text(plan.env_problems)),
+                parent=self)
+            return
         if not plan.ok:
             from tkinter import messagebox
             self._log_line("No way to run the Windows game client was found "

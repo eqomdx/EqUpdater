@@ -138,6 +138,106 @@ class TestAppStarts(unittest.TestCase):
         self.app._refresh_update_all_btn()
         self.assertFalse(self.app._all_ready)
 
+    def test_game_environment_variables_are_saved_and_checked(self):
+        """Settings -> Game launcher -> Environment variables: saved as typed,
+        shown again next time, and a bad line named at once."""
+        tk, m = self.app_mod.tk, self.app_mod
+
+        def build():
+            frame = tk.Frame(self.app)
+            frame.pack()
+            self.app._build_game_launcher_settings(frame, "#000000",
+                                                   "#111111", "#222222")
+            self.app.update()
+            return frame, self.app._env_vars_box, self.app._env_vars_error
+
+        def type_into(box, text):
+            box.delete("1.0", "end")
+            box.insert("1.0", text)
+            self.app.update()
+
+        frame, box, error = build()
+        try:
+            self.assertFalse(error.winfo_ismapped())
+            text = "DXVK_HUD=fps\nWINEDLLOVERRIDES=d3d9=n,b\nbroken line"
+            type_into(box, text)
+            self.assertEqual(m.load_config()["game_launcher"]["env_vars"], text)
+            self.assertTrue(error.winfo_ismapped())
+            self.assertIn("3", error.cget("text"))
+            frame.destroy()
+
+            frame, box, error = build()          # Settings opened again
+            self.assertEqual(box.get("1.0", "end-1c"), text)
+            self.assertTrue(error.winfo_ismapped())
+            type_into(box, "DXVK_HUD=fps\n")
+            self.assertFalse(error.winfo_ismapped())
+            self.assertEqual(m.load_config()["game_launcher"]["env_vars"],
+                             "DXVK_HUD=fps\n")
+            type_into(box, "")
+            self.assertEqual(m.load_config()["game_launcher"]["env_vars"], "")
+        finally:
+            frame.destroy()
+            m.update_config(lambda c: c.pop("game_launcher", None))
+
+    def test_linux_settings_fit_and_open_the_game_launcher(self):
+        """On Linux the launcher's fields used to sit in Settings' left
+        column and, in OpenDyslexic, pushed its last row (SUPPORT ME) out of
+        the panel. They are in a panel of their own, opened from Settings."""
+        from unittest import mock
+        app, m = self.app, self.app_mod
+
+        def find(root, text):
+            if getattr(root, "cget", None) and isinstance(root, m.tk.Label) \
+                    and root.cget("text") == text:
+                return root
+            for child in root.winfo_children():
+                hit = find(child, text)
+                if hit is not None:
+                    return hit
+            return None
+
+        def bottom(w):
+            return w.winfo_rooty() + w.winfo_height()
+
+        with mock.patch.object(m.platforms, "WINDOWS", False), \
+                mock.patch.object(m.platforms, "LINUX", True):
+            try:
+                for choice in ("arial", "friz", "opendyslexic"):
+                    with self.subTest(font=choice):
+                        app._font_choice_var.set(choice)
+                        app._change_font_choice()
+                        app._open_settings()
+                        app.update()
+                        ov = app._settings_overlay
+                        panel = ov.winfo_children()[0]
+                        last = find(ov, m.tr("Buy Me a Coffee"))
+                        self.assertIsNotNone(last)
+                        self.assertLessEqual(bottom(last), bottom(panel))
+                        self.assertIsNone(find(ov, m.tr("Environment variables")))
+
+                        item = find(ov, m.tr("Game launcher…"))
+                        item.event_generate("<Button-1>")
+                        app.update()
+                        shade = app._launcher_overlay
+                        self.assertIsNotNone(shade)
+                        box = find(shade, m.tr("Environment variables"))
+                        self.assertIsNotNone(box)
+                        launcher = shade.winfo_children()[0]
+                        self.assertLessEqual(bottom(app._env_vars_box),
+                                             bottom(launcher))
+                        app.event_generate("<Escape>")    # closes the panel...
+                        app.update()
+                        self.assertIsNone(app._launcher_overlay)
+                        self.assertIsNotNone(app._settings_overlay)  # ...only
+                        app._open_game_launcher()
+                        app._close_settings()
+                        self.assertIsNone(app._launcher_overlay)
+            finally:
+                if app._settings_overlay is not None:
+                    app._close_settings()
+                app._font_choice_var.set("arial")
+                app._change_font_choice()
+
 
 @unittest.skipUnless(HAVE_TK, "no display")
 class TestPlannerReachesTheUI(unittest.TestCase):

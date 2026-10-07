@@ -22,6 +22,7 @@ patched and launched as that file; nothing here changes it.
 from __future__ import annotations
 
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -335,10 +336,44 @@ class LaunchPlan:
     cwd: str = ""
     env: dict | None = None
     runner: str = ""
+    #: (line, reason) for each unusable line in the player's environment
+    #: variables (parse_env_lines). Any at all and the game is not started.
+    env_problems: list = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
-        return bool(self.argv)
+        return bool(self.argv) and not self.env_problems
+
+
+#: What an environment variable may be called: a letter or underscore, then
+#: letters, digits and underscores.
+_ENV_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def parse_env_lines(text) -> tuple:
+    """(variables, problems) from the Game launcher's environment variables.
+
+    One ``NAME=value`` per line. Blank lines are skipped; the name is
+    trimmed; the value is everything after the first ``=`` exactly as typed,
+    spaces and further ``=`` included. Each problem is (line number, reason)
+    with reason "no_equals", "bad_name" or "nul" -- every unusable line is
+    reported, never dropped quietly. Nothing here is run or expanded: the
+    values are strings handed to the game's environment."""
+    variables, problems = {}, []
+    for number, line in enumerate((text or "").splitlines(), start=1):
+        if not line.strip():
+            continue
+        name, eq, value = line.partition("=")
+        name = name.strip()
+        if not eq:
+            problems.append((number, "no_equals"))
+        elif not _ENV_NAME.match(name):
+            problems.append((number, "bad_name"))
+        elif "\0" in value:
+            problems.append((number, "nul"))
+        else:
+            variables[name] = value
+    return variables, problems
 
 
 def detect_runner(which=shutil.which) -> tuple:
@@ -368,15 +403,29 @@ def launch_plan(client_dir: str, exe: str, settings: dict | None = None,
          folder; with neither, the path is added at the end;
       2. Wine, then UMU, from PATH (detect_runner);
       3. nothing -- the plan is not ok, and PLAY says what is missing.
-    A Wine prefix from Settings is passed as WINEPREFIX to all of them."""
+    A Wine prefix from Settings is passed as WINEPREFIX to all of them.
+
+    The player's environment variables (Settings -> Game launcher, one
+    NAME=value per line) are added on every platform, to a copy of this
+    process's environment that only the game receives; they are applied
+    last, so a line there wins. A line that cannot be used stops the launch
+    (``env_problems``) rather than starting the game without it."""
     settings = settings or {}
+    extra, problems = parse_env_lines(settings.get("env_vars"))
+    if problems:
+        return LaunchPlan(env_problems=problems)
     if WINDOWS:
-        return LaunchPlan([exe], client_dir, None, "windows")
+        env = None
+        if extra:
+            env = child_env()
+            env.update(extra)
+        return LaunchPlan([exe], client_dir, env, "windows")
 
     env = child_env()
     prefix = (settings.get("wine_prefix") or "").strip()
     if prefix:
         env["WINEPREFIX"] = os.path.expanduser(prefix)
+    env.update(extra)
 
     command = (settings.get("launch_command") or "").strip()
     if command:

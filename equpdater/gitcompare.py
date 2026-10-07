@@ -152,6 +152,51 @@ def repo_ref(git_url: str, hosts=GIT_HOSTS) -> RepoRef | None:
     return RepoRef(host, segs[0], segs[1], None)
 
 
+#: Other names OctoWoW's forge answers to. ``git.octowow.st/git/...``
+#: redirects to the same path on ``octowow.st`` and serves the same
+#: repositories (checked 2026-10-07: identical archive, same commit); the
+#: launcher catalogue lists addons there. Only the ``/git/`` path is mapped.
+_OCTOWOW_GIT_NAMES = ("octowow.st", "www.octowow.st", "git.octowow.st")
+_OCTOWOW_GIT_PATH = re.compile(r"^/git/([^/]+)/([^/]+?)(?:\.git)?/?$",
+                               re.IGNORECASE)
+
+
+def canonical_repo_url(text: str) -> str:
+    """The canonical URL for an OctoWoW Git repository written another way,
+    or ``text`` unchanged.
+
+    Recognised, and only these: ``https://`` or no scheme at all, on
+    ``octowow.st`` / ``www.octowow.st`` / ``git.octowow.st`` exactly, with
+    the path ``/git/<owner>/<repo>[.git][/]``. Those become
+    ``https://octowow.st/git/<owner>/<repo>``. Everything else -- another
+    host, a host that merely starts with ``octowow.st``, a port, a login, a
+    query, a page inside the repository -- comes back as it was, so it is
+    accepted or refused exactly as it would have been without this."""
+    if not isinstance(text, str):
+        return text
+    url = text.strip()
+    if "://" not in url:
+        low = url.lower()
+        if not any(low.startswith(name + "/") for name in _OCTOWOW_GIT_NAMES):
+            return text
+        url = "https://" + url
+    try:
+        parts = urllib.parse.urlsplit(url)
+        port = parts.port
+    except ValueError:
+        return text
+    if (parts.scheme.lower() != "https" or port is not None
+            or parts.username is not None or parts.password is not None
+            or parts.query or parts.fragment
+            or (parts.hostname or "") not in _OCTOWOW_GIT_NAMES
+            or parts.netloc.lower() != parts.hostname):
+        return text
+    m = _OCTOWOW_GIT_PATH.match(parts.path)
+    if not m or not (_name_ok(m.group(1)) and _name_ok(m.group(2))):
+        return text
+    return f"https://octowow.st/git/{m.group(1)}/{m.group(2)}"
+
+
 #: What a git host allows in an owner or repository name. Anything else --
 #: a space, an invisible character pasted from a web page -- is not a
 #: repository, and must not become an addon's folder name.
