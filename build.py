@@ -203,7 +203,15 @@ def main() -> None:
            # without it a build verifies TLS against whatever the host
            # offers -- an empty store under Wine, a missing path on another
            # Linux distribution -- and fails certificate checks.
-           "--collect-data", "certifi"]
+           "--collect-data", "certifi",
+           # Pillow's _imagingtk C extension imports PIL._tkinter_finder at
+           # run time (PyImport_ImportModule, on Linux only, to dlopen the
+           # Tk it should attach to). PyInstaller sees no Python import of
+           # it, and its PIL hook excludes tkinter besides, so it is left
+           # out and every ImageTk.PhotoImage -- the window background
+           # first -- fails: "No module named 'PIL._tkinter_finder'".
+           # Harmless on Windows. Checked by --self-test --gui.
+           "--hidden-import", "PIL._tkinter_finder"]
     if not WINDOWS:
         cmd.append("--strip")
 

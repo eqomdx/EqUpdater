@@ -12,7 +12,9 @@
 #
 # Every artifact runs its own --self-test before it is published: it must
 # start without Python, carry its CA bundle with verification on, its
-# fonts and artwork, aria2c on Linux, and make a real HTTPS request.
+# fonts and artwork, aria2c on Linux, and make a real HTTPS request. On
+# Linux it also opens the real window under Xvfb (--gui), which draws the
+# background through Pillow's ImageTk bridge.
 name: release
 
 on:
@@ -121,7 +123,10 @@ jobs:
           # Run as a player would, from outside the source tree.
           cd "$RUNNER_TEMP"
           code=0
-          "$GITHUB_WORKSPACE/$APPIMAGE" --self-test="$RUNNER_TEMP/self-test.json" --network || code=$?
+          # --gui opens and closes the real main window under Xvfb, so the
+          # background goes through ImageTk.PhotoImage as on a player's
+          # first launch (it caught the missing PIL._tkinter_finder).
+          xvfb-run -a "$GITHUB_WORKSPACE/$APPIMAGE" --self-test="$RUNNER_TEMP/self-test.json" --network --gui || code=$?
           cat "$RUNNER_TEMP/self-test.json" || true
           exit $code
 

@@ -13,13 +13,48 @@ So the frozen build starts here instead, with an absolute import.
 it writes what the build carries (version, CA bundles and TLS settings,
 aria2c, fonts, artwork) to <file> as JSON and exits 0 when all of it is
 there. ``--network`` adds a real HTTPS request through the app's own
-verifying opener. CI runs it on every release artifact.
+verifying opener. ``--gui`` (needs a display; CI uses Xvfb) also builds the
+main window -- which renders the background through ImageTk.PhotoImage --
+and closes it again, so a build missing Pillow's Tk bridge fails here and
+not on a player's screen. CI runs it on every release artifact.
 """
 
 import sys
 
 
-def self_test(out_path: str, network: bool) -> int:
+def _gui_check(report: dict, problems: list) -> None:
+    """Build the real main window and check its background is an ImageTk
+    PhotoImage, exactly as a player's first launch draws it."""
+    import os
+    import tkinter as tk
+    os.environ["EQUPDATER_NO_LANGUAGE_PROMPT"] = "1"
+    try:
+        from PIL import ImageTk
+        from equpdater.app import EqUpdaterApp
+        win = EqUpdaterApp()
+        try:
+            win.update()
+            photo = getattr(win, "_bg_photo", None)
+            report["gui_background"] = type(photo).__name__
+            if not isinstance(photo, ImageTk.PhotoImage):
+                problems.append("background was not drawn through ImageTk")
+            elif (photo.width(), photo.height()) != win._bg_pil.size:
+                problems.append("background PhotoImage has the wrong size")
+            # The Tk bridge itself, by name: what the frozen build dropped.
+            # Imported by a computed name on purpose: a literal import here
+            # would make PyInstaller bundle the module and hide the bug this
+            # check exists to catch.
+            import importlib
+            importlib.import_module(".".join(("PIL", "_tkinter_finder")))
+            report["gui_tk_bridge"] = True
+        finally:
+            win.destroy()
+    except (Exception, tk.TclError) as e:
+        report["gui_tk_bridge"] = False
+        problems.append(f"GUI start failed: {type(e).__name__}: {e}")
+
+
+def self_test(out_path: str, network: bool, gui: bool = False) -> int:
     import json
     import os
     import platform
@@ -68,6 +103,8 @@ def self_test(out_path: str, network: bool) -> int:
                     problems.append("aria2c does not run")
             except OSError as e:
                 problems.append(f"aria2c does not run: {e}")
+    if gui:
+        _gui_check(report, problems)
     if network:
         try:
             with app.secure_urlopen("https://github.com/", timeout=20) as r:
@@ -82,7 +119,8 @@ def self_test(out_path: str, network: bool) -> int:
 def main() -> None:
     for arg in sys.argv[1:]:
         if arg.startswith("--self-test="):
-            sys.exit(self_test(arg.split("=", 1)[1], "--network" in sys.argv))
+            sys.exit(self_test(arg.split("=", 1)[1], "--network" in sys.argv,
+                               "--gui" in sys.argv))
 
     from equpdater.app import EqUpdaterApp, _enable_dpi_awareness
     _enable_dpi_awareness()
