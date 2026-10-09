@@ -432,14 +432,14 @@ STRINGS = {
         'Doutor de login…',
     'Login configuration':
         'Configuração de login',
-    'Login server did not answer ({host}:{port}, timed out)':
-        'O servidor de login não respondeu ({host}:{port}, tempo esgotado)',
+    'Login server did not answer a test connection ({host}:{port}, timed out). This alone does not mean login will fail: the server may ignore probes or be busy':
+        'O servidor de login não respondeu a uma conexão de teste ({host}:{port}, tempo esgotado). Isso por si só não significa que o login vai falhar: o servidor pode ignorar testes ou estar ocupado',
     'Login server not tested: {host} does not resolve':
         'Servidor de login não testado: {host} não resolve',
     'Login server reachable ({host}:{port})':
         'Servidor de login acessível ({host}:{port})',
-    'Login server refused or unreachable ({host}:{port})':
-        'O servidor de login recusou ou está inacessível ({host}:{port})',
+    'Login server refused a test connection ({host}:{port}). This alone does not mean login will fail: the server may ignore probes or be busy':
+        'O servidor de login recusou uma conexão de teste ({host}:{port}). Isso por si só não significa que o login vai falhar: o servidor pode ignorar testes ou estar ocupado',
     'Network checks failed: {error}':
         'As verificações de rede falharam: {error}',
     'No Config.wtf yet; the game creates it':

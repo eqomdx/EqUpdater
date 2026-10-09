@@ -432,14 +432,14 @@ STRINGS = {
         '登录诊断…',
     'Login configuration':
         '登录配置',
-    'Login server did not answer ({host}:{port}, timed out)':
-        '登录服务器无响应（{host}:{port}，超时）',
+    'Login server did not answer a test connection ({host}:{port}, timed out). This alone does not mean login will fail: the server may ignore probes or be busy':
+        '登录服务器未响应测试连接（{host}:{port}，超时）。仅凭这一点并不意味着无法登录：服务器可能会忽略探测或正忙',
     'Login server not tested: {host} does not resolve':
         '未测试登录服务器：{host} 无法解析',
     'Login server reachable ({host}:{port})':
         '登录服务器可连接（{host}:{port}）',
-    'Login server refused or unreachable ({host}:{port})':
-        '登录服务器拒绝连接或无法访问（{host}:{port}）',
+    'Login server refused a test connection ({host}:{port}). This alone does not mean login will fail: the server may ignore probes or be busy':
+        '登录服务器拒绝了测试连接（{host}:{port}）。仅凭这一点并不意味着无法登录：服务器可能会忽略探测或正忙',
     'Network checks failed: {error}':
         '网络检查失败：{error}',
     'No Config.wtf yet; the game creates it':

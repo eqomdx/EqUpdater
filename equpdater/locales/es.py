@@ -431,14 +431,14 @@ STRINGS = {
         'Doctor de inicio de sesión…',
     'Login configuration':
         'Configuración de inicio de sesión',
-    'Login server did not answer ({host}:{port}, timed out)':
-        'El servidor de inicio de sesión no respondió ({host}:{port}, tiempo agotado)',
+    'Login server did not answer a test connection ({host}:{port}, timed out). This alone does not mean login will fail: the server may ignore probes or be busy':
+        'El servidor de inicio de sesión no respondió a una conexión de prueba ({host}:{port}, tiempo agotado). Esto por sí solo no significa que el inicio de sesión vaya a fallar: el servidor puede ignorar las pruebas o estar ocupado',
     'Login server not tested: {host} does not resolve':
         'Servidor de inicio de sesión no comprobado: {host} no se resuelve',
     'Login server reachable ({host}:{port})':
         'Servidor de inicio de sesión accesible ({host}:{port})',
-    'Login server refused or unreachable ({host}:{port})':
-        'El servidor de inicio de sesión rechazó la conexión o no es accesible ({host}:{port})',
+    'Login server refused a test connection ({host}:{port}). This alone does not mean login will fail: the server may ignore probes or be busy':
+        'El servidor de inicio de sesión rechazó una conexión de prueba ({host}:{port}). Esto por sí solo no significa que el inicio de sesión vaya a fallar: el servidor puede ignorar las pruebas o estar ocupado',
     'Network checks failed: {error}':
         'Las comprobaciones de red fallaron: {error}',
     'No Config.wtf yet; the game creates it':

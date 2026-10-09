@@ -292,7 +292,7 @@ class TestNetwork(unittest.TestCase):
         connect = mock.Mock()
         checks = self.run_checks(resolve=resolve, connect=connect)
         self.assertTrue(has(checks, ld.FAIL, "does not resolve"))
-        self.assertTrue(has(checks, ld.FAIL, "Login server not tested"))
+        self.assertTrue(has(checks, ld.WARN, "Login server not tested"))
         connect.assert_not_called()
 
     def test_dns_timeout_does_not_hang(self):
@@ -302,15 +302,27 @@ class TestNetwork(unittest.TestCase):
         self.assertLess(time.monotonic() - start, 1.5)
         self.assertTrue(has(checks, ld.FAIL, "timed out"))
 
-    def test_login_port_timeout_and_refusal(self):
+    def test_login_port_timeout_and_refusal_are_only_informational(self):
+        """A server under protection may drop probes from a client that
+        would still log in: a failed 3724 probe is a warning, never a
+        failure, and does not hold back the "no local problem" summary."""
         def timeout(h, p, t):
             raise socket.timeout("slow")
 
         def refused(h, p, t):
             raise ConnectionRefusedError()
-        self.assertTrue(has(self.run_checks(connect=timeout), ld.FAIL, "did not answer"))
-        self.assertTrue(has(self.run_checks(connect=refused), ld.FAIL,
-                            "refused or unreachable"))
+        for connect, fragment in ((timeout, "did not answer"),
+                                  (refused, "refused a test connection")):
+            with self.subTest(fragment=fragment):
+                checks = self.run_checks(connect=connect)
+                probe = [c for c in checks if "Login server" in c.message]
+                self.assertEqual(len(probe), 1)
+                self.assertEqual(probe[0].state, ld.WARN)
+                self.assertTrue(probe[0].informational)
+                self.assertIn(fragment, probe[0].message)
+                self.assertIn("does not mean login will fail", probe[0].message)
+                self.assertFalse(any(c.state == ld.FAIL for c in checks))
+                self.assertEqual(ld.summary(checks), ld.NO_LOCAL_PROBLEM)
 
     def test_http_errors(self):
         def fetch(url, t):
@@ -333,6 +345,11 @@ class TestSummary(unittest.TestCase):
         self.assertIn("server-side or account-specific", text)
         self.assertIn("Priority Sign In may provide a different login route", text)
         self.assertNotIn("banned", text.lower())
+
+    def test_an_informational_warning_keeps_the_summary(self):
+        probe = ld.Check(ld.WARN, "probe", {}, "network", informational=True)
+        self.assertEqual(ld.summary([ld.Check(ld.PASS, "x", {}), probe]),
+                         ld.NO_LOCAL_PROBLEM)
 
     def test_no_summary_when_something_is_wrong(self):
         for state in (ld.WARN, ld.FAIL):

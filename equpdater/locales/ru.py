@@ -431,14 +431,14 @@ STRINGS = {
         'Доктор входа…',
     'Login configuration':
         'Настройки входа',
-    'Login server did not answer ({host}:{port}, timed out)':
-        'Сервер входа не ответил ({host}:{port}, время ожидания истекло)',
+    'Login server did not answer a test connection ({host}:{port}, timed out). This alone does not mean login will fail: the server may ignore probes or be busy':
+        'Сервер входа не ответил на тестовое подключение ({host}:{port}, время ожидания истекло). Само по себе это не значит, что войти не получится: сервер может игнорировать проверки или быть занят',
     'Login server not tested: {host} does not resolve':
         'Сервер входа не проверен: {host} не разрешается',
     'Login server reachable ({host}:{port})':
         'Сервер входа доступен ({host}:{port})',
-    'Login server refused or unreachable ({host}:{port})':
-        'Сервер входа отказал или недоступен ({host}:{port})',
+    'Login server refused a test connection ({host}:{port}). This alone does not mean login will fail: the server may ignore probes or be busy':
+        'Сервер входа отклонил тестовое подключение ({host}:{port}). Само по себе это не значит, что войти не получится: сервер может игнорировать проверки или быть занят',
     'Network checks failed: {error}':
         'Сетевые проверки не удались: {error}',
     'No Config.wtf yet; the game creates it':

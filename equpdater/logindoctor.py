@@ -7,6 +7,10 @@ never reads accounts, launcher sign-ins, tokens or cookies, and never
 claims to know why a server refused someone: a healthy result says so and
 points at the server or the account instead.
 
+The login-port probe (TCP to 3724) is informational: a server under
+protection may drop probes from a client that would still log in, so a
+failed probe is a warning and never a local-login failure.
+
 The checks are plain functions over a client folder and injectable network
 calls, so they are tested without a display or a network. The window is in
 app.py (EqUpdaterApp._open_login_doctor).
@@ -79,6 +83,10 @@ class Check:
     message: str
     values: dict = field(default_factory=dict)
     group: str = "client"
+    #: A signal worth showing that does not by itself mean something on
+    #: this computer is wrong (the login-port probe); it never holds back
+    #: the "no local login problem" summary.
+    informational: bool = False
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -340,14 +348,18 @@ def network_checks(fetch, resolve=_resolve, connect=_connect,
             out.append(Check(PASS, N_("Login server reachable ({host}:{port})"),
                              v, "network"))
         except socket.timeout:
-            out.append(Check(FAIL, N_("Login server did not answer ({host}:{port}, "
-                                      "timed out)"), v, "network"))
+            out.append(Check(WARN, N_("Login server did not answer a test connection "
+                                      "({host}:{port}, timed out). This alone does not "
+                                      "mean login will fail: the server may ignore "
+                                      "probes or be busy"), v, "network", True))
         except OSError:
-            out.append(Check(FAIL, N_("Login server refused or unreachable "
-                                      "({host}:{port})"), v, "network"))
+            out.append(Check(WARN, N_("Login server refused a test connection "
+                                      "({host}:{port}). This alone does not mean "
+                                      "login will fail: the server may ignore probes "
+                                      "or be busy"), v, "network", True))
     else:
-        out.append(Check(FAIL, N_("Login server not tested: {host} does not "
-                                  "resolve"), v, "network"))
+        out.append(Check(WARN, N_("Login server not tested: {host} does not "
+                                  "resolve"), v, "network", True))
 
     for url, label in HTTPS_CHECKS:
         try:
@@ -360,8 +372,9 @@ def network_checks(fetch, resolve=_resolve, connect=_connect,
 
 
 def summary(checks: list) -> str | None:
-    """The closing message when nothing local is wrong, else None."""
-    if any(c.state != PASS for c in checks):
+    """The closing message when nothing local is wrong, else None.
+    Informational signals (the login-port probe) do not count."""
+    if any(c.state != PASS and not c.informational for c in checks):
         return None
     return NO_LOCAL_PROBLEM
 
