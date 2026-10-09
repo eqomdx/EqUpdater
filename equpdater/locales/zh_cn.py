@@ -422,8 +422,8 @@ STRINGS = {
         '无法从 WoW.exe 读取客户端版本',
     'Could not repair: {error}':
         '无法修复：{error}',
-    "EqUpdater cannot currently use OctoLauncher's Priority Sign In directly. If your local configuration is healthy but login still fails, try the official OctoLauncher.\n\nWarning: the official launcher may modify client files that EqUpdater manages.":
-        'EqUpdater 目前无法直接使用 OctoLauncher 的 Priority Sign In（优先登录）。如果本地配置正常但仍无法登录，请尝试官方 OctoLauncher。\n\n警告：官方启动器可能会修改由 EqUpdater 管理的客户端文件。',
+    "If login stops at “Authenticating”:\n• Turn off any VPN or proxy: OctoWoW's login can hang behind one.\n• Sign in once with Priority Sign In in the official OctoLauncher, then try PLAY in EqUpdater again.\n\nEqUpdater cannot currently use OctoLauncher's Priority Sign In directly. Warning: the official launcher may modify client files that EqUpdater manages.":
+        '如果登录卡在“正在验证”：\n• 关闭所有 VPN 或代理：使用它们时 OctoWoW 的登录可能会卡住。\n• 先在官方 OctoLauncher 中用 Priority Sign In（优先登录）登录一次，然后再在 EqUpdater 中点击开始游戏。\n\nEqUpdater 目前无法直接使用 OctoLauncher 的 Priority Sign In。警告：官方启动器可能会修改由 EqUpdater 管理的客户端文件。',
     'Game client':
         '游戏客户端',
     'LOGIN DOCTOR':

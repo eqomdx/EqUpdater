@@ -366,6 +366,14 @@ class TestSummary(unittest.TestCase):
                       ld.PRIORITY_NOTE)
         self.assertIn("may modify client files", ld.PRIORITY_NOTE)
 
+    def test_stuck_at_authenticating_advice(self):
+        """A tester's login hung at Authenticating behind a VPN, in the
+        official launcher too; with the VPN off, Priority Sign In worked."""
+        self.assertIn("Authenticating", ld.PRIORITY_NOTE)
+        self.assertIn("Turn off any VPN or proxy", ld.PRIORITY_NOTE)
+        self.assertIn("Sign in once with Priority Sign In in the official "
+                      "OctoLauncher", ld.PRIORITY_NOTE)
+
 
 try:
     import tkinter  # noqa: F401
