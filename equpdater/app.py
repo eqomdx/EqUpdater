@@ -54,8 +54,9 @@ from .hashing import files_hash, folder_hash
 from .planner import (Component, plan, skipped_notably,
                       updatable)
 from .states import Action, Plan, Status
-from .news import (ANNOUNCEMENTS_FORUM_ID, CHANGELOG_FORUM_ID,
-                   fetch_latest_post, fetch_topic_list, is_challenge_page)
+from .news import (ANNOUNCEMENTS_TOPIC_ID, CHANGELOG_FORUM_ID,
+                   fetch_newest_post_in_topic, fetch_topic_list,
+                   is_challenge_page)
 from .ui import (AnimatedBackground, FontManager, GradientButton, prepare_fonts,
                  GradientPalette, apply_edge_fades, cover_background,
                  BackdropCanvas, blend, edge_fade_layers, photo_image,
@@ -3386,11 +3387,11 @@ def fetch_patch_notes() -> list:
 
 
 def fetch_featured_post() -> dict:
-    """The newest announcement, by the date it was posted -- not the pinned
-    topic at the top of the forum, and not the latest reply -- with its
-    opening post. Two requests: the listing and that topic."""
-    return fetch_latest_post(ANNOUNCEMENTS_FORUM_ID, opener=_news_open,
-                             user_agent=UA, timeout=NEWS_TIMEOUT).to_item()
+    """The newest post in OctoWoW's announcements thread (topic 2848): its
+    own subject, author, date, text and link. One request."""
+    return fetch_newest_post_in_topic(
+        ANNOUNCEMENTS_TOPIC_ID, opener=_news_open, user_agent=UA,
+        timeout=NEWS_TIMEOUT).to_item()
 
 
 def _news_error(section: str, exc: Exception) -> str:
@@ -4416,7 +4417,7 @@ class EqUpdaterApp(tk.Tk):
         self._load_patch_notes()
 
     def _load_featured(self):
-        """Read the Announcements forum once, in the background. A click on
+        """Read the announcements thread once, in the background. A click on
         refresh while a read is already running does not start a second."""
         if getattr(self, "_feat_loading", False):
             return

@@ -334,5 +334,77 @@ class TestFetch(unittest.TestCase):
         self.assertFalse(hasattr(news, "OCTONEWS_URL"))
 
 
+def thread_page_newest_first():
+    """Topic 2848 as phpBB serves it with sk=t&sd=d: the newest post first,
+    a reply ("Re: ...") by a staff member, then older posts."""
+    def post(pid, subject, author, when, body):
+        return f'''
+    <div id="p{pid}" class="post has-profile bg1">
+      <div class="inner"><div class="postbody"><div id="post_content{pid}">
+        <h3><a href="./viewtopic.php?p={pid}&amp;{SID}#p{pid}">{subject}</a></h3>
+        <p class="author"><span class="responsive-hide">by <strong>
+          <a href="./memberlist.php?u=2" class="username-coloured">{author}</a></strong>
+          &raquo; </span><time datetime="{when}">x</time></p>
+        <div class="content">{body}</div>
+        <div id="sig{pid}" class="signature">sig</div>
+      </div></div></div>
+    </div>'''
+    return ("<!DOCTYPE html><html><body id=\"phpbb\">"
+            "<h2 class=\"topic-title\"><a href=\"#\">Announcements</a></h2>"
+            + post(31010, "Re: Announcements", "Kestrel",
+                   "2026-10-09T12:00:00+00:00", "Realm restart at 18:00.<br>Thanks!")
+            + post(30500, "Re: Announcements", "Octo",
+                   "2026-10-01T09:00:00+00:00", "Older news.")
+            + post(28480, "Announcements", "Octo",
+                   "2026-06-01T09:00:00+00:00", "Thread opened.")
+            + "</body></html>")
+
+
+class TestAnnouncementsThread(unittest.TestCase):
+    """Announcements are the newest post in topic 2848."""
+
+    def test_newest_post_with_its_own_details(self):
+        site = FakeSite({"viewtopic.php?t=2848": thread_page_newest_first()})
+        item = news.fetch_newest_post_in_topic(2848, **kw(site)).to_item()
+        self.assertEqual(item["title"], "Announcements")      # "Re: " dropped
+        self.assertEqual(item["author"], "Kestrel")
+        self.assertEqual(item["date"], "2026-10-09T12:00:00+00:00")
+        self.assertEqual(item["body"], "Realm restart at 18:00.\nThanks!")
+        self.assertNotIn("sig", item["body"])
+        self.assertEqual(item["url"],
+                         "https://octowow.st/forum/viewtopic.php?p=31010#p31010")
+
+    def test_one_request_sorted_newest_first(self):
+        site = FakeSite({"viewtopic.php?t=2848": thread_page_newest_first()})
+        news.fetch_newest_post_in_topic(2848, **kw(site))
+        self.assertEqual(site.asked, [
+            "https://octowow.st/forum/viewtopic.php?t=2848&sk=t&sd=d"])
+        self.assertEqual(news.ANNOUNCEMENTS_TOPIC_ID, 2848)
+
+    def test_challenge_is_blocked_not_content(self):
+        site = FakeSite({"viewtopic.php?t=2848": CHALLENGE})
+        with self.assertRaises(news.ForumBlockedError) as cm:
+            news.fetch_newest_post_in_topic(2848, **kw(site))
+        self.assertEqual(cm.exception.stage, "topic 2848")
+
+    def test_a_page_with_no_post_is_an_error(self):
+        site = FakeSite({"viewtopic.php?t=2848": "<html><body>gone</body></html>"})
+        with self.assertRaises(news.ForumError) as cm:
+            news.fetch_newest_post_in_topic(2848, **kw(site))
+        self.assertEqual(cm.exception.stage, "topic 2848 parse")
+
+    def test_network_errors_name_the_stage(self):
+        with self.assertRaises(news.ForumError) as cm:
+            news.fetch_newest_post_in_topic(2848, **kw(FakeSite({})))
+        self.assertEqual(cm.exception.stage, "topic 2848")
+
+    def test_a_topic_page_still_yields_its_opening_post(self):
+        """parse_first_post is unchanged by the subject/id capture."""
+        page = topic_page(2600, "2026-09-23", PATCH_BODY)
+        author, _created, content = news.parse_first_post(page)
+        self.assertEqual(author, "Kestrel")
+        self.assertIn("Fixed Onyxia breath.", content)
+
+
 if __name__ == "__main__":
     unittest.main()

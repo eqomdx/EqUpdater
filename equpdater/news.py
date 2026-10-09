@@ -2,8 +2,15 @@
 
 Both come straight from the public phpBB forum:
 
-    Announcements  forum 2   https://octowow.st/forum/viewforum.php?f=2
-    Changelog      forum 4   https://octowow.st/forum/viewforum.php?f=4
+    Announcements  topic 2848  https://octowow.st/forum/viewtopic.php?t=2848
+    Changelog      forum 4     https://octowow.st/forum/viewforum.php?f=4
+
+**Announcements** are OctoWoW's announcements thread: staff post each
+announcement there as a new post, so the panel shows the thread's *newest*
+post. ``fetch_newest_post_in_topic`` asks phpBB for the topic sorted
+newest-first (``sk=t&sd=d``) and reads the first post on that page: one
+request. The opening post of a forum-2 topic (``fetch_latest_post``) is
+still available but no longer what the panel shows.
 
 Two steps, as a person reading the forum would take them:
 
@@ -16,8 +23,7 @@ Two steps, as a person reading the forum would take them:
 2. ``fetch_first_post`` opens a topic and returns its first post -- the
    announcement itself -- never the replies beneath it.
 
-The Announcements panel is ``fetch_latest_post(2)``: one listing, one topic
-page. The Changelog list is ``fetch_topic_list(4)``: one listing, nothing else.
+The Changelog list is ``fetch_topic_list(4)``: one listing, nothing else.
 
 The approach follows OctoBot's ``octotracker/announcements.py``: ``a.topictitle``
 links, the topic id from ``t=``, the first ``.post``'s ``.content`` with quotes
@@ -54,6 +60,8 @@ from .i18n import N_
 
 BASE = "https://octowow.st/forum/"
 ANNOUNCEMENTS_FORUM_ID = 2
+#: OctoWoW's announcements thread; the panel shows its newest post.
+ANNOUNCEMENTS_TOPIC_ID = 2848
 CHANGELOG_FORUM_ID = 4
 
 _HTML_ACCEPT = "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5"
@@ -127,6 +135,17 @@ def topic_url(topic_id: int, base: str = BASE) -> str:
     """The canonical address of a topic: no ``sid``, no forum id, page one,
     so its first post is the topic's opening post."""
     return f"{base}viewtopic.php?t={int(topic_id)}"
+
+
+def newest_first_topic_url(topic_id: int, base: str = BASE) -> str:
+    """A topic's first page with its posts sorted by time, newest first:
+    the first post on it is the topic's latest."""
+    return f"{base}viewtopic.php?t={int(topic_id)}&sk=t&sd=d"
+
+
+def post_url(post_id: int, base: str = BASE) -> str:
+    """The canonical address of one post, wherever it sits in its topic."""
+    return f"{base}viewtopic.php?p={int(post_id)}#p{int(post_id)}"
 
 
 def topic_id_from_href(href: str, base: str = BASE) -> int | None:
@@ -363,6 +382,9 @@ class _FirstPostParser(HTMLParser):
         self.time: str | None = None
         self.parts: list[str] = []
         self.found = False
+        self.post_id: int | None = None
+        self.subject: str | None = None
+        self._in_subject = False
         self._post_depth = 0       # div depth inside the first post
         self._done = False
         self._author_depth = 0     # inside p.author
@@ -381,6 +403,7 @@ class _FirstPostParser(HTMLParser):
                     and re.fullmatch(r"p\d+", a.get("id") or "")):
                 self._post_depth = 1
                 self.found = True
+                self.post_id = int(a["id"][1:])
             return
         if tag == "div":
             self._post_depth += 1
@@ -405,7 +428,10 @@ class _FirstPostParser(HTMLParser):
                 self.parts.append(a["alt"])
             return
 
-        if tag == "p" and "author" in cls:
+        if tag == "h3" and self.subject is None:
+            self._in_subject = True
+            self.subject = ""
+        elif tag == "p" and "author" in cls:
             self._author_depth = 1
         elif self._author_depth:
             if tag == "p":
@@ -429,6 +455,8 @@ class _FirstPostParser(HTMLParser):
             return
         if self._content_depth:
             self.parts.append(data)
+        elif self._in_subject:
+            self.subject += data
         elif self._in_user:
             self.author += data
 
@@ -446,6 +474,8 @@ class _FirstPostParser(HTMLParser):
                 self.parts.append("\n")
             if tag == "div":
                 self._content_depth -= 1
+        if tag == "h3":
+            self._in_subject = False
         if self._author_depth:
             if tag == "a":
                 self._in_user = False
@@ -558,3 +588,34 @@ def fetch_topic_list(forum_id: int, limit: int, *, opener, user_agent: str,
     """The ``limit`` newest-started topics of a forum. One request."""
     return fetch_forum_topics(forum_id, opener=opener, user_agent=user_agent,
                               timeout=timeout)[:max(1, int(limit))]
+
+
+def parse_newest_post(html: str) -> tuple | None:
+    """(post id, subject, author, created, content) of the first post on a
+    topic page sorted newest-first, or None if the page has no post."""
+    p = _FirstPostParser()
+    p.feed(html or "")
+    p.close()
+    if not p.found:
+        return None
+    subject = " ".join((p.subject or "").split())
+    subject = re.sub(r"^Re:\s*", "", subject, flags=re.I)
+    author = " ".join((p.author or "").split()) or None
+    return p.post_id, subject, author, parse_forum_date(p.time), p.content()
+
+
+def fetch_newest_post_in_topic(topic_id: int, *, opener, user_agent: str,
+                               timeout: int = 8, base: str = BASE) -> ForumPost:
+    """The newest post of a topic -- an announcements thread -- with its
+    own subject, author, date and link. One request."""
+    url = newest_first_topic_url(topic_id, base)
+    html = _get(url, f"topic {topic_id}", opener=opener,
+                user_agent=user_agent, timeout=timeout)
+    parsed = parse_newest_post(html)
+    if parsed is None:
+        raise ForumError(f"topic {topic_id} parse", url,
+                         "no post found on the topic page",
+                         short=N_("the forum topic could not be read"))
+    post_id, subject, author, created, content = parsed
+    link = post_url(post_id, base) if post_id else topic_url(topic_id, base)
+    return ForumPost(topic_id, subject, author, _iso(created), link, content)
