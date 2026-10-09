@@ -1291,11 +1291,15 @@ class TestAddonSectionToggle(unittest.TestCase):
     def finish(self):
         """Run the batched build to the end, checking at every step that
         what is on screen is a finished list, never a partial one."""
-        steps = 0
+        # Bounded by time, not by update() calls: each batch is an after(1),
+        # and Windows' timer only makes it due every ~15 ms, so most calls
+        # there find nothing to run yet.
+        deadline = time.monotonic() + 30
         while self.app._addons_build_queue:
             self.app.update()
-            steps += 1
-            self.assertLess(steps, 500, "the build never finished")
+            self.assertLess(time.monotonic(), deadline,
+                            "the build never finished")
+            time.sleep(0.002)
             if self.app._addons_build_queue:
                 self.assertIsNot(self.shown(), self.app._addons_inner,
                                  "a half-built list is on screen")
