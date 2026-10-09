@@ -501,4 +501,5 @@ STRINGS = {
     '{name} reachable':
         '{name} 可以访问',
     'the news feed was malformed': '新闻源格式错误',
+    '{error} · showing the news feed instead': '{error} · 改为显示新闻源',
 }

@@ -501,4 +501,5 @@ STRINGS = {
     '{name} reachable':
         '{name} acessível',
     'the news feed was malformed': 'o feed de notícias estava malformado',
+    '{error} · showing the news feed instead': '{error} · mostrando o feed de notícias no lugar',
 }

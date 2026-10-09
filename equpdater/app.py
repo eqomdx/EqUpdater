@@ -3405,7 +3405,12 @@ def fetch_featured_post() -> dict | None:
         except ForumError as feed_exc:
             log(f"Announcements: {feed_exc}", "dim")
             raise forum_exc
-        return items[0] if items else None
+        if not items:
+            return None
+        # The newest by date: a pinned older post may lead the feed.
+        item = dict(max(items, key=lambda i: i["date"]))
+        item["_note"] = getattr(forum_exc, "short", "") or str(forum_exc)
+        return item
 
 
 def _news_error(section: str, exc: Exception) -> str:
@@ -4450,9 +4455,11 @@ class EqUpdaterApp(tk.Tk):
             def apply():
                 self._feat_loading = False
                 if feat is not None:
+                    # Set only when the forum failed and news.json stood in.
+                    note = feat.pop("_note", "")
                     self._featured = feat
                     self._save_news_cache("announcements", "item", feat)
-                    self._render_featured(feat)
+                    self._render_featured(feat, note=note)
                 else:
                     self._render_featured(self._featured, error=err)
             self.after(0, apply)
@@ -4504,7 +4511,7 @@ class EqUpdaterApp(tk.Tk):
         rf.bind("<Leave>", lambda e: rf.configure(fg=C_TEXT_DIM))
         tk.Frame(parent, bg=C_DIVIDER, height=self._px(1)).pack(fill="x")
 
-    def _render_featured(self, post, loading=False, error=""):
+    def _render_featured(self, post, loading=False, error="", note=""):
         f = self._feat_frame
         for w in f.winfo_children():
             w.destroy()
@@ -4568,9 +4575,11 @@ class EqUpdaterApp(tk.Tk):
         txt.pack(fill="both", expand=True, padx=self._px(18),
                  pady=(self._px(6), self._px(2)))
 
-        if error:
-            tk.Label(f, text=tr("{error} · showing cached content",
-                                error=error),
+        if error or note:
+            text = (tr("{error} · showing cached content", error=error) if error
+                    else tr("{error} · showing the news feed instead",
+                            error=tr(note)))
+            tk.Label(f, text=text,
                      font=self._font(8), fg=C_TEXT_DIM, bg=C_PANEL,
                      wraplength=self._news_left_w - self._px(40),
                      justify="left", anchor="w").pack(

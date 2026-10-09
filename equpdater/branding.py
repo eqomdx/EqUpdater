@@ -21,7 +21,11 @@ import sys
 #: The product.
 APP_NAME = "EqUpdater"
 APP_TITLE = "EqUpdater"
-APP_VERSION = "2.0.6"
+#: A release is three numbers (2.1.0). A test build handed out before a
+#: release carries a fourth, raised for every such build (2.0.6.1, 2.0.6.2,
+#: ...), so a tester can tell builds apart: it shows in the window, the log
+#: and the file names, and still sorts after 2.0.6 and before 2.1.0.
+APP_VERSION = "2.0.6.1"
 
 #: Upstream, for the About box and the attribution the licence requires.
 #: EqUpdater is a substantially reworked derivative of Octo Updater; see

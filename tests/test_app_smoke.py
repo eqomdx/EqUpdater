@@ -116,7 +116,10 @@ class TestAppStarts(unittest.TestCase):
 
     def test_product_identity(self):
         self.assertEqual(self.app.title(), "EqUpdater")
-        self.assertEqual(self.app_mod.UA, "EqUpdater/2.0.6")
+        self.assertEqual(self.app_mod.UA,
+                         f"EqUpdater/{self.branding.APP_VERSION}")
+        # A release (2.1.0) or a numbered test build of one (2.0.6.1).
+        self.assertRegex(self.branding.APP_VERSION, r"^\d+\.\d+\.\d+(\.\d+)?$")
 
     def test_settings_live_under_the_new_name(self):
         self.assertIn("EqUpdater", self.app_mod.CONFIG_FILE)

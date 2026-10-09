@@ -634,6 +634,18 @@ class TestAnnouncementsFallbackOrder(unittest.TestCase):
                                     self.n.parse_news_feed(feed(FEED_ITEM)))
         self.assertEqual(item["id"], "2026-10-08-ddos")
         self.assertEqual(calls, ["forum", "news.json"])
+        # Says why the feed stands in (shown under the post, not cached).
+        self.assertIn("DDoS-protection", item["_note"])
+
+    def test_the_newest_dated_feed_item_wins(self):
+        """A pinned older post may lead the feed: the panel shows the
+        newest by date, not the first."""
+        pinned = dict(FEED_ITEM, id="beta", title="Beta Test Info",
+                      date="2026-04-28")
+        newer = dict(FEED_ITEM, id="new", date="2026-10-09")
+        item, _calls = self.run_with(self.blocked(),
+                                     self.n.parse_news_feed(feed(pinned, FEED_ITEM, newer)))
+        self.assertEqual(item["id"], "new")
 
     def test_empty_feed_keeps_the_cache(self):
         item, _calls = self.run_with(self.blocked(), [])
