@@ -199,6 +199,13 @@ class TestAppStarts(unittest.TestCase):
         def bottom(w):
             return w.winfo_rooty() + w.winfo_height()
 
+        # A first run opens Settings by itself 500 ms after start, built for
+        # the real platform (on Windows: no Game launcher item). Whether that
+        # has fired yet is timing; drop it so this test builds its own.
+        app.update()
+        if app._settings_overlay is not None:
+            app._settings_overlay.destroy()
+            app._settings_overlay = None
         with mock.patch.object(m.platforms, "WINDOWS", False), \
                 mock.patch.object(m.platforms, "LINUX", True):
             try:
