@@ -394,4 +394,110 @@ STRINGS = {
     "{name} is installed and {app} did not install it.\n\nManaging it means {app} will track:\n    {source}\n\nYour current files are not changed now. {app} will tell you when that source has a newer version, and will never replace files you have edited without asking.\n\nManage it?":
         "{name} 已安装，但不是由 {app} 安装的。\n\n托管后，{app} 将跟踪：\n    {source}\n\n你当前的文件现在不会被更改。当该来源有较新版本时，{app} 会告诉你，并且绝不会未经询问就替换你修改过的文件。\n\n要托管吗？",
     "{section} unavailable: {reason}": "{section}不可用：{reason}",
+    'Checking the connection…':
+        '正在检查连接…',
+    'Client build looks correct ({version})':
+        '客户端版本正确（{version}）',
+    'Client download server':
+        '客户端下载服务器',
+    'Config.wtf contains an obsolete realmList ({host})':
+        'Config.wtf 含有过时的 realmList（{host}）',
+    'Config.wtf has a malformed patchList ({host})':
+        'Config.wtf 的 patchList 格式错误（{host}）',
+    'Config.wtf has a malformed realmList ({host})':
+        'Config.wtf 的 realmList 格式错误（{host}）',
+    'Config.wtf has no realmList of its own':
+        'Config.wtf 没有自己的 realmList',
+    'Config.wtf patchList points somewhere other than OctoWoW ({host})':
+        'Config.wtf 的 patchList 未指向 OctoWoW（{host}）',
+    'Config.wtf realmList ({host}) disagrees with realmlist.wtf ({root})':
+        'Config.wtf 的 realmList（{host}）与 realmlist.wtf 不一致（{root}）',
+    'Config.wtf realmList matches ({host})':
+        'Config.wtf 的 realmList 一致（{host}）',
+    'Config.wtf realmList uses a non-standard address ({host}); it may be stale':
+        'Config.wtf 的 realmList 使用非标准地址（{host}），可能已过时',
+    'Connection':
+        '连接',
+    'Could not read the client build from WoW.exe':
+        '无法从 WoW.exe 读取客户端版本',
+    'Could not repair: {error}':
+        '无法修复：{error}',
+    "EqUpdater cannot currently use OctoLauncher's Priority Sign In directly. If your local configuration is healthy but login still fails, try the official OctoLauncher.\n\nWarning: the official launcher may modify client files that EqUpdater manages.":
+        'EqUpdater 目前无法直接使用 OctoLauncher 的 Priority Sign In（优先登录）。如果本地配置正常但仍无法登录，请尝试官方 OctoLauncher。\n\n警告：官方启动器可能会修改由 EqUpdater 管理的客户端文件。',
+    'Game client':
+        '游戏客户端',
+    'LOGIN DOCTOR':
+        '登录诊断',
+    'Login Doctor…':
+        '登录诊断…',
+    'Login configuration':
+        '登录配置',
+    'Login server did not answer ({host}:{port}, timed out)':
+        '登录服务器无响应（{host}:{port}，超时）',
+    'Login server not tested: {host} does not resolve':
+        '未测试登录服务器：{host} 无法解析',
+    'Login server reachable ({host}:{port})':
+        '登录服务器可连接（{host}:{port}）',
+    'Login server refused or unreachable ({host}:{port})':
+        '登录服务器拒绝连接或无法访问（{host}:{port}）',
+    'Network checks failed: {error}':
+        '网络检查失败：{error}',
+    'No Config.wtf yet; the game creates it':
+        '尚无 Config.wtf；游戏会创建它',
+    'No game folder is set':
+        '未设置游戏文件夹',
+    "No local login problem was found.\n\nThe problem may be server-side or account-specific. If OctoWoW is currently under attack or congestion, the official launcher's Priority Sign In may provide a different login route.":
+        '未发现本地登录问题。\n\n问题可能出在服务器端或账号本身。如果 OctoWoW 正遭受攻击或拥堵，官方启动器的 Priority Sign In（优先登录）可能提供另一条登录线路。',
+    'Priority Sign In':
+        'Priority Sign In（优先登录）',
+    'Repair login configuration':
+        '修复登录配置',
+    'Run again':
+        '重新检查',
+    'The game is running. Close it first: it rewrites these files when it exits.':
+        '游戏正在运行。请先关闭：游戏退出时会重写这些文件。',
+    'The game is running: repairs are disabled until it is closed':
+        '游戏正在运行：关闭游戏前无法修复',
+    'These files will be changed:\n\n{files}\n\nOnly their login lines change: the realm address is set to {host}. A copy of each is kept beside it as {ext} (an existing copy is never replaced).\n\nRepair now?':
+        '将修改以下文件：\n\n{files}\n\n只修改其中的登录行：服务器地址设为 {host}。每个文件旁会保留一份 {ext} 副本（已有副本不会被替换）。\n\n现在修复吗？',
+    'Unexpected client build {version} (OctoWoW uses {expected})':
+        '客户端版本异常 {version}（OctoWoW 使用 {expected}）',
+    'WoW.exe found':
+        '已找到 WoW.exe',
+    'WoW.exe is too small to be the game client':
+        'WoW.exe 太小，不可能是游戏客户端',
+    'WoW.exe not found in the game folder':
+        '游戏文件夹中未找到 WoW.exe',
+    'octowow.st website':
+        'octowow.st 网站',
+    '{file} ({host}) does not match the root realmlist ({root})':
+        '{file}（{host}）与主 realmlist 不一致（{root}）',
+    '{file} has a malformed line: {line}':
+        '{file} 中有格式错误的行：{line}',
+    '{file} has a malformed realm address ({host})':
+        '{file} 中的服务器地址格式错误（{host}）',
+    '{file} has no realmlist line':
+        '{file} 中没有 realmlist 行',
+    '{file} is missing':
+        '缺少 {file}',
+    '{file} sets the realm more than once ({hosts})':
+        '{file} 多次设置服务器（{hosts}）',
+    '{file} uses a non-standard address ({host}); it may be stale, for example left behind by an interrupted official launcher session':
+        '{file} 使用非标准地址（{host}），可能已过时，例如官方启动器会话中断后遗留',
+    '{file} uses the old address {host}':
+        '{file} 使用旧地址 {host}',
+    '{file} uses {host}':
+        '{file} 使用 {host}',
+    '{file} uses {host}, not the normal route {expected}':
+        '{file} 使用 {host}，而不是常规线路 {expected}',
+    '{host} did not resolve (timed out)':
+        '{host} 解析超时',
+    '{host} does not resolve':
+        '{host} 无法解析',
+    '{host} resolves':
+        '{host} 可以解析',
+    '{name} not reachable':
+        '{name} 无法访问',
+    '{name} reachable':
+        '{name} 可以访问',
 }

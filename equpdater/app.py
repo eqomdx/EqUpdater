@@ -42,7 +42,7 @@ from functools import cache
 import tkinter as tk
 from tkinter import filedialog
 
-from . import branding, i18n, mpq, platforms
+from . import branding, i18n, logindoctor, mpq, platforms
 from .i18n import N_, tr
 from .config import (APP_DATA_DIR, BACKUP_DIR, CONFIG_FILE, bootstrap_config,
                      ensure_dir, load_config, new_addon_record,
@@ -1416,9 +1416,13 @@ def write_config_wtf(client_dir: str, tweaks: dict | None = None):
                                 TWEAKS_DEFAULTS["soundInBackground"]) else 0
 
     di  = _get_display_info_safe()
-    srv = "octowow.st"
+    # No realmList here. The login route lives in realmlist.wtf
+    # (play.octowow.st, see logindoctor.LOGIN_HOST) and the client saves the
+    # value it used back into Config.wtf itself; a realmList written here
+    # could only disagree with it. EqUpdater used to write "octowow.st",
+    # the website's address, which Login Doctor now reports and repairs.
     vars_ = {
-        "realmList": srv, "patchList": srv,
+        "patchList": "octowow.st",
         "readTOS": 1, "readEULA": 1,
         "profanityFilter": 0,
         "gxResolution": f"{di['width']}x{di['height']}",
@@ -3260,7 +3264,29 @@ def fov_default_for_display() -> int:
     return 110
 
 
+#: What Config.wtf gets where the display cannot be asked (Linux, or a
+#: failed query). The game runs windowed and maximised (gxWindow,
+#: gxMaximize), so the window still fills the screen.
+_DISPLAY_FALLBACK = {"width": 1920, "height": 1080, "refresh_rate": 60}
+
+
 def _get_display_info_safe() -> dict:
+    """The primary display's mode; never raises. Windows asks the display
+    driver. Elsewhere -- this runs on worker threads, where Tk may not be
+    asked -- it is the fallback: before, ctypes.windll raised on Linux and
+    a fresh Config.wtf was never written there."""
+    if not platforms.WINDOWS:
+        return dict(_DISPLAY_FALLBACK)
+    try:
+        info = _query_display_info()
+    except Exception:
+        return dict(_DISPLAY_FALLBACK)
+    if not info["width"] or not info["height"]:
+        return dict(_DISPLAY_FALLBACK)
+    return info
+
+
+def _query_display_info() -> dict:
     import ctypes
     ENUM_CURRENT_SETTINGS = -1
 
@@ -8161,6 +8187,7 @@ class EqUpdaterApp(tk.Tk):
                 w.bind("<Leave>", lambda e: tl.configure(fg=C_TEXT))
 
         _titem("✓", tr("Verify game files"), self._settings_verify)
+        _titem("✚", tr("Login Doctor…"), self._open_login_doctor)
         _titem("☰", tr("Show logs"), self._show_logs)
         if platforms.WINDOWS:
             _titem("⛊", tr("Add game folder to Defender exclusions"),
@@ -8347,6 +8374,228 @@ class EqUpdaterApp(tk.Tk):
         panel.place(relx=0.5, rely=0.5, anchor="center",
                     width=min(self._px(560), WIN_W - 2 * self._px(10)))
 
+    # ── Login Doctor ────────────────────────────────────────────────────────
+
+    _DOCTOR_MARKS = {logindoctor.PASS: ("✓", C_OK),
+                     logindoctor.WARN: ("⚠", "#d4b43c"),
+                     logindoctor.FAIL: ("✗", C_ERR)}
+
+    def _doctor_fetch(self, url: str, timeout: float) -> int:
+        """One HTTPS request for Login Doctor. Any HTTP answer -- an error
+        status or the DDoS-protection page included -- means the host was
+        reached; only a failure to connect raises."""
+        import urllib.error
+        req = urllib.request.Request(url, headers={"User-Agent": UA})
+        try:
+            with secure_urlopen(req, timeout=timeout,
+                                allowed_hosts={"octowow.st", "dl.octowow.st"}) as r:
+                r.read(4096)
+                return r.status
+        except urllib.error.HTTPError as e:
+            return e.code
+
+    def _open_login_doctor(self):
+        """Settings -> Login Doctor: local login checks, safe connectivity
+        checks and an explicit repair of the login configuration. See
+        equpdater/logindoctor.py for what it does and does not touch."""
+        if self._settings_overlay is None:
+            return
+        old = getattr(self, "_doctor_overlay", None)
+        if old is not None and old.winfo_exists():
+            return
+        P_BG, P_HDR, P_BDR = C_PANEL, C_HDR, C_PANEL_BDR
+        shade = tk.Frame(self._settings_overlay, bg="#0a0a0e")
+        shade.place(x=0, y=0, relwidth=1, relheight=1)
+        self._doctor_overlay = shade
+
+        def close():
+            self._doctor_overlay = None
+            self._doctor_gen = getattr(self, "_doctor_gen", 0) + 1
+            try:
+                shade.destroy()
+            except tk.TclError:
+                pass
+            if self._settings_overlay is not None:
+                self.bind("<Escape>", lambda e: self._close_settings())
+        self.bind("<Escape>", lambda e: close())
+
+        panel = tk.Frame(shade, bg=P_BG, highlightthickness=1,
+                         highlightbackground=P_BDR, highlightcolor=P_BDR)
+        hdr = tk.Frame(panel, bg=P_HDR, height=self._px(46))
+        hdr.pack(fill="x")
+        hdr.pack_propagate(False)
+        tk.Label(hdr, text=tr("LOGIN DOCTOR"), font=self._font(13, bold=True),
+                 fg=C_PURPLE, bg=P_HDR).pack(side="left", padx=self._px(18))
+        x_btn = tk.Label(hdr, text="✕", font=self._font(12),
+                         fg=C_TEXT_DIM, bg=P_HDR, cursor="hand2")
+        x_btn.pack(side="right", padx=self._px(16))
+        x_btn.bind("<Button-1>", lambda e: close())
+        tk.Frame(panel, bg=P_BDR, height=self._px(1)).pack(fill="x")
+        body = tk.Frame(panel, bg=P_BG)
+        body.pack(fill="both", expand=True, padx=self._px(22),
+                  pady=(self._px(10), self._px(16)))
+
+        box = tk.Frame(body, bg=C_LOG_BG)
+        box.pack(fill="both", expand=True)
+        txt = tk.Text(box, height=13, wrap="word", bg=C_LOG_BG, fg=C_TEXT,
+                      font=self._font(10), relief="flat", bd=0,
+                      padx=self._px(10), pady=self._px(8),
+                      highlightthickness=0, cursor="arrow")
+        sb = SlimScrollbar(box, command=txt.yview, bg=C_LOG_BG,
+                           width=self._px(8))
+        txt.configure(yscrollcommand=sb.set)
+        sb.pack(side="right", fill="y")
+        txt.pack(side="left", fill="both", expand=True)
+        for state, (_mark, colour) in self._DOCTOR_MARKS.items():
+            txt.tag_configure(state, foreground=colour)
+        txt.tag_configure("head", foreground=C_GOLD,
+                          font=self._font(10, bold=True))
+        txt.tag_configure("dim", foreground=C_TEXT_DIM)
+        self._doctor_text = txt
+
+        row = tk.Frame(body, bg=P_BG)
+        row.pack(fill="x", pady=(self._px(10), 0))
+        self._doctor_repair_btn = tk.Label(
+            row, text=tr("Repair login configuration"), font=self._font(10),
+            fg=C_TEXT_DIM, bg=C_PANEL_BDR, padx=self._px(12), pady=self._px(5))
+        self._doctor_repair_btn.pack(side="left")
+        again = tk.Label(row, text="⟳  " + tr("Run again"), font=self._font(10),
+                         fg=C_TEXT, bg=C_PANEL_BDR, cursor="hand2",
+                         padx=self._px(12), pady=self._px(5))
+        again.pack(side="right")
+        again.bind("<Button-1>", lambda e: self._run_login_doctor())
+
+        tk.Label(body, text=tr("Priority Sign In"), font=self._font(10, bold=True),
+                 fg=C_GOLD, bg=P_BG).pack(anchor="w", pady=(self._px(14), 0))
+        tk.Label(body, text=tr(logindoctor.PRIORITY_NOTE), font=self._font(9),
+                 fg=C_TEXT_DIM, bg=P_BG, justify="left", anchor="w",
+                 wraplength=min(self._px(600), WIN_W - 2 * self._px(60))
+                 ).pack(anchor="w", fill="x", pady=(self._px(4), 0))
+
+        panel.place(relx=0.5, rely=0.5, anchor="center",
+                    width=min(self._px(660), WIN_W - 2 * self._px(10)))
+        self._run_login_doctor()
+
+    def _run_login_doctor(self):
+        """Local checks now (file reads), network checks on a worker; the
+        window polls for them so Tk is only touched on this thread."""
+        if getattr(self, "_doctor_overlay", None) is None:
+            return
+        self._doctor_gen = gen = getattr(self, "_doctor_gen", 0) + 1
+        client = self._game_path.get().strip()
+        if not client or not os.path.isdir(client):
+            local = [logindoctor.Check(logindoctor.FAIL,
+                                       N_("No game folder is set"), {})]
+            running = False
+        else:
+            running = platforms.client_in_use(client)
+            local = logindoctor.local_checks(client, get_client_version(client),
+                                             running)
+        self._doctor_state = {"client": client, "local": local,
+                              "running": running, "network": None}
+        result = []
+
+        def work():
+            try:
+                result.append(logindoctor.network_checks(self._doctor_fetch))
+            except Exception as e:           # never leave the window waiting
+                result.append([logindoctor.Check(
+                    logindoctor.FAIL, N_("Network checks failed: {error}"),
+                    {"error": str(e)}, "network")])
+
+        threading.Thread(target=work, daemon=True, name="login-doctor").start()
+
+        def poll():
+            if gen != self._doctor_gen or self._doctor_overlay is None:
+                return
+            if result:
+                self._doctor_state["network"] = result[0]
+                self._render_login_doctor()
+            else:
+                self.after(100, poll)
+        self._render_login_doctor()
+        self.after(100, poll)
+
+    def _render_login_doctor(self):
+        st, txt = self._doctor_state, getattr(self, "_doctor_text", None)
+        if txt is None or not txt.winfo_exists():
+            return
+        txt.configure(state="normal")
+        txt.delete("1.0", "end")
+
+        def section(title, checks):
+            txt.insert("end", tr(title) + "\n", "head")
+            for c in checks:
+                mark, _colour = self._DOCTOR_MARKS[c.state]
+                txt.insert("end", "  " + mark + "  ", c.state)
+                txt.insert("end", tr(c.message, **c.values) + "\n")
+            txt.insert("end", "\n")
+
+        local = st["local"]
+        section(N_("Game client"), [c for c in local if c.group == "client"])
+        realm = [c for c in local if c.group in ("realmlist", "config")]
+        if realm:
+            section(N_("Login configuration"), realm)
+        net = st["network"]
+        if net is None:
+            txt.insert("end", tr("Checking the connection…") + "\n", "dim")
+        else:
+            section(N_("Connection"), net)
+            done = logindoctor.summary(local + net)
+            if done:
+                txt.insert("end", tr(done) + "\n")
+        txt.configure(state="disabled")
+
+        btn = self._doctor_repair_btn
+        plan = (logindoctor.repair_plan(st["client"])
+                if st["client"] and os.path.isdir(st["client"]) else [])
+        ready = bool(plan) and not st["running"]
+        btn.configure(fg=C_TEXT if ready else C_TEXT_DIM,
+                      cursor="hand2" if ready else "arrow")
+        btn.unbind("<Button-1>")
+        if ready:
+            btn.bind("<Button-1>", lambda e: self._repair_login_config())
+
+    def _repair_login_config(self):
+        """Show exactly what changes, back up, repair, run the checks again."""
+        from tkinter import messagebox
+        client = self._doctor_state["client"]
+        if platforms.client_in_use(client):
+            messagebox.showerror(tr("Repair login configuration"),
+                                 tr("The game is running. Close it first: it "
+                                    "rewrites these files when it exits."),
+                                 parent=self)
+            self._run_login_doctor()
+            return
+        plan = logindoctor.repair_plan(client)
+        if not plan:
+            self._run_login_doctor()
+            return
+        files = "\n".join("    " + os.path.relpath(p, client) for p, _t in plan)
+        if not messagebox.askyesno(
+                tr("Repair login configuration"),
+                tr("These files will be changed:\n\n{files}\n\nOnly their login "
+                   "lines change: the realm address is set to {host}. A copy of "
+                   "each is kept beside it as {ext} (an existing copy is never "
+                   "replaced).\n\nRepair now?", files=files,
+                   host=logindoctor.LOGIN_HOST, ext=logindoctor.BACKUP_EXT),
+                parent=self):
+            return
+        try:
+            changed = logindoctor.repair(client, platforms.client_in_use)
+            for path in changed:
+                log(f"Login Doctor repaired {path}", "ok")
+        except logindoctor.GameRunning:
+            messagebox.showerror(tr("Repair login configuration"),
+                                 tr("The game is running. Close it first: it "
+                                    "rewrites these files when it exits."),
+                                 parent=self)
+        except OSError as e:
+            messagebox.showerror(tr("Repair login configuration"),
+                                 tr("Could not repair: {error}", error=e),
+                                 parent=self)
+        self._run_login_doctor()
+
     def _build_game_launcher_settings(self, parent, bg, inp, bdr):
         """Linux: how PLAY starts the Windows game client. Empty fields mean
         automatic (Wine, else UMU); a launch command covers Proton, Lutris,
@@ -8462,6 +8711,7 @@ class EqUpdaterApp(tk.Tk):
     def _close_settings(self):
         self.unbind("<Escape>")
         self._launcher_overlay = None         # destroyed with the overlay
+        self._doctor_overlay = None
         if self._settings_overlay is not None:
             self._settings_overlay.destroy()
             self._settings_overlay = None

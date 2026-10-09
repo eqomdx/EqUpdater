@@ -15,8 +15,8 @@ aria2c, fonts, artwork) to <file> as JSON and exits 0 when all of it is
 there. ``--network`` adds a real HTTPS request through the app's own
 verifying opener. ``--gui`` (needs a display; CI uses Xvfb) also builds the
 main window -- which renders the background through ImageTk.PhotoImage --
-and closes it again, so a build missing Pillow's Tk bridge fails here and
-not on a player's screen. CI runs it on every release artifact.
+opens Settings and Login Doctor in it, and closes it again, so a build
+missing Pillow's Tk bridge fails here and not on a player's screen. CI runs it on every release artifact.
 """
 
 import sys
@@ -47,6 +47,16 @@ def _gui_check(report: dict, problems: list) -> None:
             import importlib
             importlib.import_module(".".join(("PIL", "_tkinter_finder")))
             report["gui_tk_bridge"] = True
+            # Settings and its Login Doctor window, built in the packaged
+            # app too: they add widgets and a worker the main window lacks.
+            win._open_settings()
+            win.update()
+            win._open_login_doctor()
+            win.update()
+            text = win._doctor_text.get("1.0", "end").strip()
+            report["gui_login_doctor"] = bool(text)
+            if not text:
+                problems.append("Login Doctor showed nothing")
         finally:
             win.destroy()
     except (Exception, tk.TclError) as e:

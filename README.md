@@ -155,6 +155,22 @@ confirmed, and skips the rest.
 - Client tweaks patched into `WoW.exe`.
 - **Reset** asks before putting everything back to defaults.
 
+### Login Doctor
+- **Settings → Login Doctor** checks what on your computer could stop the
+  game logging in: `WoW.exe` and its build (1.12.1, 5875), the realmlist
+  files (`realmlist.wtf`, and `Data/<locale>/realmlist.wtf` where there is
+  one), the login lines in `WTF/Config.wtf`, name lookups for
+  play.octowow.st, octowow.st and dl.octowow.st, the login server's port
+  (3724) and the HTTPS servers EqUpdater uses. It never tries to log in and
+  never reads accounts, launcher sign-ins or tokens.
+- **Repair login configuration** sets the realmlist to `play.octowow.st` and
+  removes a stale `SET realmList` from `Config.wtf`. It lists the files
+  first, refuses while the game is running, changes only those lines, and
+  keeps a copy of each file as `<file>.octobak` (an existing copy is never
+  replaced).
+- If nothing local is wrong it says so: the problem is then on the server or
+  the account. EqUpdater cannot use the official launcher's Priority Sign In.
+
 ### News
 - Announcements and the Changelog, read straight from the OctoWoW forum:
   once at launch, and again when you press refresh.

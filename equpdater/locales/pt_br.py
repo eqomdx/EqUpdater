@@ -394,4 +394,110 @@ STRINGS = {
     "{name} is installed and {app} did not install it.\n\nManaging it means {app} will track:\n    {source}\n\nYour current files are not changed now. {app} will tell you when that source has a newer version, and will never replace files you have edited without asking.\n\nManage it?":
         "{name} está instalado e não foi o {app} que o instalou.\n\nSe o {app} gerenciá-lo, vai acompanhar:\n    {source}\n\nSeus arquivos atuais não mudam agora. O {app} avisará quando essa fonte tiver uma versão mais recente e nunca substituirá sem perguntar arquivos que você editou.\n\nGerenciar?",
     "{section} unavailable: {reason}": "{section} — indisponível: {reason}",
+    'Checking the connection…':
+        'Verificando a conexão…',
+    'Client build looks correct ({version})':
+        'A build do cliente parece correta ({version})',
+    'Client download server':
+        'Servidor de download do cliente',
+    'Config.wtf contains an obsolete realmList ({host})':
+        'O Config.wtf contém um realmList obsoleto ({host})',
+    'Config.wtf has a malformed patchList ({host})':
+        'O Config.wtf tem um patchList malformado ({host})',
+    'Config.wtf has a malformed realmList ({host})':
+        'O Config.wtf tem um realmList malformado ({host})',
+    'Config.wtf has no realmList of its own':
+        'O Config.wtf não tem realmList próprio',
+    'Config.wtf patchList points somewhere other than OctoWoW ({host})':
+        'O patchList do Config.wtf não aponta para o OctoWoW ({host})',
+    'Config.wtf realmList ({host}) disagrees with realmlist.wtf ({root})':
+        'O realmList do Config.wtf ({host}) não bate com o realmlist.wtf ({root})',
+    'Config.wtf realmList matches ({host})':
+        'O realmList do Config.wtf confere ({host})',
+    'Config.wtf realmList uses a non-standard address ({host}); it may be stale':
+        'O realmList do Config.wtf usa um endereço fora do padrão ({host}); pode estar desatualizado',
+    'Connection':
+        'Conexão',
+    'Could not read the client build from WoW.exe':
+        'Não foi possível ler a build do cliente no WoW.exe',
+    'Could not repair: {error}':
+        'Não foi possível reparar: {error}',
+    "EqUpdater cannot currently use OctoLauncher's Priority Sign In directly. If your local configuration is healthy but login still fails, try the official OctoLauncher.\n\nWarning: the official launcher may modify client files that EqUpdater manages.":
+        'O EqUpdater ainda não consegue usar diretamente o Priority Sign In (login prioritário) do OctoLauncher. Se a sua configuração local estiver em ordem mas o login continuar falhando, tente o OctoLauncher oficial.\n\nAviso: o launcher oficial pode modificar arquivos do cliente que o EqUpdater gerencia.',
+    'Game client':
+        'Cliente do jogo',
+    'LOGIN DOCTOR':
+        'DOUTOR DE LOGIN',
+    'Login Doctor…':
+        'Doutor de login…',
+    'Login configuration':
+        'Configuração de login',
+    'Login server did not answer ({host}:{port}, timed out)':
+        'O servidor de login não respondeu ({host}:{port}, tempo esgotado)',
+    'Login server not tested: {host} does not resolve':
+        'Servidor de login não testado: {host} não resolve',
+    'Login server reachable ({host}:{port})':
+        'Servidor de login acessível ({host}:{port})',
+    'Login server refused or unreachable ({host}:{port})':
+        'O servidor de login recusou ou está inacessível ({host}:{port})',
+    'Network checks failed: {error}':
+        'As verificações de rede falharam: {error}',
+    'No Config.wtf yet; the game creates it':
+        'Ainda não há Config.wtf; o jogo cria',
+    'No game folder is set':
+        'Nenhuma pasta do jogo definida',
+    "No local login problem was found.\n\nThe problem may be server-side or account-specific. If OctoWoW is currently under attack or congestion, the official launcher's Priority Sign In may provide a different login route.":
+        'Nenhum problema local de login foi encontrado.\n\nO problema pode estar no servidor ou na conta. Se o OctoWoW estiver sob ataque ou congestionado, o Priority Sign In (login prioritário) do launcher oficial pode oferecer outra rota de login.',
+    'Priority Sign In':
+        'Priority Sign In (login prioritário)',
+    'Repair login configuration':
+        'Reparar configuração de login',
+    'Run again':
+        'Verificar de novo',
+    'The game is running. Close it first: it rewrites these files when it exits.':
+        'O jogo está aberto. Feche-o primeiro: ele regrava estes arquivos ao sair.',
+    'The game is running: repairs are disabled until it is closed':
+        'O jogo está aberto: os reparos ficam desativados até ele ser fechado',
+    'These files will be changed:\n\n{files}\n\nOnly their login lines change: the realm address is set to {host}. A copy of each is kept beside it as {ext} (an existing copy is never replaced).\n\nRepair now?':
+        'Estes arquivos serão alterados:\n\n{files}\n\nSó as linhas de login mudam: o endereço do reino passa a ser {host}. Uma cópia de cada um fica ao lado como {ext} (uma cópia existente nunca é substituída).\n\nReparar agora?',
+    'Unexpected client build {version} (OctoWoW uses {expected})':
+        'Build do cliente inesperada {version} (o OctoWoW usa {expected})',
+    'WoW.exe found':
+        'WoW.exe encontrado',
+    'WoW.exe is too small to be the game client':
+        'O WoW.exe é pequeno demais para ser o cliente do jogo',
+    'WoW.exe not found in the game folder':
+        'WoW.exe não encontrado na pasta do jogo',
+    'octowow.st website':
+        'site octowow.st',
+    '{file} ({host}) does not match the root realmlist ({root})':
+        '{file} ({host}) não bate com o realmlist principal ({root})',
+    '{file} has a malformed line: {line}':
+        '{file} tem uma linha malformada: {line}',
+    '{file} has a malformed realm address ({host})':
+        '{file} tem um endereço de reino malformado ({host})',
+    '{file} has no realmlist line':
+        '{file} não tem linha de realmlist',
+    '{file} is missing':
+        '{file} está faltando',
+    '{file} sets the realm more than once ({hosts})':
+        '{file} define o reino mais de uma vez ({hosts})',
+    '{file} uses a non-standard address ({host}); it may be stale, for example left behind by an interrupted official launcher session':
+        '{file} usa um endereço fora do padrão ({host}); pode estar desatualizado, por exemplo deixado por uma sessão interrompida do launcher oficial',
+    '{file} uses the old address {host}':
+        '{file} usa o endereço antigo {host}',
+    '{file} uses {host}':
+        '{file} usa {host}',
+    '{file} uses {host}, not the normal route {expected}':
+        '{file} usa {host}, não a rota normal {expected}',
+    '{host} did not resolve (timed out)':
+        '{host} não resolveu (tempo esgotado)',
+    '{host} does not resolve':
+        '{host} não resolve',
+    '{host} resolves':
+        '{host} resolve',
+    '{name} not reachable':
+        '{name} inacessível',
+    '{name} reachable':
+        '{name} acessível',
 }

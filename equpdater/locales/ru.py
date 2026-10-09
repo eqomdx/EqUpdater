@@ -393,4 +393,110 @@ STRINGS = {
     "{name} is installed and {app} did not install it.\n\nManaging it means {app} will track:\n    {source}\n\nYour current files are not changed now. {app} will tell you when that source has a newer version, and will never replace files you have edited without asking.\n\nManage it?":
         "{name} установлен, но не через {app}.\n\nЕсли {app} будет им управлять, он будет отслеживать:\n    {source}\n\nВаши текущие файлы сейчас не изменятся. {app} сообщит, когда в источнике появится новая версия, и никогда не заменит отредактированные вами файлы без спроса.\n\nУправлять?",
     "{section} unavailable: {reason}": "{section} — недоступно: {reason}",
+    'Checking the connection…':
+        'Проверка соединения…',
+    'Client build looks correct ({version})':
+        'Сборка клиента в порядке ({version})',
+    'Client download server':
+        'Сервер загрузки клиента',
+    'Config.wtf contains an obsolete realmList ({host})':
+        'В Config.wtf устаревший realmList ({host})',
+    'Config.wtf has a malformed patchList ({host})':
+        'В Config.wtf некорректный patchList ({host})',
+    'Config.wtf has a malformed realmList ({host})':
+        'В Config.wtf некорректный realmList ({host})',
+    'Config.wtf has no realmList of its own':
+        'В Config.wtf нет собственного realmList',
+    'Config.wtf patchList points somewhere other than OctoWoW ({host})':
+        'patchList в Config.wtf указывает не на OctoWoW ({host})',
+    'Config.wtf realmList ({host}) disagrees with realmlist.wtf ({root})':
+        'realmList в Config.wtf ({host}) не совпадает с realmlist.wtf ({root})',
+    'Config.wtf realmList matches ({host})':
+        'realmList в Config.wtf совпадает ({host})',
+    'Config.wtf realmList uses a non-standard address ({host}); it may be stale':
+        'realmList в Config.wtf использует нестандартный адрес ({host}); возможно, он устарел',
+    'Connection':
+        'Соединение',
+    'Could not read the client build from WoW.exe':
+        'Не удалось прочитать сборку клиента из WoW.exe',
+    'Could not repair: {error}':
+        'Не удалось исправить: {error}',
+    "EqUpdater cannot currently use OctoLauncher's Priority Sign In directly. If your local configuration is healthy but login still fails, try the official OctoLauncher.\n\nWarning: the official launcher may modify client files that EqUpdater manages.":
+        'EqUpdater пока не может напрямую использовать Priority Sign In (приоритетный вход) OctoLauncher. Если локальная конфигурация в порядке, но войти всё равно не получается, попробуйте официальный OctoLauncher.\n\nВнимание: официальный лаунчер может изменять файлы клиента, которыми управляет EqUpdater.',
+    'Game client':
+        'Игровой клиент',
+    'LOGIN DOCTOR':
+        'ДОКТОР ВХОДА',
+    'Login Doctor…':
+        'Доктор входа…',
+    'Login configuration':
+        'Настройки входа',
+    'Login server did not answer ({host}:{port}, timed out)':
+        'Сервер входа не ответил ({host}:{port}, время ожидания истекло)',
+    'Login server not tested: {host} does not resolve':
+        'Сервер входа не проверен: {host} не разрешается',
+    'Login server reachable ({host}:{port})':
+        'Сервер входа доступен ({host}:{port})',
+    'Login server refused or unreachable ({host}:{port})':
+        'Сервер входа отказал или недоступен ({host}:{port})',
+    'Network checks failed: {error}':
+        'Сетевые проверки не удались: {error}',
+    'No Config.wtf yet; the game creates it':
+        'Config.wtf ещё нет; игра создаст его',
+    'No game folder is set':
+        'Папка игры не задана',
+    "No local login problem was found.\n\nThe problem may be server-side or account-specific. If OctoWoW is currently under attack or congestion, the official launcher's Priority Sign In may provide a different login route.":
+        'Локальных проблем со входом не найдено.\n\nПроблема может быть на стороне сервера или связана с учётной записью. Если OctoWoW сейчас атакуют или он перегружен, Priority Sign In (приоритетный вход) официального лаунчера может дать другой путь входа.',
+    'Priority Sign In':
+        'Priority Sign In (приоритетный вход)',
+    'Repair login configuration':
+        'Исправить настройки входа',
+    'Run again':
+        'Проверить снова',
+    'The game is running. Close it first: it rewrites these files when it exits.':
+        'Игра запущена. Сначала закройте её: при выходе она перезаписывает эти файлы.',
+    'The game is running: repairs are disabled until it is closed':
+        'Игра запущена: исправления недоступны, пока она не закрыта',
+    'These files will be changed:\n\n{files}\n\nOnly their login lines change: the realm address is set to {host}. A copy of each is kept beside it as {ext} (an existing copy is never replaced).\n\nRepair now?':
+        'Будут изменены эти файлы:\n\n{files}\n\nМеняются только строки входа: адрес сервера станет {host}. Копия каждого файла сохраняется рядом как {ext} (существующая копия никогда не заменяется).\n\nИсправить сейчас?',
+    'Unexpected client build {version} (OctoWoW uses {expected})':
+        'Неожиданная сборка клиента {version} (OctoWoW использует {expected})',
+    'WoW.exe found':
+        'WoW.exe найден',
+    'WoW.exe is too small to be the game client':
+        'WoW.exe слишком мал, чтобы быть игровым клиентом',
+    'WoW.exe not found in the game folder':
+        'WoW.exe не найден в папке игры',
+    'octowow.st website':
+        'сайт octowow.st',
+    '{file} ({host}) does not match the root realmlist ({root})':
+        '{file} ({host}) не совпадает с основным realmlist ({root})',
+    '{file} has a malformed line: {line}':
+        'В {file} некорректная строка: {line}',
+    '{file} has a malformed realm address ({host})':
+        'В {file} некорректный адрес сервера ({host})',
+    '{file} has no realmlist line':
+        'В {file} нет строки realmlist',
+    '{file} is missing':
+        '{file} отсутствует',
+    '{file} sets the realm more than once ({hosts})':
+        '{file} задаёт сервер больше одного раза ({hosts})',
+    '{file} uses a non-standard address ({host}); it may be stale, for example left behind by an interrupted official launcher session':
+        '{file} использует нестандартный адрес ({host}); возможно, он устарел — например, остался после прерванной сессии официального лаунчера',
+    '{file} uses the old address {host}':
+        '{file} использует старый адрес {host}',
+    '{file} uses {host}':
+        '{file} использует {host}',
+    '{file} uses {host}, not the normal route {expected}':
+        '{file} использует {host}, а не обычный путь {expected}',
+    '{host} did not resolve (timed out)':
+        '{host} не разрешился (время ожидания истекло)',
+    '{host} does not resolve':
+        '{host} не разрешается',
+    '{host} resolves':
+        '{host} разрешается',
+    '{name} not reachable':
+        '{name} недоступен',
+    '{name} reachable':
+        '{name} доступен',
 }

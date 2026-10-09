@@ -1343,5 +1343,121 @@ class TestAddonSectionToggle(unittest.TestCase):
         self.assertIs(self.shown(), self.app._addons_inner)
 
 
+@unittest.skipUnless(HAVE_TK, "no display")
+class TestLoginDoctorWindow(unittest.TestCase):
+    """Settings -> Login Doctor: shows the checks, repairs only after
+    confirming, refuses while the game runs, and runs again afterwards.
+    The network checks are replaced; nothing here goes online."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="equ-doctor-ui-")
+        os.environ["LOCALAPPDATA"] = cls.tmp
+        os.environ["XDG_DATA_HOME"] = cls.tmp
+        for mod in [m for m in list(sys.modules) if m.startswith("equpdater")]:
+            del sys.modules[mod]
+        from equpdater import app
+        cls.m = app
+        cls.app = app.EqUpdaterApp()
+        for _ in range(4):
+            cls.app.update()
+
+    @classmethod
+    def tearDownClass(cls):
+        _close_app(cls.app)
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def setUp(self):
+        from unittest import mock
+        ld = self.m.logindoctor
+        self.client = tempfile.mkdtemp(prefix="client-", dir=self.tmp)
+        with open(os.path.join(self.client, "WoW.exe"), "wb") as f:
+            f.truncate(5_000_000)
+        with open(os.path.join(self.client, "realmlist.wtf"), "wb") as f:
+            f.write(b"set realmlist octowow.st\r\n")
+        self.app._game_path.set(self.client)
+        net = [ld.Check(ld.PASS, "{host} resolves", {"host": h}, "network")
+               for h in ld.DNS_HOSTS]
+        for p in (mock.patch.object(ld, "network_checks", return_value=net),
+                  mock.patch.object(self.m, "get_client_version",
+                                    return_value="1.12.1 (5875)"),
+                  mock.patch.object(self.m.platforms, "client_in_use",
+                                    return_value=False)):
+            p.start()
+            self.addCleanup(p.stop)
+        self.app._open_settings()
+        self.app.update()
+
+    def tearDown(self):
+        if self.app._settings_overlay is not None:
+            self.app._close_settings()
+        self.app._game_path.set("")
+
+    def open_doctor(self):
+        def find(root, text):
+            if isinstance(root, self.m.tk.Label) and root.cget("text") == text:
+                return root
+            for child in root.winfo_children():
+                hit = find(child, text)
+                if hit is not None:
+                    return hit
+        find(self.app._settings_overlay,
+             self.m.tr("Login Doctor…")).event_generate("<Button-1>")
+        self.wait()
+
+    def wait(self):
+        deadline = time.monotonic() + 10
+        while self.app._doctor_state["network"] is None:
+            self.app.update()
+            time.sleep(0.01)
+            self.assertLess(time.monotonic(), deadline)
+        self.app.update()
+
+    def text(self):
+        return self.app._doctor_text.get("1.0", "end")
+
+    def test_shows_problems_then_repairs_and_runs_again(self):
+        from unittest import mock
+        self.open_doctor()
+        self.assertIn("✗  realmlist.wtf uses the old address octowow.st", self.text())
+        self.assertNotIn("No local login problem", self.text())
+        self.assertEqual(self.app._doctor_repair_btn.cget("cursor"), "hand2")
+        with mock.patch("tkinter.messagebox.askyesno", return_value=True) as ask:
+            self.app._doctor_repair_btn.event_generate("<Button-1>")
+            self.wait()
+        self.assertIn("realmlist.wtf", ask.call_args[0][1])     # files listed
+        self.assertIn(".octobak", ask.call_args[0][1])
+        with open(os.path.join(self.client, "realmlist.wtf"), "rb") as f:
+            self.assertEqual(f.read(), b"set realmlist play.octowow.st\r\n")
+        self.assertTrue(os.path.exists(
+            os.path.join(self.client, "realmlist.wtf.octobak")))
+        self.assertIn("✓  realmlist.wtf uses play.octowow.st", self.text())
+        self.assertIn("No local login problem was found.", self.text())
+        self.assertNotEqual(self.app._doctor_repair_btn.cget("cursor"), "hand2")
+
+    def test_declining_changes_nothing(self):
+        from unittest import mock
+        self.open_doctor()
+        with mock.patch("tkinter.messagebox.askyesno", return_value=False):
+            self.app._repair_login_config()
+        with open(os.path.join(self.client, "realmlist.wtf"), "rb") as f:
+            self.assertEqual(f.read(), b"set realmlist octowow.st\r\n")
+
+    def test_refuses_while_the_game_runs(self):
+        from unittest import mock
+        self.open_doctor()
+        with mock.patch.object(self.m.platforms, "client_in_use", return_value=True), \
+                mock.patch("tkinter.messagebox.showerror") as err, \
+                mock.patch("tkinter.messagebox.askyesno") as ask:
+            self.app._repair_login_config()
+            self.wait()
+        err.assert_called_once()
+        ask.assert_not_called()
+        self.assertIn("The game is running", self.text())
+        self.assertNotEqual(self.app._doctor_repair_btn.cget("cursor"), "hand2")
+        with open(os.path.join(self.client, "realmlist.wtf"), "rb") as f:
+            self.assertEqual(f.read(), b"set realmlist octowow.st\r\n")
+
+
 if __name__ == "__main__":
     unittest.main()
