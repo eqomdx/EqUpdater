@@ -389,10 +389,10 @@ NO_LOCAL_PROBLEM = N_(
 
 PRIORITY_NOTE = N_(
     "If login stops at \u201cAuthenticating\u201d:\n"
-    "\u2022 Turn off any VPN or proxy: OctoWoW's login can hang behind one.\n"
-    "\u2022 Sign in once with Priority Sign In in the official OctoLauncher, "
-    "then try PLAY in EqUpdater again.\n\n"
-    "EqUpdater cannot currently use OctoLauncher's Priority Sign In directly. "
+    "\u2022 Turn off any VPN or proxy: OctoWoW login can hang behind one.\n"
+    "\u2022 If normal login still fails, try launching the game through the "
+    "official OctoLauncher using Priority Sign In.\n\n"
+    "EqUpdater cannot currently use OctoLauncher's Priority Sign In directly.\n"
     "Warning: the official launcher may modify client files that EqUpdater "
     "manages.")
 

@@ -169,9 +169,10 @@ confirmed, and skips the rest.
   keeps a copy of each file as `<file>.octobak` (an existing copy is never
   replaced).
 - If nothing local is wrong it says so: the problem is then on the server or
-  the account. If login stops at "Authenticating", turn off any VPN or proxy
-  and sign in once with Priority Sign In in the official OctoLauncher, then
-  try PLAY again. EqUpdater cannot use Priority Sign In itself.
+  the account. If login stops at "Authenticating", turn off any VPN or
+  proxy; if normal login still fails, try launching the game through the
+  official OctoLauncher using Priority Sign In. EqUpdater cannot use Priority
+  Sign In itself.
 
 ### News
 - Announcements and the Changelog, read straight from the OctoWoW forum:

@@ -8437,7 +8437,7 @@ class EqUpdaterApp(tk.Tk):
 
         box = tk.Frame(body, bg=C_LOG_BG)
         box.pack(fill="both", expand=True)
-        txt = tk.Text(box, height=13, wrap="word", bg=C_LOG_BG, fg=C_TEXT,
+        txt = tk.Text(box, height=12, wrap="word", bg=C_LOG_BG, fg=C_TEXT,
                       font=self._font(10), relief="flat", bd=0,
                       padx=self._px(10), pady=self._px(8),
                       highlightthickness=0, cursor="arrow")

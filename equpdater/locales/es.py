@@ -421,8 +421,8 @@ STRINGS = {
         'No se pudo leer la compilación del cliente de WoW.exe',
     'Could not repair: {error}':
         'No se pudo reparar: {error}',
-    "If login stops at “Authenticating”:\n• Turn off any VPN or proxy: OctoWoW's login can hang behind one.\n• Sign in once with Priority Sign In in the official OctoLauncher, then try PLAY in EqUpdater again.\n\nEqUpdater cannot currently use OctoLauncher's Priority Sign In directly. Warning: the official launcher may modify client files that EqUpdater manages.":
-        'Si el inicio de sesión se queda en «Autenticando»:\n• Desactiva cualquier VPN o proxy: el inicio de sesión de OctoWoW puede bloquearse con ellos.\n• Inicia sesión una vez con el Priority Sign In (inicio de sesión prioritario) del OctoLauncher oficial y luego vuelve a probar JUGAR en EqUpdater.\n\nEqUpdater no puede usar directamente el Priority Sign In de OctoLauncher por ahora. Aviso: el launcher oficial puede modificar archivos del cliente que gestiona EqUpdater.',
+    "If login stops at “Authenticating”:\n• Turn off any VPN or proxy: OctoWoW login can hang behind one.\n• If normal login still fails, try launching the game through the official OctoLauncher using Priority Sign In.\n\nEqUpdater cannot currently use OctoLauncher's Priority Sign In directly.\nWarning: the official launcher may modify client files that EqUpdater manages.":
+        'Si el inicio de sesión se queda en «Autenticando»:\n• Desactiva cualquier VPN o proxy: el inicio de sesión de OctoWoW puede bloquearse con ellos.\n• Si el inicio de sesión normal sigue fallando, prueba a abrir el juego desde el OctoLauncher oficial con el Priority Sign In (inicio de sesión prioritario).\n\nEqUpdater no puede usar directamente el Priority Sign In de OctoLauncher por ahora.\nAviso: el launcher oficial puede modificar archivos del cliente que gestiona EqUpdater.',
     'Game client':
         'Cliente del juego',
     'LOGIN DOCTOR':

@@ -368,11 +368,16 @@ class TestSummary(unittest.TestCase):
 
     def test_stuck_at_authenticating_advice(self):
         """A tester's login hung at Authenticating behind a VPN, in the
-        official launcher too; with the VPN off, Priority Sign In worked."""
+        official launcher too; with the VPN off, the launcher's Priority
+        Sign In worked."""
         self.assertIn("Authenticating", ld.PRIORITY_NOTE)
         self.assertIn("Turn off any VPN or proxy", ld.PRIORITY_NOTE)
-        self.assertIn("Sign in once with Priority Sign In in the official "
-                      "OctoLauncher", ld.PRIORITY_NOTE)
+        self.assertIn("try launching the game through the official "
+                      "OctoLauncher using Priority Sign In", ld.PRIORITY_NOTE)
+        # Priority Sign In does not carry over to EqUpdater's own PLAY: the
+        # launcher restores the normal route after the game it started.
+        self.assertNotIn("Sign in once", ld.PRIORITY_NOTE)
+        self.assertNotIn("PLAY in EqUpdater", ld.PRIORITY_NOTE)
 
 
 try:
