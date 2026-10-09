@@ -586,13 +586,19 @@ class TestAnnouncementsFallbackOrder(unittest.TestCase):
     """Topic 2848 first; news.json only when the forum fails; if both fail
     the forum's error is raised and the panel keeps its cached post."""
 
-    POST = news.ForumPost(2848, "Realm restart", "Kestrel",
-                          "2026-10-09T12:00:00+00:00",
-                          "https://octowow.st/forum/viewtopic.php?p=1#p1", "b")
+    def setUp(self):
+        # The app's own news module: other test files reload the package,
+        # and an exception class from a stale copy is not the one the app
+        # catches.
+        from equpdater import app
+        self.app, self.n = app, sys.modules["equpdater.news"]
+        self.POST = self.n.ForumPost(2848, "Realm restart", "Kestrel",
+                                     "2026-10-09T12:00:00+00:00",
+                                     "https://octowow.st/forum/viewtopic.php?p=1#p1", "b")
 
     def run_with(self, forum, feed):
         from unittest import mock
-        from equpdater import app
+        app = self.app
         calls = []
 
         def topic(*a, **k):
@@ -610,11 +616,11 @@ class TestAnnouncementsFallbackOrder(unittest.TestCase):
                 mock.patch.object(app, "fetch_news_feed", news_feed):
             try:
                 return app.fetch_featured_post(), calls
-            except news.ForumError as exc:
+            except self.n.ForumError as exc:
                 return exc, calls
 
     def blocked(self):
-        return news.ForumBlockedError("topic 2848", "u", "challenge",
+        return self.n.ForumBlockedError("topic 2848", "u", "challenge",
                                       short="octowow.st is showing its "
                                             "DDoS-protection check to apps right now")
 
@@ -625,7 +631,7 @@ class TestAnnouncementsFallbackOrder(unittest.TestCase):
 
     def test_news_json_when_the_forum_is_blocked(self):
         item, calls = self.run_with(self.blocked(),
-                                    news.parse_news_feed(feed(FEED_ITEM)))
+                                    self.n.parse_news_feed(feed(FEED_ITEM)))
         self.assertEqual(item["id"], "2026-10-08-ddos")
         self.assertEqual(calls, ["forum", "news.json"])
 
@@ -634,10 +640,10 @@ class TestAnnouncementsFallbackOrder(unittest.TestCase):
         self.assertIsNone(item)            # _load_featured keeps the cache
 
     def test_both_failing_reports_the_forum(self):
-        malformed = news.ForumError("news.json parse", "u", "bad",
+        malformed = self.n.ForumError("news.json parse", "u", "bad",
                                     short="the news feed was malformed")
         exc, calls = self.run_with(self.blocked(), malformed)
-        self.assertIsInstance(exc, news.ForumBlockedError)
+        self.assertIsInstance(exc, self.n.ForumBlockedError)
         self.assertEqual(calls, ["forum", "news.json"])
 
 
