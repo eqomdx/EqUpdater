@@ -1471,5 +1471,121 @@ class TestLoginDoctorWindow(unittest.TestCase):
             self.assertEqual(f.read(), b"set realmlist octowow.st\r\n")
 
 
+@unittest.skipUnless(HAVE_TK, "no display")
+class TestAnnouncementsSource(unittest.TestCase):
+    """Announcements: news.json first; when it fails, the last good
+    announcement stays (on screen and in the cache); the forum is read only
+    with nothing cached. A malformed, failed or validly empty feed never
+    replaces the cache. All sources are replaced; nothing goes online."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="equ-announce-")
+        os.environ["LOCALAPPDATA"] = cls.tmp
+        os.environ["XDG_DATA_HOME"] = cls.tmp
+        for mod in [m for m in list(sys.modules) if m.startswith("equpdater")]:
+            del sys.modules[mod]
+        from equpdater import app as m, news
+        cls.m, cls.news = m, news
+        cls.app = m.EqUpdaterApp()
+        for _ in range(4):
+            cls.app.update()
+
+    @classmethod
+    def tearDownClass(cls):
+        _close_app(cls.app)
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    FEED = {"id": "feed-1", "title": "From news.json", "date": "2026-10-08",
+            "body": "feed body", "html": "", "author": None,
+            "url": "https://octowow.st/forum/viewtopic.php?t=9"}
+    FORUM = {"id": "2595", "title": "From the forum", "date": "", "body": "x",
+             "html": "x", "author": "K", "url": "https://octowow.st/forum/viewtopic.php?t=2595"}
+    CACHED = {"id": "old", "title": "Cached", "date": "2026-09-01", "body": "c",
+              "html": "", "author": None, "url": None}
+
+    def run_load(self, feed, forum=None, cached=None):
+        """Load the Announcements with ``feed`` (an item, None for an empty
+        feed, or an exception) and ``forum`` likewise; return (shown item,
+        cached item, forum called)."""
+        from unittest import mock
+        m, a = self.m, self.app
+        a._featured = cached
+        m.update_config(lambda c: c.setdefault("news_cache", {}).__setitem__(
+            "announcements", {"item": cached} if cached else {}))
+        forum_calls = []
+
+        def from_feed():
+            if isinstance(feed, Exception):
+                raise feed
+            return feed
+
+        def from_forum():
+            forum_calls.append(1)
+            if isinstance(forum, Exception):
+                raise forum
+            return forum
+        class Inline:
+            """The worker, run on this thread: its after(0, apply) then
+            needs no running mainloop."""
+            def __init__(self, target, **_kw):
+                self.target = target
+
+            def start(self):
+                self.target()
+        with mock.patch.object(m, "fetch_featured_post", from_feed), \
+                mock.patch.object(m, "fetch_featured_post_from_forum", from_forum), \
+                mock.patch.object(m.threading, "Thread", Inline):
+            a._feat_loading = False
+            a._load_featured()
+            deadline = time.monotonic() + 10
+            while a._feat_loading:
+                a.update()
+                time.sleep(0.01)
+                self.assertLess(time.monotonic(), deadline)
+        cache = m.load_config().get("news_cache", {}).get("announcements", {})
+        return a._featured, cache.get("item"), bool(forum_calls)
+
+    def malformed(self):
+        return self.news.ForumError("news.json parse", self.news.NEWS_FEED_URL,
+                                      "bad", short="the news feed was malformed")
+
+    def test_feed_first(self):
+        shown, cached, forum = self.run_load(self.FEED, self.FORUM, self.CACHED)
+        self.assertEqual(shown["id"], "feed-1")
+        self.assertEqual(cached["id"], "feed-1")
+        self.assertFalse(forum)
+        self.assertIsNone(shown["author"])          # not invented
+
+    def test_failed_or_malformed_feed_keeps_the_last_good(self):
+        import socket
+        for err in (self.malformed(), socket.timeout("timed out"),
+                    self.news.ForumBlockedError("news.json", "u", "challenge")):
+            with self.subTest(err=type(err).__name__):
+                shown, cached, forum = self.run_load(err, self.FORUM, self.CACHED)
+                self.assertEqual(shown["id"], "old")
+                self.assertEqual(cached["id"], "old")
+                self.assertFalse(forum)             # cache before the forum
+
+    def test_empty_feed_keeps_the_last_good(self):
+        shown, cached, forum = self.run_load(None, self.FORUM, self.CACHED)
+        self.assertEqual(shown["id"], "old")
+        self.assertEqual(cached["id"], "old")
+        self.assertFalse(forum)
+
+    def test_forum_only_with_nothing_cached(self):
+        shown, cached, forum = self.run_load(self.malformed(), self.FORUM, None)
+        self.assertTrue(forum)
+        self.assertEqual(shown["id"], "2595")
+        self.assertEqual(cached["id"], "2595")
+
+    def test_everything_failing_shows_no_content(self):
+        err = self.news.ForumBlockedError("forum 2 listing", "u", "challenge")
+        shown, cached, forum = self.run_load(self.malformed(), err, None)
+        self.assertTrue(forum)
+        self.assertIsNone(shown)
+        self.assertIsNone(cached)
+
+
 if __name__ == "__main__":
     unittest.main()

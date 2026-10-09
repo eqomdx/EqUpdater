@@ -1,6 +1,18 @@
-"""OctoWoW forum news for the News tab: Announcements and the Changelog.
+"""OctoWoW news for the News tab: Announcements and the Changelog.
 
-Both come straight from the public phpBB forum:
+**Announcements** come from OctoWoW's public news feed, the one the official
+launcher reads -- fetched here directly, so EqUpdater needs no launcher:
+
+    https://octowow.st/news.json     {"items": [{id, title, date, body,
+                                                  author?, url?}, ...]}
+
+It is served from the forum by OctoWoW (ForumFeedService), newest first,
+with a plain-text ``body``. ``fetch_news_feed`` validates it against that
+contract -- the launcher's NewsFeedSchema -- and a feed that does not match
+is an error, never content. ``{"items": []}`` is a valid, empty feed.
+
+**The Changelog**, and the Announcements fallback on a first run with
+nothing cached, come straight from the public phpBB forum:
 
     Announcements  forum 2   https://octowow.st/forum/viewforum.php?f=2
     Changelog      forum 4   https://octowow.st/forum/viewforum.php?f=4
@@ -16,7 +28,7 @@ Two steps, as a person reading the forum would take them:
 2. ``fetch_first_post`` opens a topic and returns its first post -- the
    announcement itself -- never the replies beneath it.
 
-The Announcements panel is ``fetch_latest_post(2)``: one listing, one topic
+The forum Announcements are ``fetch_latest_post(2)``: one listing, one topic
 page. The Changelog list is ``fetch_topic_list(4)``: one listing, nothing else.
 
 The approach follows OctoBot's ``octotracker/announcements.py``: ``a.topictitle``
@@ -26,22 +38,22 @@ OctoBot reads the first ``<time>`` and username in a row's ``.list-inner``:
 on phpBB 3.3 that is the hidden mobile "Last post by ..." line, i.e. the
 latest *reply*. Here the last-post parts of a row are skipped.
 
-There is no JSON feed behind this. ``octonews.php`` is not used, and
-``news.json`` (OctoBot's fallback) is not either: it holds two posts from
-April 2026, which is exactly the stale content this must not show.
+``octonews.php`` is not used. (``news.json`` once held two posts from April
+2026; it is now generated from the forum, which is why it is used again.)
 
 **Every failure says which stage failed.** A listing with no topics is an
 error, not an empty news feed: the forum always has topics, so zero means the
 page was not the forum. That is what happens while the site's DDoS protection
 (BlazingFast) answers non-browser clients with a JavaScript "Just a moment
 please..." check -- HTTP 200, no forum in it -- which is named as such rather
-than reported as "no topics". It is detected, never solved or evaded.
+than reported as "no topics". It is detected, never solved or evaded; the
+same check on news.json is the same error.
 
 Pure parsing is separate from fetching so it is tested without a network.
 """
-
 from __future__ import annotations
 
+import json
 import re
 import urllib.request
 from dataclasses import dataclass
@@ -53,10 +65,13 @@ from urllib.parse import parse_qs, urljoin, urlparse
 from .i18n import N_
 
 BASE = "https://octowow.st/forum/"
+#: The public news feed OctoLauncher reads; no sign-in.
+NEWS_FEED_URL = "https://octowow.st/news.json"
 ANNOUNCEMENTS_FORUM_ID = 2
 CHANGELOG_FORUM_ID = 4
 
 _HTML_ACCEPT = "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5"
+_JSON_ACCEPT = "application/json"
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -558,3 +573,66 @@ def fetch_topic_list(forum_id: int, limit: int, *, opener, user_agent: str,
     """The ``limit`` newest-started topics of a forum. One request."""
     return fetch_forum_topics(forum_id, opener=opener, user_agent=user_agent,
                               timeout=timeout)[:max(1, int(limit))]
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  news.json
+# ──────────────────────────────────────────────────────────────────────────────
+
+_REQUIRED = ("id", "title", "date", "body")
+
+
+def _absolute_url(value) -> bool:
+    if not isinstance(value, str):
+        return False
+    parts = urlparse(value)
+    return parts.scheme in ("http", "https") and bool(parts.netloc)
+
+
+def parse_news_feed(text: str, url: str = NEWS_FEED_URL) -> list[dict]:
+    """news.json's items as News items, in the feed's order (newest first).
+
+    The contract is OctoLauncher's NewsFeedSchema: an object whose ``items``
+    is a list; each item has string ``id``, ``title``, ``date`` and ``body``
+    (plain text), ``author`` a string, null or absent, and ``url`` absent or
+    an absolute http(s) URL. Anything else raises ForumError -- the whole
+    feed, as the launcher rejects it -- so a bad feed never becomes content
+    or replaces the last good one. Missing optional values stay missing."""
+    stage = "news.json parse"
+    short = N_("the news feed was malformed")
+
+    def bad(why):
+        return ForumError(stage, url, why, short=short)
+
+    try:
+        data = json.loads(text)
+    except ValueError as exc:
+        raise bad(f"not JSON: {exc}") from exc
+    if not isinstance(data, dict) or not isinstance(data.get("items"), list):
+        raise bad("expected an object with an 'items' list")
+    out = []
+    for n, item in enumerate(data["items"]):
+        if not isinstance(item, dict):
+            raise bad(f"item {n} is not an object")
+        for key in _REQUIRED:
+            if not isinstance(item.get(key), str):
+                raise bad(f"item {n}: '{key}' missing or not a string")
+        author = item.get("author")
+        if author is not None and not isinstance(author, str):
+            raise bad(f"item {n}: 'author' is not a string")
+        link = item.get("url")
+        if link is not None and not _absolute_url(link):
+            raise bad(f"item {n}: 'url' is not an absolute http(s) URL")
+        out.append({"id": item["id"], "title": item["title"],
+                    "date": item["date"], "body": item["body"], "html": "",
+                    "author": author, "url": link})
+    return out
+
+
+def fetch_news_feed(*, opener, user_agent: str, timeout: int = 8,
+                    url: str = NEWS_FEED_URL) -> list[dict]:
+    """GET news.json and validate it (parse_news_feed). One request; the
+    DDoS-protection page is ForumBlockedError, as on the forum."""
+    body = _get(url, "news.json", opener=opener, user_agent=user_agent,
+                timeout=timeout, accept=_JSON_ACCEPT)
+    return parse_news_feed(body, url)

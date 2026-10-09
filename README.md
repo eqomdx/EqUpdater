@@ -175,8 +175,10 @@ confirmed, and skips the rest.
   Sign In itself.
 
 ### News
-- Announcements and the Changelog, read straight from the OctoWoW forum:
-  once at launch, and again when you press refresh.
+- Announcements from OctoWoW's public news feed (`news.json`, the one the
+  official launcher reads -- fetched directly, no launcher needed), and the
+  Changelog from the OctoWoW forum: once at launch, and again when you press
+  refresh.
 - If the forum cannot be read, the News tab says why and keeps the last news
   it received.
 

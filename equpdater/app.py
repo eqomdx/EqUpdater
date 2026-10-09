@@ -55,7 +55,8 @@ from .planner import (Component, plan, skipped_notably,
                       updatable)
 from .states import Action, Plan, Status
 from .news import (ANNOUNCEMENTS_FORUM_ID, CHANGELOG_FORUM_ID,
-                   fetch_latest_post, fetch_topic_list, is_challenge_page)
+                   fetch_latest_post, fetch_news_feed, fetch_topic_list,
+                   is_challenge_page)
 from .ui import (AnimatedBackground, FontManager, GradientButton, prepare_fonts,
                  GradientPalette, apply_edge_fades, cover_background,
                  BackdropCanvas, blend, edge_fade_layers, photo_image,
@@ -3385,10 +3386,21 @@ def fetch_patch_notes() -> list:
         opener=_news_open, user_agent=UA, timeout=NEWS_TIMEOUT)]
 
 
-def fetch_featured_post() -> dict:
-    """The newest announcement, by the date it was posted -- not the pinned
-    topic at the top of the forum, and not the latest reply -- with its
-    opening post. Two requests: the listing and that topic."""
+def fetch_featured_post() -> dict | None:
+    """The newest announcement from OctoWoW's public news feed (news.json,
+    as OctoLauncher reads it -- fetched directly, no launcher needed): its
+    first item, or None when the feed is validly empty. Raises
+    news.ForumError when the feed cannot be fetched or is malformed."""
+    items = fetch_news_feed(opener=_news_open, user_agent=UA,
+                            timeout=NEWS_TIMEOUT)
+    return items[0] if items else None
+
+
+def fetch_featured_post_from_forum() -> dict:
+    """The fallback when news.json fails and nothing is cached: the newest
+    announcement, by the date it was posted -- not the pinned topic at the
+    top of the forum, and not the latest reply -- with its opening post. Two
+    requests: the listing and that topic."""
     return fetch_latest_post(ANNOUNCEMENTS_FORUM_ID, opener=_news_open,
                              user_agent=UA, timeout=NEWS_TIMEOUT).to_item()
 
@@ -4416,12 +4428,16 @@ class EqUpdaterApp(tk.Tk):
         self._load_patch_notes()
 
     def _load_featured(self):
-        """Read the Announcements forum once, in the background. A click on
-        refresh while a read is already running does not start a second."""
+        """Read the Announcements once, in the background: news.json, then
+        the last good announcement (kept on screen and in the cache), and
+        only with nothing cached the forum. A malformed or failed feed never
+        replaces what is cached, and nor does a validly empty one. A click
+        on refresh while a read is already running does not start a second."""
         if getattr(self, "_feat_loading", False):
             return
         self._feat_loading = True
         self._render_featured(self._featured, loading=True)
+        have_cached = bool(self._featured)
 
         def worker():
             feat, err = None, ""
@@ -4429,6 +4445,11 @@ class EqUpdaterApp(tk.Tk):
                 feat = fetch_featured_post()
             except Exception as exc:
                 err = _news_error(N_("Announcements"), exc)
+                if not have_cached:
+                    try:
+                        feat, err = fetch_featured_post_from_forum(), ""
+                    except Exception as forum_exc:
+                        _news_error(N_("Announcements"), forum_exc)
 
             def apply():
                 self._feat_loading = False
