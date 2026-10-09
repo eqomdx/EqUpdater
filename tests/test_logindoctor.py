@@ -19,7 +19,7 @@ sys.path.insert(0, ROOT)
 
 from equpdater import logindoctor as ld  # noqa: E402
 
-GOOD = "1.12.1 (5875)"
+GOOD = "1.18.1 (7272)"
 
 
 def states(checks):
@@ -84,8 +84,13 @@ class TestClient(DoctorCase):
         self.assertTrue(has(checks, ld.FAIL, "WoW.exe not found"))
 
     def test_wrong_build(self):
-        checks = self.client().checks(version="1.12.2 (6005)")
-        self.assertTrue(has(checks, ld.FAIL, "Unexpected client build"))
+        """Another build is a warning: it may be a newer OctoWoW client
+        than this EqUpdater knows. The vanilla 1.12.1 build is not it."""
+        for other in ("1.12.1 (5875)", "1.18.2 (7300)"):
+            with self.subTest(build=other):
+                checks = self.client().checks(version=other)
+                self.assertTrue(has(checks, ld.WARN, "Unexpected client build"))
+                self.assertFalse(any(c.state == ld.FAIL for c in checks))
 
     def test_unreadable_build(self):
         self.assertTrue(has(self.client().checks(version=""), ld.WARN,

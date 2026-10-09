@@ -157,7 +157,7 @@ confirmed, and skips the rest.
 
 ### Login Doctor
 - **Settings → Login Doctor** checks what on your computer could stop the
-  game logging in: `WoW.exe` and its build (1.12.1, 5875), the realmlist
+  game logging in: `WoW.exe` and its build (1.18.1, 7272), the realmlist
   files (`realmlist.wtf`, and `Data/<locale>/realmlist.wtf` where there is
   one), the login lines in `WTF/Config.wtf`, name lookups for
   play.octowow.st, octowow.st and dl.octowow.st, the login server's port

@@ -1380,7 +1380,7 @@ class TestLoginDoctorWindow(unittest.TestCase):
                for h in ld.DNS_HOSTS]
         for p in (mock.patch.object(ld, "network_checks", return_value=net),
                   mock.patch.object(self.m, "get_client_version",
-                                    return_value="1.12.1 (5875)"),
+                                    return_value="1.18.1 (7272)"),
                   mock.patch.object(self.m.platforms, "client_in_use",
                                     return_value=False)):
             p.start()

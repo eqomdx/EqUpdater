@@ -50,9 +50,11 @@ OLD_HOSTS = ("octowow.st", "www.octowow.st")
 ALT_ROUTES = ("normal.octowow.st",)
 #: The port the 1.12 client logs in on.
 LOGIN_PORT = 3724
-#: What OctoWoW's client is: WoW 1.12.1, build 5875.
-EXPECTED_VERSION = "1.12.1"
-EXPECTED_BUILD = "5875"
+#: What OctoWoW's client reports: 1.18.1, build 7272 (read from the
+#: client EqUpdater syncs). Any other build is a warning, not a failure: a
+#: newer client released after this EqUpdater is still the right one.
+EXPECTED_VERSION = "1.18.1"
+EXPECTED_BUILD = "7272"
 #: The exact line repair writes; the client reads it case-insensitively.
 REALMLIST_LINE = f"set realmlist {LOGIN_HOST}"
 BACKUP_EXT = ".octobak"
@@ -188,8 +190,8 @@ def _host_check(kind: str, where: str, host: str, group: str) -> Check:
 
 
 def client_checks(client_dir: str, version: str, running: bool) -> list:
-    """WoW.exe is there and is the expected 1.12.1 (5875) client.
-    ``version`` is app.get_client_version's "1.12.1 (5875)" or ""."""
+    """WoW.exe is there and is the expected 1.18.1 (7272) client.
+    ``version`` is app.get_client_version's "1.18.1 (7272)" or ""."""
     exe = os.path.join(client_dir, "WoW.exe")
     if not os.path.isfile(exe):
         return [Check(FAIL, N_("WoW.exe not found in the game folder"), {})]
@@ -203,7 +205,7 @@ def client_checks(client_dir: str, version: str, running: bool) -> list:
         out.append(Check(PASS, N_("Client build looks correct ({version})"),
                          {"version": version}))
     else:
-        out.append(Check(FAIL, N_("Unexpected client build {version} (OctoWoW uses "
+        out.append(Check(WARN, N_("Unexpected client build {version} (OctoWoW uses "
                                   "{expected})"),
                          {"version": version, "expected": expected}))
     if running:
