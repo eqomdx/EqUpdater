@@ -54,9 +54,9 @@ from .hashing import files_hash, folder_hash
 from .planner import (Component, plan, skipped_notably,
                       updatable)
 from .states import Action, Plan, Status
-from .news import (ANNOUNCEMENTS_TOPIC_ID, CHANGELOG_FORUM_ID,
-                   fetch_newest_post_in_topic, fetch_topic_list,
-                   is_challenge_page)
+from .news import (ANNOUNCEMENTS_TOPIC_ID, PATCH_NOTES_TOPIC_ID, ForumError,
+                   fetch_news_feed, fetch_newest_post_in_topic,
+                   fetch_topic_posts, is_challenge_page)
 from .ui import (AnimatedBackground, FontManager, GradientButton, prepare_fonts,
                  GradientPalette, apply_edge_fades, cover_background,
                  BackdropCanvas, blend, edge_fade_layers, photo_image,
@@ -3378,20 +3378,34 @@ def _news_open(req, timeout):
 
 
 def fetch_patch_notes() -> list:
-    """The newest Patch Notes and Changelog topics: title, start date,
-    author and topic link, from one request for the forum listing.
+    """The newest posts of OctoWoW's patch notes thread (topic 2816), newest
+    first, each with its own date, author, text and link. One request.
     Raises news.ForumError, naming the stage that failed."""
-    return [row.to_item() for row in fetch_topic_list(
-        CHANGELOG_FORUM_ID, NEWS_CHANGELOG_COUNT,
+    return [post.to_item() for post in fetch_topic_posts(
+        PATCH_NOTES_TOPIC_ID, NEWS_CHANGELOG_COUNT,
         opener=_news_open, user_agent=UA, timeout=NEWS_TIMEOUT)]
 
 
-def fetch_featured_post() -> dict:
-    """The newest post in OctoWoW's announcements thread (topic 2848): its
-    own subject, author, date, text and link. One request."""
-    return fetch_newest_post_in_topic(
-        ANNOUNCEMENTS_TOPIC_ID, opener=_news_open, user_agent=UA,
-        timeout=NEWS_TIMEOUT).to_item()
+def fetch_featured_post() -> dict | None:
+    """The newest post in OctoWoW's announcements thread (topic 2848). When
+    the forum cannot be read -- above all while it shows apps its DDoS check
+    -- the first item of the public news.json instead (as OctoLauncher reads
+    it; fetched directly, no launcher needed), or None when that feed is
+    validly empty. If both fail, the forum's error is raised: it is the
+    reason the panel cannot update."""
+    try:
+        return fetch_newest_post_in_topic(
+            ANNOUNCEMENTS_TOPIC_ID, opener=_news_open, user_agent=UA,
+            timeout=NEWS_TIMEOUT).to_item()
+    except ForumError as forum_exc:
+        log(f"Announcements: {forum_exc}; trying news.json", "dim")
+        try:
+            items = fetch_news_feed(opener=_news_open, user_agent=UA,
+                                    timeout=NEWS_TIMEOUT)
+        except ForumError as feed_exc:
+            log(f"Announcements: {feed_exc}", "dim")
+            raise forum_exc
+        return items[0] if items else None
 
 
 def _news_error(section: str, exc: Exception) -> str:
@@ -4417,8 +4431,10 @@ class EqUpdaterApp(tk.Tk):
         self._load_patch_notes()
 
     def _load_featured(self):
-        """Read the announcements thread once, in the background. A click on
-        refresh while a read is already running does not start a second."""
+        """Read the Announcements once, in the background: the thread, else
+        news.json (fetch_featured_post); if both fail, the last good one
+        stays on screen. A click on refresh while a read is already running
+        does not start a second."""
         if getattr(self, "_feat_loading", False):
             return
         self._feat_loading = True
@@ -4443,7 +4459,7 @@ class EqUpdaterApp(tk.Tk):
         threading.Thread(target=worker, daemon=True).start()
 
     def _load_patch_notes(self):
-        """Read the Patch Notes forum listing once, in the background."""
+        """Read the patch notes thread once, in the background."""
         if getattr(self, "_patch_loading", False):
             return
         self._patch_loading = True

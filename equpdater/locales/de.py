@@ -499,4 +499,5 @@ STRINGS = {
         '{name} nicht erreichbar',
     '{name} reachable':
         '{name} erreichbar',
+    'the news feed was malformed': 'der News-Feed war fehlerhaft',
 }

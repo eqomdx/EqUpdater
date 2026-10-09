@@ -175,8 +175,12 @@ confirmed, and skips the rest.
   Sign In itself.
 
 ### News
-- Announcements and the Changelog, read straight from the OctoWoW forum:
-  once at launch, and again when you press refresh.
+- Announcements: the newest post in OctoWoW's announcements thread
+  ([t=2848](https://octowow.st/forum/viewtopic.php?t=2848)); while the forum
+  is unreadable, OctoWoW's public news feed (`news.json`) instead.
+- Changelog: the newest posts in the patch notes thread
+  ([t=2816](https://octowow.st/forum/viewtopic.php?t=2816)).
+- Both are read once at launch, and again when you press refresh.
 - If the forum cannot be read, the News tab says why and keeps the last news
   it received.
 
