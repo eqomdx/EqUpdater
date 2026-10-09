@@ -1389,8 +1389,13 @@ class TestLoginDoctorWindow(unittest.TestCase):
         self.app.update()
 
     def tearDown(self):
+        # Not _close_settings(): closing Settings is "Confirm", which on a
+        # fresh app (a first run) offers a reconcile -- and on Windows asks
+        # about a Defender exclusion in a real dialog that nobody answers.
         if self.app._settings_overlay is not None:
-            self.app._close_settings()
+            self.app._settings_overlay.destroy()
+            self.app._settings_overlay = None
+            self.app._doctor_overlay = None
         self.app._game_path.set("")
 
     def open_doctor(self):
