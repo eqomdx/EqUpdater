@@ -500,5 +500,4 @@ STRINGS = {
         '{name} inacessível',
     '{name} reachable':
         '{name} acessível',
-    'the news feed was malformed': 'o feed de notícias estava malformado',
 }

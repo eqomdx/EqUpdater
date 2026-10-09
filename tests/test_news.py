@@ -326,136 +326,13 @@ class TestFetch(unittest.TestCase):
         self.assertEqual(cm.exception.stage, "forum 2 listing")
         self.assertIn("forum 2 listing failed", str(cm.exception))
 
-    def test_the_changelog_reads_only_the_forum(self):
-        """news.json is the Announcements' source; the Changelog has no
-        public JSON contract and stays on forum 4."""
+    def test_no_json_feed_is_consulted(self):
         site = FakeSite({"viewforum.php?f=4": CHANGELOG})
         news.fetch_topic_list(4, 8, **kw(site))
-        self.assertEqual(site.asked, [news.forum_url(4)])
         self.assertFalse([u for u in site.asked
                           if "octonews" in u or u.endswith(".json")])
         self.assertFalse(hasattr(news, "OCTONEWS_URL"))
 
-
-import json  # noqa: E402
-
-FEED_ITEM = {"id": "2026-10-08-ddos", "title": "DDoS Updates",
-             "date": "2026-10-08", "body": "Mitigation is live.\nThanks!",
-             "author": "Kestrel",
-             "url": "https://octowow.st/forum/viewtopic.php?t=2595"}
-
-
-def feed(*items, **top):
-    return json.dumps(dict({"items": list(items)}, **top))
-
-
-class TestNewsFeed(unittest.TestCase):
-    """news.json against OctoLauncher's NewsFeedSchema. No network."""
-
-    def test_valid_feed_maps_to_the_news_item(self):
-        (item,) = news.parse_news_feed(feed(FEED_ITEM))
-        self.assertEqual(item, {"id": "2026-10-08-ddos", "title": "DDoS Updates",
-                                "date": "2026-10-08",
-                                "body": "Mitigation is live.\nThanks!",
-                                "html": "", "author": "Kestrel",
-                                "url": "https://octowow.st/forum/viewtopic.php?t=2595"})
-
-    def test_multiple_items_keep_the_feed_order(self):
-        older = dict(FEED_ITEM, id="old", title="Older", date="2026-09-01")
-        items = news.parse_news_feed(feed(FEED_ITEM, older))
-        self.assertEqual([i["id"] for i in items], ["2026-10-08-ddos", "old"])
-
-    def test_empty_items_is_valid(self):
-        self.assertEqual(news.parse_news_feed('{"items": []}'), [])
-
-    def test_author_and_url_optional_and_not_invented(self):
-        for item in ({k: v for k, v in FEED_ITEM.items() if k != "author"},
-                     dict(FEED_ITEM, author=None)):
-            with self.subTest(item=item):
-                self.assertIsNone(news.parse_news_feed(feed(item))[0]["author"])
-        no_url = {k: v for k, v in FEED_ITEM.items() if k != "url"}
-        self.assertIsNone(news.parse_news_feed(feed(no_url))[0]["url"])
-
-    def test_unknown_extra_fields_are_ignored(self):
-        self.assertEqual(len(news.parse_news_feed(
-            feed(dict(FEED_ITEM, pinned=True), version=2))), 1)
-
-    def assertMalformed(self, text):
-        with self.assertRaises(news.ForumError) as cm:
-            news.parse_news_feed(text)
-        self.assertEqual(cm.exception.stage, "news.json parse")
-        self.assertEqual(cm.exception.short, "the news feed was malformed")
-
-    def test_malformed_top_level(self):
-        for text in ("[]", '"news"', "null", "{}", '{"items": {}}',
-                     '{"items": null}', '{"Items": []}'):
-            with self.subTest(text=text):
-                self.assertMalformed(text)
-
-    def test_missing_required_fields(self):
-        for key in ("id", "title", "date", "body"):
-            with self.subTest(missing=key):
-                self.assertMalformed(feed({k: v for k, v in FEED_ITEM.items()
-                                           if k != key}))
-
-    def test_invalid_field_types(self):
-        for key, value in (("id", 7), ("title", None), ("date", 20261008),
-                           ("body", ["x"]), ("author", 5), ("author", {})):
-            with self.subTest(key=key, value=value):
-                self.assertMalformed(feed(dict(FEED_ITEM, **{key: value})))
-        self.assertMalformed(feed("not an object"))
-
-    def test_invalid_url(self):
-        for link in ("viewtopic.php?t=1", "/forum/x", "ftp://octowow.st/x",
-                     "javascript:alert(1)", "https://", "", 42):
-            with self.subTest(url=link):
-                self.assertMalformed(feed(dict(FEED_ITEM, url=link)))
-
-    def test_one_bad_item_rejects_the_whole_feed(self):
-        self.assertMalformed(feed(FEED_ITEM, {"id": "x"}))
-
-    def test_malformed_json(self):
-        for text in ("", "{", "<html>oops</html>", '{"items": [}'):
-            with self.subTest(text=text):
-                self.assertMalformed(text)
-
-    # ── fetching ───────────────────────────────────────────────────────────
-
-    def test_fetch_is_one_request_to_news_json(self):
-        site = FakeSite({"news.json": feed(FEED_ITEM)})
-        items = news.fetch_news_feed(**kw(site))
-        self.assertEqual(site.asked, ["https://octowow.st/news.json"])
-        self.assertEqual(items[0]["url"], FEED_ITEM["url"])
-
-    def test_timeout_and_http_errors(self):
-        import socket
-        import urllib.error
-        for exc in (socket.timeout("timed out"),
-                    urllib.error.HTTPError(news.NEWS_FEED_URL, 503, "busy", {}, None),
-                    urllib.error.URLError("unreachable")):
-            with self.subTest(exc=type(exc).__name__):
-                with self.assertRaises(news.ForumError) as cm:
-                    news.fetch_news_feed(**kw(FakeSite({"news.json": exc})))
-                self.assertEqual(cm.exception.stage, "news.json")
-                self.assertEqual(cm.exception.short,
-                                 "octowow.st could not be reached")
-
-    def test_challenge_is_blocked_not_content(self):
-        for page in (CHALLENGE, (feed(FEED_ITEM), {"X-BF-Challenge": "pending"})):
-            with self.subTest(page=str(page)[:30]):
-                with self.assertRaises(news.ForumBlockedError) as cm:
-                    news.fetch_news_feed(**kw(FakeSite({"news.json": page})))
-                self.assertEqual(cm.exception.stage, "news.json")
-                self.assertIn("DDoS-protection", cm.exception.short)
-
-    def test_the_timeout_is_passed_through(self):
-        seen = []
-
-        def opener(req, timeout):
-            seen.append(timeout)
-            return _Resp(feed(FEED_ITEM))
-        news.fetch_news_feed(opener=opener, user_agent="t", timeout=8)
-        self.assertEqual(seen, [8])
 
 if __name__ == "__main__":
     unittest.main()

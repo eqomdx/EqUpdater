@@ -499,5 +499,4 @@ STRINGS = {
         '{name} недоступен',
     '{name} reachable':
         '{name} доступен',
-    'the news feed was malformed': 'лента новостей была повреждена',
 }

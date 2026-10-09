@@ -500,5 +500,4 @@ STRINGS = {
         '{name} 无法访问',
     '{name} reachable':
         '{name} 可以访问',
-    'the news feed was malformed': '新闻源格式错误',
 }

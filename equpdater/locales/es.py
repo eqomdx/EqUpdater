@@ -499,5 +499,4 @@ STRINGS = {
         '{name} no accesible',
     '{name} reachable':
         '{name} accesible',
-    'the news feed was malformed': 'el feed de noticias estaba mal formado',
 }
