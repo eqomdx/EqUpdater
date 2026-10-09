@@ -77,6 +77,15 @@ particular Proton, Lutris, Faugus, a custom Wine prefix - open
   A line EqUpdater cannot use is pointed out straight away, and PLAY will
   not start the game until it is fixed.
 
+The game runs on its own: closing EqUpdater never closes it. It gets your
+desktop session as EqUpdater got it, without EqUpdater's own launch details
+(the desktop's startup ID and the AppImage's variables), so its window is
+its own in the taskbar. If a game started through Bottles or another
+launcher still shows only in Alt+Tab, start the same command from a
+terminal: if it behaves the same there, it is that launcher's or the
+window manager's setting (for example a Wine virtual desktop), not
+EqUpdater's.
+
 Everything else - updates, mods, addons, texture packs, tweaks, the
 `WoW.exe` patch - works the same as on Windows. Keep the game anywhere,
 for example `~/Games/OctoWoW` or inside a Wine prefix.

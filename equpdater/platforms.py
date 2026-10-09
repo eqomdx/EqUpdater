@@ -59,6 +59,18 @@ def own_env(var: str, value: str) -> None:
     os.environ[var] = value
 
 
+#: How the desktop started EqUpdater: startup notification (X11), XDG
+#: activation (Wayland) and the launched-desktop-file hints GLib and BAMF
+#: set. They belong to EqUpdater's own launch, never to a program it starts.
+LAUNCH_CONTEXT_VARS = ("DESKTOP_STARTUP_ID", "XDG_ACTIVATION_TOKEN",
+                       "GIO_LAUNCHED_DESKTOP_FILE",
+                       "GIO_LAUNCHED_DESKTOP_FILE_PID",
+                       "BAMF_DESKTOP_FILE_HINT")
+#: Set by the AppImage runtime for EqUpdater's AppImage; a program started
+#: from it is not running from that AppImage.
+APPIMAGE_RUNTIME_VARS = ("APPIMAGE", "APPDIR", "ARGV0", "OWD")
+
+
 def child_env(base: dict | None = None) -> dict:
     """The environment for a program that is not part of EqUpdater: the
     game, its runner, a file manager, a browser.
@@ -67,11 +79,31 @@ def child_env(base: dict | None = None) -> dict:
     LD_LIBRARY_PATH (PyInstaller does that) and may point FONTCONFIG_FILE at
     its own fonts (ui.py). Wine or a browser started with those would load
     EqUpdater's copies of libraries instead of the system's and can crash.
-    So each such variable gets its original value back, or goes."""
+    So each such variable gets its original value back, or goes.
+
+    Variables that describe how *EqUpdater* was started go too
+    (LAUNCH_CONTEXT_VARS, the AppImage runtime's, and Tcl/Tk paths into the
+    bundle): a desktop launcher's startup-notification ID or activation
+    token is single-use and names EqUpdater's launch, so a game inheriting
+    it presents its windows as part of that finished startup -- Wine copies
+    DESKTOP_STARTUP_ID onto its windows -- and a taskbar or dock can file
+    them under EqUpdater, or nowhere. The desktop session itself (DISPLAY,
+    WAYLAND_DISPLAY, XDG_RUNTIME_DIR, DBUS_SESSION_BUS_ADDRESS,
+    XDG_CURRENT_DESKTOP, ...) is passed through untouched."""
     env = dict(os.environ if base is None else base)
     if WINDOWS:
         return env
+    for var in LAUNCH_CONTEXT_VARS:
+        env.pop(var, None)
+    if env.get("APPIMAGE") or env.get("APPDIR"):
+        for var in APPIMAGE_RUNTIME_VARS:
+            env.pop(var, None)
     bundle = getattr(sys, "_MEIPASS", None)
+    if bundle:
+        root = os.path.abspath(bundle)
+        for var in ("TCL_LIBRARY", "TK_LIBRARY"):
+            if var in env and os.path.abspath(env[var]).startswith(root):
+                env.pop(var)
     for var in ("LD_LIBRARY_PATH", "FONTCONFIG_FILE"):
         orig = env.pop(var + "_ORIG", None)
         if orig is not None:

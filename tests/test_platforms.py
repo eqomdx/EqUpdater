@@ -102,6 +102,65 @@ class TestChildEnvironment(unittest.TestCase):
         with On("windows") as platforms:
             self.assertEqual(platforms.child_env({"PATH": "x"}), {"PATH": "x"})
 
+    #: The desktop session a game needs to put its window on screen and in
+    #: the taskbar; every one must reach it exactly as EqUpdater got it.
+    SESSION = {"DISPLAY": ":0", "WAYLAND_DISPLAY": "wayland-0",
+               "XDG_RUNTIME_DIR": "/run/user/1000",
+               "DBUS_SESSION_BUS_ADDRESS": "unix:path=/run/user/1000/bus",
+               "XDG_CURRENT_DESKTOP": "KDE", "XDG_SESSION_TYPE": "wayland",
+               "XAUTHORITY": "/run/user/1000/xauth", "HOME": "/home/me",
+               "PATH": "/usr/bin", "APPIMAGE_EXTRACT_AND_RUN": "1"}
+
+    def test_the_desktop_session_passes_through(self):
+        with On("linux") as platforms:
+            env = platforms.child_env(dict(self.SESSION))
+        self.assertEqual(env, self.SESSION)
+
+    def test_eqUpdaters_own_launch_context_is_not_inherited(self):
+        """A startup ID or activation token names EqUpdater's launch; Wine
+        puts DESKTOP_STARTUP_ID on the game's windows, and a taskbar can
+        then file the game under a startup that has already finished."""
+        bundle = os.path.abspath(os.path.join(tempfile.gettempdir(), "_MEIbundle"))
+        launched = dict(self.SESSION,
+                        DESKTOP_STARTUP_ID="kwin-123_TIME456",
+                        XDG_ACTIVATION_TOKEN="token",
+                        GIO_LAUNCHED_DESKTOP_FILE="/usr/share/applications/eq.desktop",
+                        GIO_LAUNCHED_DESKTOP_FILE_PID="4242",
+                        BAMF_DESKTOP_FILE_HINT="/usr/share/applications/eq.desktop",
+                        APPIMAGE="/home/me/EqUpdater.AppImage",
+                        APPDIR="/tmp/.mount_EqUpd", ARGV0="EqUpdater", OWD="/home/me",
+                        TCL_LIBRARY=os.path.join(bundle, "_tcl_data"),
+                        TK_LIBRARY=os.path.join(bundle, "_tk_data"))
+        with On("linux") as platforms, \
+                mock.patch.object(sys, "_MEIPASS", bundle, create=True):
+            env = platforms.child_env(launched)
+        self.assertEqual(env, self.SESSION)
+
+    def test_a_players_own_tcl_library_is_kept(self):
+        bundle = os.path.abspath(os.path.join(tempfile.gettempdir(), "_MEIbundle"))
+        with On("linux") as platforms, \
+                mock.patch.object(sys, "_MEIPASS", bundle, create=True):
+            env = platforms.child_env({"TCL_LIBRARY": "/opt/tcl8.6"})
+        self.assertEqual(env, {"TCL_LIBRARY": "/opt/tcl8.6"})
+
+    def test_the_game_gets_the_clean_environment(self):
+        """End to end: PLAY's plan, spawned, carries the session and not
+        EqUpdater's launch context -- for a custom command (Bottles) too."""
+        launched = dict(self.SESSION, DESKTOP_STARTUP_ID="id",
+                        XDG_ACTIVATION_TOKEN="token")
+        settings = {"launch_command":
+                    "flatpak run --command=bottles-cli com.usebottles.bottles "
+                    "run -b WoW -e {exe}"}
+        with On("linux") as platforms, \
+                mock.patch.dict(os.environ, launched, clear=True), \
+                mock.patch.object(platforms.subprocess, "Popen") as popen:
+            plan = platforms.launch_plan("/games/wow", "/games/wow/WoW.exe", settings)
+            platforms.spawn_detached(plan.argv, cwd=plan.cwd, env=plan.env)
+        kwargs = popen.call_args.kwargs
+        self.assertEqual(kwargs["env"], self.SESSION)
+        self.assertTrue(kwargs["start_new_session"])
+        self.assertEqual(popen.call_args[0][0][-1], "/games/wow/WoW.exe")
+
 
 class TestLaunching(unittest.TestCase):
     EXE = "/home/me/Games/OctoWoW/WoW.exe"
@@ -173,6 +232,43 @@ class TestLaunching(unittest.TestCase):
             platforms.spawn_detached(["/usr/bin/wine", self.EXE], cwd=self.DIR)
         self.assertTrue(popen.call_args.kwargs["start_new_session"])
         self.assertEqual(popen.call_args.kwargs["cwd"], self.DIR)
+
+
+@unittest.skipUnless(sys.platform.startswith("linux"), "Linux process sessions")
+class TestGameOutlivesEqUpdater(unittest.TestCase):
+    """A real process, not a mock: the game started by spawn_detached keeps
+    running when EqUpdater exits, and when EqUpdater's whole process group
+    is signalled (a terminal closing, a launcher stopping it)."""
+
+    def test_the_game_survives(self):
+        import signal
+        import subprocess
+        import time
+        script = (
+            "import sys; sys.path.insert(0, %r)\n"
+            "from equpdater import platforms\n"
+            "p = platforms.spawn_detached([sys.executable, '-c', "
+            "'import time; time.sleep(60)'])\n"
+            "print(p.pid, flush=True)\n"
+            "import time; time.sleep(60)\n" % ROOT)
+        updater = subprocess.Popen([sys.executable, "-c", script],
+                                   stdout=subprocess.PIPE, text=True,
+                                   start_new_session=True)
+        game = int(updater.stdout.readline())
+        try:
+            self.assertNotEqual(os.getsid(game), os.getsid(updater.pid))
+            os.killpg(updater.pid, signal.SIGHUP)    # EqUpdater goes away
+            updater.wait(timeout=10)
+            time.sleep(0.2)
+            os.kill(game, 0)                         # still running
+            with open("/proc/%d/stat" % game) as f:
+                self.assertNotIn(f.read().split(")")[-1].split()[0], ("Z", "X"))
+        finally:
+            updater.stdout.close()
+            try:
+                os.kill(game, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
 
 
 class TestGameEnvironment(unittest.TestCase):
