@@ -7233,24 +7233,50 @@ class EqUpdaterApp(tk.Tk):
     # ── addons rendering ─────────────────────────────────────────────────────
 
     def _reset_addons_inner(self):
-        """Replace the whole rows container with a fresh frame. A single
-        destroy() tears the old subtree down inside Tk (C code) — far faster
-        than destroying hundreds of row widgets one by one from Python."""
+        """Start a fresh rows container. A single destroy() tears an old
+        subtree down inside Tk (C code) -- far faster than destroying
+        hundreds of row widgets one by one from Python.
+
+        Once a list is on screen, the new container is built off-screen:
+        the old one stays visible until the batched build has finished and
+        _addons_show_inner swaps the finished list in, in one step. Built in
+        place, every batch was drawn as it came, so expanding or collapsing
+        a section showed an emptied list filling back in from the top."""
         cv  = self._addons_canvas
-        old = getattr(self, "_addons_inner", None)
-        if old is not None:
-            old.destroy()
+        pending = getattr(self, "_addons_inner", None)
+        shown = getattr(self, "_addons_shown", None)
+        if pending is not None and pending is not shown:
+            pending.destroy()          # an abandoned, never-shown build
         inner = tk.Frame(cv, bg=C_PANEL)
-        inner.bind("<Configure>",
-                   lambda e: cv.configure(scrollregion=cv.bbox("all")))
+        self._addons_inner = inner
+        if self._addons_win is None or shown is None:
+            self._addons_show_inner(top=True)
+
+    def _addons_show_inner(self, top: bool = True):
+        """Put the built rows container on screen in place of the old one,
+        with its scroll region set once, from its finished size."""
+        cv = self._addons_canvas
+        inner = self._addons_inner
+        old = getattr(self, "_addons_shown", None)
+        if old is inner:
+            return
+        first = top or old is None
+        y = 0.0 if first else cv.yview()[0]
+        inner.update_idletasks()       # lay out before it is ever drawn
         if self._addons_win is None:
             self._addons_win = cv.create_window((0, 0), window=inner,
                                                 anchor="nw",
                                                 width=cv.winfo_width() or 1)
         else:
             cv.itemconfigure(self._addons_win, window=inner)
-        cv.yview_moveto(0)
-        self._addons_inner = inner
+        inner.bind("<Configure>",
+                   lambda e: cv.configure(scrollregion=cv.bbox("all")))
+        cv.configure(scrollregion=(0, 0, cv.winfo_width() or 1,
+                                   inner.winfo_reqheight()))
+        cv.yview_moveto(y)
+        self._addons_shown = inner
+        if old is not None:
+            old.destroy()
 
     def _on_addon_filter_changed(self, *_args):
         """Debounce search input — re-render once typing pauses, not on
@@ -7263,11 +7289,15 @@ class EqUpdaterApp(tk.Tk):
         self._addon_filter_job = None
         self._render_addons()
 
-    def _render_addons(self):
+    def _render_addons(self, keep_scroll: bool = False):
         """Rebuild the addons list. Rows are created in small batches on the
-        Tk event loop so a large catalog doesn't freeze the UI."""
+        Tk event loop so a large catalog doesn't freeze the UI; the finished
+        list replaces the shown one in one step (see _reset_addons_inner).
+        ``keep_scroll`` keeps the scroll position (expanding/collapsing a
+        section) instead of returning to the top."""
         if not hasattr(self, "_addons_inner"):
             return
+        self._addons_keep_scroll = keep_scroll
         self._addons_render_gen = getattr(self, "_addons_render_gen", 0) + 1
         gen = self._addons_render_gen
         self._reset_addons_inner()
@@ -7331,6 +7361,9 @@ class EqUpdaterApp(tk.Tk):
             built += 1
         if queue:
             self.after(1, lambda: self._addons_build_step(gen))
+        else:
+            self._addons_show_inner(
+                top=not getattr(self, "_addons_keep_scroll", False))
 
     def _addon_section_header(self, title: str, rows: list):
         f = self._addons_inner
@@ -7352,7 +7385,7 @@ class EqUpdaterApp(tk.Tk):
         def toggle(_e=None, t=title):
             self._addon_sections_open[t] = \
                 not self._addon_sections_open.get(t, True)
-            self._render_addons()
+            self._render_addons(keep_scroll=True)
         arrow.bind("<Button-1>", toggle)
         lbl.bind("<Button-1>", toggle)
 

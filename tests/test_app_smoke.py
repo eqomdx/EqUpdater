@@ -1239,5 +1239,105 @@ class TestNoDllWithoutConsent(unittest.TestCase):
             self.assertEqual(fh.read(), b"the user's own build")
 
 
+@unittest.skipUnless(HAVE_TK, "no display")
+class TestAddonSectionToggle(unittest.TestCase):
+    """Expanding or collapsing an addon section swaps in the finished list in
+    one step. It used to empty the list, jump to the top and refill it batch
+    by batch on screen -- the "brief visual glitch" a Linux tester saw."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="equ-addon-toggle-")
+        os.environ["LOCALAPPDATA"] = cls.tmp
+        os.environ["XDG_DATA_HOME"] = cls.tmp
+        for mod in [m for m in list(sys.modules) if m.startswith("equpdater")]:
+            del sys.modules[mod]
+        from equpdater import app
+        cls.app = app.EqUpdaterApp()
+        cls.app._addons_verify = lambda *a, **k: None   # no network, no disk
+        cls.app._switch_tab("ADDONS")
+        for _ in range(6):
+            cls.app.update()
+
+    @classmethod
+    def tearDownClass(cls):
+        _close_app(cls.app)
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def setUp(self):
+        a = self.app
+        a._addon_sections_open.clear()
+        a._addons_status = {
+            "state": "done", "addons": {},
+            "available": [{"folder": "Addon%03d" % i, "status": "available",
+                           "toc": {"Title": "Addon %d" % i}}
+                          for i in range(80)]}
+        a._render_addons()
+        self.finish()
+
+    def shown(self):
+        cv = self.app._addons_canvas
+        return cv.nametowidget(cv.itemcget(self.app._addons_win, "window"))
+
+    def click_header(self, title):
+        """Click a section's header, as the player does."""
+        for child in self.shown().winfo_children():
+            for label in child.winfo_children():
+                if isinstance(label, tk.Label) and label.cget("text") == title:
+                    label.event_generate("<Button-1>")
+                    return
+        self.fail("no %s header" % title)
+
+    def finish(self):
+        """Run the batched build to the end, checking at every step that
+        what is on screen is a finished list, never a partial one."""
+        steps = 0
+        while self.app._addons_build_queue:
+            self.app.update()
+            steps += 1
+            self.assertLess(steps, 500, "the build never finished")
+            if self.app._addons_build_queue:
+                self.assertIsNot(self.shown(), self.app._addons_inner,
+                                 "a half-built list is on screen")
+        self.app.update()
+
+    def test_collapse_and_expand_swap_in_a_finished_list(self):
+        cv = self.app._addons_canvas
+        full = self.shown()
+        rows_full = len(full.winfo_children())
+        cv.yview_moveto(0.5)
+        self.app.update()
+        before = cv.yview()[0]
+
+        self.click_header("MANAGED")
+        self.assertFalse(self.app._addon_sections_open["MANAGED"])
+        self.assertIs(self.shown(), full)        # still the old list
+        self.assertTrue(full.winfo_exists())
+        self.finish()
+
+        new = self.shown()
+        self.assertIsNot(new, full)
+        self.assertFalse(full.winfo_exists())   # the old list is gone
+        self.assertEqual(len(new.winfo_children()), rows_full - 1)
+        # Scroll region set from the finished list, position kept.
+        region = [float(v) for v in str(cv.cget("scrollregion")).split()]
+        self.assertEqual(region[3], new.winfo_reqheight())
+        self.assertAlmostEqual(cv.yview()[0], before, delta=0.02)
+
+    def test_a_collapsed_section_has_no_rows(self):
+        self.click_header("AVAILABLE")
+        self.finish()
+        # Three headers and the two "Nothing here." lines.
+        self.assertEqual(len(self.shown().winfo_children()), 5)
+
+    def test_a_superseded_build_is_discarded(self):
+        self.app._render_addons()
+        first = self.app._addons_inner
+        self.app._render_addons()
+        self.assertFalse(first.winfo_exists())
+        self.finish()
+        self.assertIs(self.shown(), self.app._addons_inner)
+
+
 if __name__ == "__main__":
     unittest.main()
