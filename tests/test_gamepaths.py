@@ -274,6 +274,7 @@ class TestCopiedWineSettings(unittest.TestCase):
         with mock.patch.object(p, "WINDOWS", True):
             self.assertFalse(p.foreign_windows_path(r"C:\Games\OctoWoW"))
 
+    @unittest.skipUnless(os.name == "posix", "Wine's Z: maps to a Linux root")
     def test_z_drive_maps_to_an_existing_native_folder(self):
         _gp, p = modules()
         d = tempfile.mkdtemp(prefix="equ-z-")
