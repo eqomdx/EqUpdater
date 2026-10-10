@@ -40,6 +40,7 @@ import shutil
 import socket
 from dataclasses import dataclass, field
 
+from . import gamepaths
 from .i18n import N_
 
 #: The login server the client should use.
@@ -98,8 +99,8 @@ class Check:
 def realmlist_files(client_dir: str) -> list:
     """The realmlist files the client may read: the root one (always, even
     when missing) and Data/<locale>/realmlist.wtf where one exists."""
-    paths = [os.path.join(client_dir, "realmlist.wtf")]
-    data = os.path.join(client_dir, "Data")
+    paths = [gamepaths.game_path(client_dir, "realmlist.wtf")]
+    data = gamepaths.game_path(client_dir, "Data")
     try:
         names = sorted(os.listdir(data))
     except OSError:
@@ -112,7 +113,7 @@ def realmlist_files(client_dir: str) -> list:
 
 
 def config_wtf(client_dir: str) -> str:
-    return os.path.join(client_dir, "WTF", "Config.wtf")
+    return gamepaths.game_path(client_dir, "WTF", "Config.wtf")
 
 
 def _read(path: str) -> str | None:
@@ -218,7 +219,8 @@ def realmlist_checks(client_dir: str) -> tuple:
     """(checks, effective host or None). The root realmlist is the one the
     1.12 client reads; a locale copy is compared against it."""
     out, root_host = [], None
-    for path in realmlist_files(client_dir):
+    files = realmlist_files(client_dir)
+    for path in files:
         where = os.path.relpath(path, client_dir)
         text = _read(path)
         if text is None:
@@ -239,7 +241,7 @@ def realmlist_checks(client_dir: str) -> tuple:
                              {"file": where, "hosts": ", ".join(hosts)}, "realmlist"))
         host = hosts[-1]
         out.append(_host_check(host_kind(host), where, host, "realmlist"))
-        if path == os.path.join(client_dir, "realmlist.wtf"):
+        if path == files[0]:
             root_host = host
         elif root_host and host.lower() != root_host.lower():
             out.append(Check(WARN, N_("{file} ({host}) does not match the root "

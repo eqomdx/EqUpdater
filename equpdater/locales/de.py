@@ -501,4 +501,7 @@ STRINGS = {
         '{name} erreichbar',
     'the news feed was malformed': 'der News-Feed war fehlerhaft',
     '{error} · showing the news feed instead': '{error} · stattdessen wird der News-Feed angezeigt',
+    'Two addon folders': 'Zwei Addon-Ordner',
+    'This game folder has two addon folders whose names differ only in letter case:\n    {other}\n    {addons}\n\nEverything that was in only one of them is now in {addons}. These addons are in both, with different files:\n{names}\n\nYes: keep the copies from {other}.\nNo: keep the copies in {addons}.\nCancel: decide later. Until then {app} installs, updates and removes no addons.\n\nThe copies you do not keep are moved into an AddOns-conflicts folder next to them, not deleted.':
+        'Dieser Spielordner hat zwei Addon-Ordner, deren Namen sich nur in Groß-/Kleinschreibung unterscheiden:\n    {other}\n    {addons}\n\nAlles, was nur in einem davon war, ist jetzt in {addons}. Diese Addons sind in beiden, mit unterschiedlichen Dateien:\n{names}\n\nJa: die Kopien aus {other} behalten.\nNein: die Kopien in {addons} behalten.\nAbbrechen: später entscheiden. Bis dahin installiert, aktualisiert und entfernt {app} keine Addons.\n\nDie Kopien, die du nicht behältst, werden in einen AddOns-conflicts-Ordner daneben verschoben, nicht gelöscht.',
 }

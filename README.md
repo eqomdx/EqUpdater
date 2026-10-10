@@ -86,6 +86,14 @@ terminal: if it behaves the same there, it is that launcher's or the
 window manager's setting (for example a Wine virtual desktop), not
 EqUpdater's.
 
+Linux tells `Interface/AddOns` and `Interface/Addons` apart; Windows and
+Wine do not. EqUpdater finds the addons folder in whatever case it has and
+names it `Interface/AddOns`. If a game folder has two of them, everything
+only one holds is moved into `AddOns`, and for an addon both hold with
+different files you choose which copy to keep -- the other is moved into an
+`AddOns-conflicts-...` folder, never deleted. Settings copied from a Wine
+install keep their addon and mod records.
+
 Everything else - updates, mods, addons, texture packs, tweaks, the
 `WoW.exe` patch - works the same as on Windows. Keep the game anywhere,
 for example `~/Games/OctoWoW` or inside a Wine prefix.

@@ -71,6 +71,26 @@ LAUNCH_CONTEXT_VARS = ("DESKTOP_STARTUP_ID", "XDG_ACTIVATION_TOKEN",
 APPIMAGE_RUNTIME_VARS = ("APPIMAGE", "APPDIR", "ARGV0", "OWD")
 
 
+_WINDOWS_PATH = re.compile(r"^[A-Za-z]:[\\/]")
+
+
+def foreign_windows_path(path: str) -> bool:
+    """A drive-letter path (C:\\..., Z:\\...) seen on Linux: settings that
+    came from Windows or a Wine prefix, naming a folder that is not a path
+    on this system."""
+    return bool(path) and not WINDOWS and bool(_WINDOWS_PATH.match(path))
+
+
+def native_path_for(path: str) -> str | None:
+    """The Linux folder a Wine ``Z:`` path names (Wine maps Z: to /), when it
+    exists. Other drive letters live inside a Wine prefix that settings do
+    not name, so they are not guessed at."""
+    if not foreign_windows_path(path) or path[0].upper() != "Z":
+        return None
+    native = "/" + path[3:].replace("\\", "/").strip("/")
+    return native if os.path.isdir(native) else None
+
+
 def child_env(base: dict | None = None) -> dict:
     """The environment for a program that is not part of EqUpdater: the
     game, its runner, a file manager, a browser.

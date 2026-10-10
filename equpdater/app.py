@@ -42,7 +42,7 @@ from functools import cache
 import tkinter as tk
 from tkinter import filedialog
 
-from . import branding, i18n, logindoctor, mpq, platforms
+from . import branding, gamepaths, i18n, logindoctor, mpq, platforms
 from .i18n import N_, tr
 from .config import (APP_DATA_DIR, BACKUP_DIR, CONFIG_FILE, bootstrap_config,
                      ensure_dir, load_config, new_addon_record,
@@ -295,7 +295,7 @@ def log(msg: str, tag: str = ""):
 
 def remove_wdb(client_dir: str):
     """Delete the client's WDB folder (server-data cache, safe to drop)."""
-    wdb = os.path.join(client_dir, "WDB")
+    wdb = gamepaths.game_path(client_dir, "WDB")
     if not os.path.isdir(wdb):
         return
     try:
@@ -668,7 +668,7 @@ def prune_stale_client_files(client_dir: str, files) -> list:
     current torrent no longer ships. Folders are removed by name (unless the torrent
     still uses them); archives only when the name AND the exact size match a known
     legacy one. Returns removed names."""
-    data_dir = os.path.join(client_dir, "Data")
+    data_dir = gamepaths.game_path(client_dir, "Data")
     if not os.path.isdir(data_dir):
         return []
     # what the current torrent puts directly in Data/ (.mpq files and subdirs)
@@ -1277,7 +1277,7 @@ class UpdateWorker:
 
             # Config.wtf is user game config, not in the torrent — (re)write it
             # on a reconcile (overwrite_config), or when missing.
-            cfg_wtf = os.path.join(self.out_dir, "WTF", "Config.wtf")
+            cfg_wtf = gamepaths.game_path(self.out_dir, "WTF", "Config.wtf")
             if self.overwrite_config or not os.path.exists(cfg_wtf):
                 write_config_wtf(self.out_dir)
 
@@ -1484,9 +1484,9 @@ def write_config_wtf(client_dir: str, tweaks: dict | None = None):
         "ChatBubblesParty": 1,
     }
     try:
-        cfg_dir = os.path.join(client_dir, "WTF")
+        cfg_dir = gamepaths.game_path(client_dir, "WTF")
         ensure_dir(cfg_dir)
-        with open(os.path.join(cfg_dir, "Config.wtf"), "w",
+        with open(gamepaths.game_path(client_dir, "WTF", "Config.wtf"), "w",
                   encoding="utf-8") as f:
             for k, v in vars_.items():
                 f.write(f'SET {k} "{v}"\n')
@@ -1496,7 +1496,7 @@ def write_config_wtf(client_dir: str, tweaks: dict | None = None):
 
 
 def update_config_wtf(client_dir: str, tweaks: dict):
-    cfg_path = os.path.join(client_dir, "WTF", "Config.wtf")
+    cfg_path = gamepaths.game_path(client_dir, "WTF", "Config.wtf")
     if not os.path.exists(cfg_path):
         write_config_wtf(client_dir, tweaks)
         return
@@ -2622,8 +2622,48 @@ ADDON_GIT_HOSTS = tuple(h.label for h in GIT_HOSTS)
 ADDON_ZIP_HOSTS = frozenset().union(*(h.downloads_from for h in GIT_HOSTS))
 
 
+#: The last conflict set logged, so a standing conflict is logged once.
+_ADDON_CONFLICT_LOGGED: list = []
+
+
+def _log_addon_dir_state(state) -> None:
+    if state.renamed:
+        log(f"Addons folder: renamed Interface/{state.renamed} to "
+            f"Interface/{gamepaths.ADDONS} (letter case only; no addon changed).", "ok")
+    for entry in state.moved:
+        log(f"Addons folder: moved Interface/{entry} into Interface/{gamepaths.ADDONS}.", "ok")
+    for entry in state.collapsed:
+        log(f"Addons folder: Interface/{entry} was identical to the copy in "
+            f"Interface/{gamepaths.ADDONS}; kept one.", "dim")
+    for note in state.notes:
+        log(f"Addons folder: {note}.", "dim")
+    names = sorted(c[0] for c in state.conflicts)
+    if names != _ADDON_CONFLICT_LOGGED:
+        _ADDON_CONFLICT_LOGGED[:] = names
+        for entry, other, mine in state.conflicts:
+            log(f"Addons folder: {entry} exists in both {other} and {mine} with "
+                f"different contents; both kept. Addon changes are paused until "
+                f"you choose which to keep.", "err")
+
+
 def addons_path(client_dir: str) -> str:
-    return os.path.join(client_dir, "Interface", "AddOns")
+    """Interface/AddOns of ``client_dir``, the one place the addons folder is
+    named. On a case-sensitive filesystem an existing Interface/Addons (or
+    any other case) is found and settled first -- see equpdater.gamepaths."""
+    state = gamepaths.prepare_addons_dir(client_dir)
+    _log_addon_dir_state(state)
+    return state.path
+
+
+def writable_addons_path(client_dir: str) -> str:
+    """addons_path for installing, updating or removing: raises
+    gamepaths.AddonDirConflict while two case variants of the folder hold
+    different copies of the same addon."""
+    state = gamepaths.prepare_addons_dir(client_dir)
+    _log_addon_dir_state(state)
+    if state.conflicts:
+        raise gamepaths.AddonDirConflict(state)
+    return state.path
 
 
 def check_custom_addon_url(text: str):
@@ -2965,7 +3005,10 @@ def _rmtree_force(path):
 
 def install_addon_files(client_dir: str, folder: str, git_url: str, sha: str):
     """Download the repo archive at `sha` and unpack it into
-    Interface/AddOns/<folder>, atomically replacing any existing copy."""
+    Interface/AddOns/<folder>, atomically replacing any existing copy.
+    Refused (gamepaths.AddonDirConflict) before anything is downloaded while
+    the addons folder has a case conflict."""
+    addons_root = writable_addons_path(client_dir)
     kept = _ARCHIVES.pop(sha, None)
     if kept and time.time() - kept[0] <= _ARCHIVE_KEEP:
         data = kept[1]               # fetched moments ago to read its commit
@@ -2976,7 +3019,7 @@ def install_addon_files(client_dir: str, folder: str, git_url: str, sha: str):
 
     import zipfile
     import io
-    dest_root = os.path.join(addons_path(client_dir), folder)
+    dest_root = os.path.join(addons_root, folder)
     tmp_root  = dest_root + ".tmp_install"
     tmp_abs   = os.path.abspath(tmp_root)
     if os.path.isdir(tmp_root):
@@ -3617,6 +3660,13 @@ class EqUpdaterApp(tk.Tk):
         # Game folder path — shared by the Settings modal. A change takes
         # effect only once Settings is closed (see _close_settings), so no
         # live trace fires mid-edit.
+        # Settings copied from a Wine install can name the game folder as
+        # Wine sees it (Z:\\home\\...); where that folder exists here, use it.
+        native = platforms.native_path_for(self._cfg.get("out_dir") or "")
+        if native:
+            log(f"Game folder from Wine settings: {self._cfg['out_dir']} is "
+                f"{native} here.", "acct")
+            self._cfg = update_config(lambda c: c.__setitem__("out_dir", native))
         self._game_path = tk.StringVar(
             value=os.path.normpath(self._cfg.get("out_dir", DEFAULT_GAME_DIR)))
 
@@ -5088,7 +5138,7 @@ class EqUpdaterApp(tk.Tk):
                 self._apply_tweaks_worker(out, load_tweaks_config())
 
         # frillDensity (Config.wtf value). Raise to 128 if it's lower
-        cfg_path = os.path.join(out, "WTF", "Config.wtf") if out else ""
+        cfg_path = gamepaths.game_path(out, "WTF", "Config.wtf") if out else ""
         if cfg_path and os.path.exists(cfg_path):
             try:
                 with open(cfg_path, "r", encoding="utf-8") as f:
@@ -6342,7 +6392,7 @@ class EqUpdaterApp(tk.Tk):
         """Lettered patch archives (patch-<letter>.mpq, case-insensitive) present in the
         game's Data folder, e.g. Patch-A.mpq / patch-b.MPQ. Sorted by letter."""
         out = self._game_path.get().strip()
-        data_dir = os.path.join(out, "Data") if out else ""
+        data_dir = gamepaths.game_path(out, "Data") if out else ""
         found = []
         if data_dir and os.path.isdir(data_dir):
             for name in os.listdir(data_dir):
@@ -6398,7 +6448,7 @@ class EqUpdaterApp(tk.Tk):
         self._render_mpq()
 
         out = self._game_path.get().strip()
-        data_dir = os.path.join(out, "Data") if out else ""
+        data_dir = gamepaths.game_path(out, "Data") if out else ""
         linked = [r for r in rows if r["source"]]
         if not (linked and data_dir):
             self._mpq_updates_count = 0
@@ -6648,7 +6698,7 @@ class EqUpdaterApp(tk.Tk):
             return None
         self._mpq_busy, self._mpq_busy_text = filename, text
         self._render_mpq()
-        return os.path.join(out, "Data")
+        return gamepaths.game_path(out, "Data")
 
     def _mpq_finish(self):
         self._mpq_busy = None
@@ -6860,6 +6910,53 @@ class EqUpdaterApp(tk.Tk):
 
     # ── addons engine (app side) ─────────────────────────────────────────────
 
+    def _addon_dir_conflict_prompt(self, client: str) -> bool:
+        """When Interface/AddOns and another case of it (Interface/Addons)
+        both hold different copies of the same addon: ask, once per
+        session, which copies to keep. The others are moved aside, never
+        deleted. Returns True when the scan should wait (the player chose
+        to decide later), False to go on."""
+        try:
+            state = gamepaths.prepare_addons_dir(client)
+        except OSError as e:
+            self._log_line(f"Could not check the addons folder: {e}\n", "err")
+            return False
+        _log_addon_dir_state(state)
+        if not state.conflicts or getattr(self, "_addon_conflict_asked", False):
+            return False
+        self._addon_conflict_asked = True
+        from tkinter import messagebox
+        other = os.path.dirname(state.conflicts[0][1])
+        names = "\n".join("    " + c[0] for c in state.conflicts)
+        choice = messagebox.askyesnocancel(
+            tr("Two addon folders"),
+            tr("This game folder has two addon folders whose names differ only "
+               "in letter case:\n    {other}\n    {addons}\n\nEverything that "
+               "was in only one of them is now in {addons}. These addons are "
+               "in both, with different files:\n{names}\n\nYes: keep the "
+               "copies from {other}.\nNo: keep the copies in {addons}.\n"
+               "Cancel: decide later. Until then {app} installs, updates and "
+               "removes no addons.\n\nThe copies you do not keep are moved "
+               "into an AddOns-conflicts folder next to them, not deleted.",
+               other=other, addons=state.path, names=names,
+               app=branding.APP_NAME),
+            icon="warning", parent=self)
+        if choice is None:
+            self._log_line("Addon changes are paused until the two addon "
+                           "folders are resolved (ADDONS tab, Check for "
+                           "updates, asks again after a restart).\n", "err")
+            return False
+        try:
+            aside, moved = gamepaths.resolve_conflicts(
+                client, "other" if choice else "addons")
+        except OSError as e:
+            self._log_line(f"Could not resolve the addon folders: {e}\n", "err")
+            return False
+        _ADDON_CONFLICT_LOGGED[:] = []
+        for entry in moved:
+            self._log_line(f"Moved {entry} aside to {aside}\n", "ok")
+        return False
+
     def _addons_verify(self, force=False, remote_checks=True):
         """Scan Interface/AddOns, match against the catalog, and check every
         tracked addon's remote commit sha (config-cached). With
@@ -6874,6 +6971,8 @@ class EqUpdaterApp(tk.Tk):
                 < ADDONS_VERIFY_TTL):
             return
         client = self._game_path.get().strip()
+        if client and self._addon_dir_conflict_prompt(client):
+            return
         self._addons_busy = True
         had_content = bool(self._addons_status["addons"]
                            or self._addons_status["available"])
@@ -7182,7 +7281,7 @@ class EqUpdaterApp(tk.Tk):
         if not client or self._addons_busy:
             return
         try:
-            dirp = os.path.join(addons_path(client), folder)
+            dirp = os.path.join(writable_addons_path(client), folder)
             if os.path.isdir(dirp):
                 shutil.rmtree(dirp)
             update_config(lambda c: c.get("addons", {}).pop(folder, None))
@@ -7997,11 +8096,25 @@ class EqUpdaterApp(tk.Tk):
 
         # Wipe folder-scoped config and set the new path in one atomic merge.
         # This also re-arms the default-mods / recommended-addons auto-install.
+        # Settings copied from a Windows or Wine install name the old folder
+        # as a Windows path, which is no folder here at all: choosing the
+        # game folder then is moving the settings across, not switching to
+        # another game, so the mod and addon records are kept. Each is
+        # checked against the files in the new folder as usual -- a record
+        # whose files differ shows as changed, never as up to date.
+        old_dir = self._cfg.get("out_dir") or ""
+        keep_records = platforms.foreign_windows_path(old_dir)
+
         def _wipe(c):
             c["out_dir"] = new_val
-            for k in ("mods", "addons"):
-                c.pop(k, None)
+            if not keep_records:
+                for k in ("mods", "addons"):
+                    c.pop(k, None)
         self._cfg = update_config(_wipe)
+        if keep_records:
+            self._log_line(f"Settings came from a Windows/Wine install "
+                           f"({old_dir}); mod and addon records kept and "
+                           f"checked against the new folder.\n", "acct")
 
         self._mod_pending_state = {}
         self._default_mods_install_started = False

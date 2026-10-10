@@ -502,4 +502,7 @@ STRINGS = {
         '{name} 可以访问',
     'the news feed was malformed': '新闻源格式错误',
     '{error} · showing the news feed instead': '{error} · 改为显示新闻源',
+    'Two addon folders': '两个插件文件夹',
+    'This game folder has two addon folders whose names differ only in letter case:\n    {other}\n    {addons}\n\nEverything that was in only one of them is now in {addons}. These addons are in both, with different files:\n{names}\n\nYes: keep the copies from {other}.\nNo: keep the copies in {addons}.\nCancel: decide later. Until then {app} installs, updates and removes no addons.\n\nThe copies you do not keep are moved into an AddOns-conflicts folder next to them, not deleted.':
+        '此游戏文件夹中有两个插件文件夹，名称只有大小写不同：\n    {other}\n    {addons}\n\n只存在于其中一个文件夹里的内容现已移到 {addons}。以下插件在两个文件夹中都有，且文件不同：\n{names}\n\n是：保留 {other} 中的副本。\n否：保留 {addons} 中的副本。\n取消：稍后决定。在此之前 {app} 不会安装、更新或删除插件。\n\n未保留的副本会移到旁边的 AddOns-conflicts 文件夹中，不会被删除。',
 }

@@ -501,4 +501,7 @@ STRINGS = {
         '{name} доступен',
     'the news feed was malformed': 'лента новостей была повреждена',
     '{error} · showing the news feed instead': '{error} · вместо этого показана лента новостей',
+    'Two addon folders': 'Две папки аддонов',
+    'This game folder has two addon folders whose names differ only in letter case:\n    {other}\n    {addons}\n\nEverything that was in only one of them is now in {addons}. These addons are in both, with different files:\n{names}\n\nYes: keep the copies from {other}.\nNo: keep the copies in {addons}.\nCancel: decide later. Until then {app} installs, updates and removes no addons.\n\nThe copies you do not keep are moved into an AddOns-conflicts folder next to them, not deleted.':
+        'В этой папке игры две папки аддонов, названия которых различаются только регистром букв:\n    {other}\n    {addons}\n\nВсё, что было только в одной из них, теперь в {addons}. Эти аддоны есть в обеих, с разными файлами:\n{names}\n\nДа: оставить копии из {other}.\nНет: оставить копии в {addons}.\nОтмена: решить позже. До тех пор {app} не устанавливает, не обновляет и не удаляет аддоны.\n\nКопии, которые вы не оставите, переносятся в папку AddOns-conflicts рядом, а не удаляются.',
 }
