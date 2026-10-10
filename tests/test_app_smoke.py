@@ -413,13 +413,22 @@ class TestAnimatedBackground(unittest.TestCase):
                      duration=duration, loop=0)
         return path
 
-    def run_for(self, anim, ms, sample=None):
+    def run_for(self, anim, ms, sample=None, until=None):
+        """Run the loop for ``ms``; with ``until``, as soon as it is true,
+        or after 3 s at the latest (a loaded runner may need longer than
+        ``ms`` for the worker to report)."""
+        deadline = time.monotonic() + 3.0
+
         def tick():
             if sample:
                 sample()
+            if until is not None and (until() or time.monotonic() > deadline):
+                self.root.quit()
+                return
             self.root.after(10, tick)
         self.root.after(10, tick)
-        self.root.after(ms, self.root.quit)
+        if until is None:
+            self.root.after(ms, self.root.quit)
         anim.start()
         self.root.mainloop()
         # Wait for the worker: the window is destroyed in tearDown.
@@ -464,7 +473,7 @@ class TestAnimatedBackground(unittest.TestCase):
         failed = []
         anim = self.ui.AnimatedBackground(self.root, self.canvas, self.item,
                                           path, 40, 30, on_fail=failed.append)
-        self.run_for(anim, 300)
+        self.run_for(anim, 300, until=lambda: failed)
         self.assertEqual(len(failed), 1)
         self.assertTrue(anim._stopped)
         self.assertIsNone(anim.photo)
@@ -474,7 +483,7 @@ class TestAnimatedBackground(unittest.TestCase):
         anim = self.ui.AnimatedBackground(
             self.root, self.canvas, self.item, self.gif(self.COLOURS[:1]),
             40, 30, on_fail=failed.append)
-        self.run_for(anim, 300)
+        self.run_for(anim, 300, until=lambda: failed)
         self.assertEqual(len(failed), 1)
         self.assertIn("1 frame", failed[0])
 
