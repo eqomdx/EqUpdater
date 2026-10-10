@@ -22,6 +22,36 @@ missing Pillow's Tk bridge fails here and not on a player's screen. CI runs it o
 import sys
 
 
+def _font_stack_check(report: dict, problems: list) -> None:
+    """Linux, with a window open: the fontconfig Tk loaded must be the
+    host's, and the bundle must carry none of the host font stack -- an old
+    bundled fontconfig reading a newer host /etc/fonts is what flooded a
+    Fedora tester's terminal with errors (platforms.HOST_FONT_STACK)."""
+    import ctypes
+    import os
+    from equpdater import platforms
+    if not platforms.LINUX:
+        return
+    bundle = getattr(sys, "_MEIPASS", None)
+    if bundle:
+        carried = [n for n in platforms.HOST_FONT_STACK
+                   if os.path.lexists(os.path.join(bundle, n))]
+        report["bundled_font_stack"] = carried
+        if carried:
+            problems.append("bundle carries the host font stack: "
+                            + ", ".join(carried))
+    lib = platforms.loaded_library("libfontconfig.so")
+    report["fontconfig_library"] = lib
+    if lib:
+        try:
+            v = ctypes.CDLL(lib).FcGetVersion()
+            report["fontconfig_version"] = f"{v // 10000}.{v // 100 % 100}.{v % 100}"
+        except (OSError, AttributeError):
+            pass
+        if bundle and os.path.abspath(lib).startswith(os.path.abspath(bundle)):
+            problems.append(f"fontconfig loaded from the bundle: {lib}")
+
+
 def _gui_check(report: dict, problems: list) -> None:
     """Build the real main window and check its background is an ImageTk
     PhotoImage, exactly as a player's first launch draws it."""
@@ -57,6 +87,13 @@ def _gui_check(report: dict, problems: list) -> None:
             report["gui_login_doctor"] = bool(text)
             if not text:
                 problems.append("Login Doctor showed nothing")
+            _font_stack_check(report, problems)
+            # The bundled fonts reached Tk through that fontconfig.
+            fonts = win._fonts
+            report["gui_fonts"] = {"friz": fonts.friz,
+                                   "opendyslexic": fonts.open_dyslexic}
+            if not fonts.friz or not fonts.open_dyslexic:
+                problems.append("bundled fonts not visible to Tk")
         finally:
             win.destroy()
     except (Exception, tk.TclError) as e:

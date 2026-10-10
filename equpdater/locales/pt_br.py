@@ -505,4 +505,62 @@ STRINGS = {
     'Two addon folders': 'Duas pastas de addons',
     'This game folder has two addon folders whose names differ only in letter case:\n    {other}\n    {addons}\n\nEverything that was in only one of them is now in {addons}. These addons are in both, with different files:\n{names}\n\nYes: keep the copies from {other}.\nNo: keep the copies in {addons}.\nCancel: decide later. Until then {app} installs, updates and removes no addons.\n\nThe copies you do not keep are moved into an AddOns-conflicts folder next to them, not deleted.':
         'Esta pasta do jogo tem duas pastas de addons cujos nomes diferem apenas em maiúsculas e minúsculas:\n    {other}\n    {addons}\n\nTudo o que estava em só uma delas agora está em {addons}. Estes addons estão nas duas, com arquivos diferentes:\n{names}\n\nSim: manter as cópias de {other}.\nNão: manter as cópias em {addons}.\nCancelar: decidir depois. Até lá o {app} não instala, atualiza nem remove addons.\n\nAs cópias que você não mantiver são movidas para uma pasta AddOns-conflicts ao lado, não apagadas.',
+    'Addons: {n} of {total} failed':
+        'Addons: {n} de {total} falharam',
+    'Could not connect to {host}.':
+        'Não foi possível conectar a {host}.',
+    'Could not find the latest version of the addon at {host}.':
+        'Não foi possível encontrar a versão mais recente do addon em {host}.',
+    'Could not look up {host}. Check your internet connection or DNS.':
+        'Não foi possível resolver {host}. Verifique sua conexão com a internet ou o DNS.',
+    'Could not write the addon files ({error}).':
+        'Não foi possível gravar os arquivos do addon ({error}).',
+    'Failed to install {name}':
+        'Falha ao instalar {name}',
+    'Failed to update {name}':
+        'Falha ao atualizar {name}',
+    'No permission to write to the AddOns folder.':
+        'Sem permissão para gravar na pasta AddOns.',
+    'Not enough disk space to write the addon files.':
+        'Espaço em disco insuficiente para os arquivos do addon.',
+    'Open the log for details?':
+        'Abrir o log com os detalhes?',
+    'Some addons failed — see the message for details':
+        'Alguns addons falharam — veja a mensagem para detalhes',
+    'The AddOns folder exists twice with different copies of this addon. Choose which to keep, then try again.':
+        'A pasta AddOns existe duas vezes com cópias diferentes deste addon. Escolha qual manter e tente novamente.',
+    "The addon's address is not on an allowed git host.":
+        'O endereço do addon não está em um host git permitido.',
+    'The file from {host} is not a valid addon archive. Try again later.':
+        'O arquivo de {host} não é um pacote de addon válido. Tente novamente mais tarde.',
+    "The files were blocked or removed while being written — usually antivirus. Open Settings (⚙) → 'Add game folder to Defender exclusions', then retry.":
+        "Os arquivos foram bloqueados ou removidos durante a gravação — geralmente pelo antivírus. Abra Configurações (⚙) → 'Adicionar a pasta do jogo às exclusões do Defender' e tente novamente.",
+    'The installed copy was left as it was.':
+        'A cópia instalada não foi alterada.',
+    'The other {n} finished.':
+        'Os outros {n} foram concluídos.',
+    'The secure connection to {host} failed (TLS/certificate error).':
+        'A conexão segura com {host} falhou (erro de TLS/certificado).',
+    'Unexpected error ({error}).':
+        'Erro inesperado ({error}).',
+    '{host} did not answer in time. Try again later.':
+        '{host} não respondeu a tempo. Tente novamente mais tarde.',
+    '{host} is having problems (HTTP {code}). Try again later.':
+        '{host} está com problemas (HTTP {code}). Tente novamente mais tarde.',
+    '{host} is limiting requests (HTTP 429). Try again later.':
+        '{host} está limitando as requisições (HTTP 429). Tente novamente mais tarde.',
+    '{host} is showing its DDoS-protection check instead of the download. Try again later.':
+        '{host} está exibindo sua verificação anti-DDoS em vez do download. Tente novamente mais tarde.',
+    '{host} refused or dropped the connection. Try again later.':
+        '{host} recusou ou encerrou a conexão. Tente novamente mais tarde.',
+    '{host} refused the download (HTTP 403). It may be limiting automated downloads. Try again later.':
+        '{host} recusou o download (HTTP 403). Pode estar limitando downloads automáticos. Tente novamente mais tarde.',
+    '{host} refused the download (HTTP {code}).':
+        '{host} recusou o download (HTTP {code}).',
+    '{host} says the repository or version does not exist (HTTP 404).':
+        '{host} informa que o repositório ou a versão não existe (HTTP 404).',
+    '{name} (update)':
+        '{name} (atualização)',
+    '…and {n} more':
+        '…e mais {n}',
 }

@@ -504,4 +504,62 @@ STRINGS = {
     'Two addon folders': 'Две папки аддонов',
     'This game folder has two addon folders whose names differ only in letter case:\n    {other}\n    {addons}\n\nEverything that was in only one of them is now in {addons}. These addons are in both, with different files:\n{names}\n\nYes: keep the copies from {other}.\nNo: keep the copies in {addons}.\nCancel: decide later. Until then {app} installs, updates and removes no addons.\n\nThe copies you do not keep are moved into an AddOns-conflicts folder next to them, not deleted.':
         'В этой папке игры две папки аддонов, названия которых различаются только регистром букв:\n    {other}\n    {addons}\n\nВсё, что было только в одной из них, теперь в {addons}. Эти аддоны есть в обеих, с разными файлами:\n{names}\n\nДа: оставить копии из {other}.\nНет: оставить копии в {addons}.\nОтмена: решить позже. До тех пор {app} не устанавливает, не обновляет и не удаляет аддоны.\n\nКопии, которые вы не оставите, переносятся в папку AddOns-conflicts рядом, а не удаляются.',
+    'Addons: {n} of {total} failed':
+        'Аддоны: не удалось {n} из {total}',
+    'Could not connect to {host}.':
+        'Не удалось подключиться к {host}.',
+    'Could not find the latest version of the addon at {host}.':
+        'Не удалось найти последнюю версию аддона на {host}.',
+    'Could not look up {host}. Check your internet connection or DNS.':
+        'Не удалось найти адрес {host}. Проверьте подключение к интернету или DNS.',
+    'Could not write the addon files ({error}).':
+        'Не удалось записать файлы аддона ({error}).',
+    'Failed to install {name}':
+        'Не удалось установить {name}',
+    'Failed to update {name}':
+        'Не удалось обновить {name}',
+    'No permission to write to the AddOns folder.':
+        'Нет прав на запись в папку AddOns.',
+    'Not enough disk space to write the addon files.':
+        'Недостаточно места на диске для файлов аддона.',
+    'Open the log for details?':
+        'Открыть журнал с подробностями?',
+    'Some addons failed — see the message for details':
+        'Некоторые аддоны не установлены — подробности в сообщении',
+    'The AddOns folder exists twice with different copies of this addon. Choose which to keep, then try again.':
+        'Папка AddOns существует дважды с разными копиями этого аддона. Выберите, какую оставить, и повторите попытку.',
+    "The addon's address is not on an allowed git host.":
+        'Адрес аддона не относится к разрешённому git-хостингу.',
+    'The file from {host} is not a valid addon archive. Try again later.':
+        'Файл с {host} не является корректным архивом аддона. Повторите попытку позже.',
+    "The files were blocked or removed while being written — usually antivirus. Open Settings (⚙) → 'Add game folder to Defender exclusions', then retry.":
+        'Файлы были заблокированы или удалены во время записи — обычно это антивирус. Откройте Настройки (⚙) → «Добавить папку игры в исключения Defender» и повторите попытку.',
+    'The installed copy was left as it was.':
+        'Установленная копия осталась без изменений.',
+    'The other {n} finished.':
+        'Остальные {n} завершены.',
+    'The secure connection to {host} failed (TLS/certificate error).':
+        'Не удалось установить защищённое соединение с {host} (ошибка TLS/сертификата).',
+    'Unexpected error ({error}).':
+        'Непредвиденная ошибка ({error}).',
+    '{host} did not answer in time. Try again later.':
+        '{host} не ответил вовремя. Повторите попытку позже.',
+    '{host} is having problems (HTTP {code}). Try again later.':
+        'У {host} проблемы (HTTP {code}). Повторите попытку позже.',
+    '{host} is limiting requests (HTTP 429). Try again later.':
+        '{host} ограничивает запросы (HTTP 429). Повторите попытку позже.',
+    '{host} is showing its DDoS-protection check instead of the download. Try again later.':
+        '{host} показывает проверку защиты от DDoS вместо загрузки. Повторите попытку позже.',
+    '{host} refused or dropped the connection. Try again later.':
+        '{host} отклонил или разорвал соединение. Повторите попытку позже.',
+    '{host} refused the download (HTTP 403). It may be limiting automated downloads. Try again later.':
+        '{host} отклонил загрузку (HTTP 403). Возможно, он ограничивает автоматические загрузки. Повторите попытку позже.',
+    '{host} refused the download (HTTP {code}).':
+        '{host} отклонил загрузку (HTTP {code}).',
+    '{host} says the repository or version does not exist (HTTP 404).':
+        '{host} сообщает, что репозиторий или версия не существует (HTTP 404).',
+    '{name} (update)':
+        '{name} (обновление)',
+    '…and {n} more':
+        '…и ещё {n}',
 }

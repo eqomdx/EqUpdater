@@ -2909,7 +2909,8 @@ def describe_install_error(e: Exception) -> str:
     import urllib.error
     if isinstance(e, (urllib.error.HTTPError, urllib.error.URLError)):
         return _describe_net_error(e)
-    if isinstance(e, OSError) and getattr(e, "errno", None) in (2, 13, 22):
+    if (platforms.WINDOWS and isinstance(e, OSError)
+            and getattr(e, "errno", None) in (2, 13, 22)):
         # The archive/file vanished or got locked mid-operation — on Windows
         # that's almost always the antivirus quarantining the download.
         return N_("Blocked by antivirus — open Settings (⚙) → "
@@ -2919,6 +2920,142 @@ def describe_install_error(e: Exception) -> str:
                   "antivirus) — retry, or use Settings (⚙) → "
                   "'Add game folder to Defender exclusions'")
     return str(e)
+
+
+
+# ── Why an addon install/update failed, for the person who asked for it ────
+#
+# Each failure is put in one of a few plain categories, and the one sentence
+# shown names the host that failed -- a remote that is down or behind its
+# DDoS check is not the player's internet. The English text and the full
+# exception chain go to the log; the dialog shows the translated sentence.
+
+ADDON_FAILURES = {
+    "challenge": N_("{host} is showing its DDoS-protection check instead of "
+                    "the download. Try again later."),
+    "forbidden": N_("{host} refused the download (HTTP 403). It may be "
+                    "limiting automated downloads. Try again later."),
+    "rate_limit": N_("{host} is limiting requests (HTTP 429). Try again "
+                     "later."),
+    "not_found": N_("{host} says the repository or version does not exist "
+                    "(HTTP 404)."),
+    "server": N_("{host} is having problems (HTTP {code}). Try again later."),
+    "http": N_("{host} refused the download (HTTP {code})."),
+    "timeout": N_("{host} did not answer in time. Try again later."),
+    "dns": N_("Could not look up {host}. Check your internet connection or "
+              "DNS."),
+    "tls": N_("The secure connection to {host} failed (TLS/certificate "
+              "error)."),
+    "connection": N_("{host} refused or dropped the connection. Try again "
+                     "later."),
+    "network": N_("Could not connect to {host}."),
+    "archive": N_("The file from {host} is not a valid addon archive. Try "
+                  "again later."),
+    "lookup": N_("Could not find the latest version of the addon at "
+                 "{host}."),
+    "conflict": N_("The AddOns folder exists twice with different copies of "
+                   "this addon. Choose which to keep, then try again."),
+    "source": N_("The addon's address is not on an allowed git host."),
+    "no_space": N_("Not enough disk space to write the addon files."),
+    "permission": N_("No permission to write to the AddOns folder."),
+    "antivirus": N_("The files were blocked or removed while being written — "
+                    "usually antivirus. Open Settings (⚙) → 'Add game "
+                    "folder to Defender exclusions', then retry."),
+    "write": N_("Could not write the addon files ({error})."),
+    "unknown": N_("Unexpected error ({error})."),
+}
+
+
+def _error_chain(e: BaseException) -> list:
+    """``e`` and every exception it was raised from, outermost first."""
+    chain, seen = [], set()
+    while e is not None and id(e) not in seen:
+        seen.add(id(e))
+        chain.append(e)
+        e = e.__cause__ or e.__context__
+    return chain
+
+
+def addon_failure(e: BaseException, url: str | None = None) -> tuple:
+    """(category, ADDON_FAILURES template, values) for a failed addon
+    install or update. ``url`` is the addon's source, for the host name when
+    the exception does not carry one."""
+    import errno as _errno
+    import socket
+    import urllib.error
+    import zipfile
+    from urllib.parse import urlsplit
+
+    def host_of(u):
+        try:
+            return urlsplit(u or "").hostname or ""
+        except ValueError:
+            return ""
+
+    chain = _error_chain(e)
+    host = ""
+    for x in chain:
+        if isinstance(x, urllib.error.HTTPError):
+            host = host_of(getattr(x, "url", None) or x.geturl())
+            break
+    host = host or host_of(url) or "?"
+
+    def out(category, **values):
+        return category, ADDON_FAILURES[category], dict(host=host, **values)
+
+    for x in chain:
+        if isinstance(x, gamepaths.AddonDirConflict):
+            return out("conflict")
+        if isinstance(x, DdosCheckError):
+            return out("challenge")
+        if isinstance(x, urllib.error.HTTPError):
+            if x.code == 403:
+                return out("forbidden", code=x.code)
+            if x.code == 429:
+                return out("rate_limit", code=x.code)
+            if x.code == 404:
+                return out("not_found", code=x.code)
+            if x.code >= 500:
+                return out("server", code=x.code)
+            return out("http", code=x.code)
+        if isinstance(x, zipfile.BadZipFile):
+            return out("archive")
+    for x in chain:
+        reason = getattr(x, "reason", None) if isinstance(
+            x, urllib.error.URLError) else x
+        for r in (x, reason):
+            if isinstance(r, (socket.timeout, TimeoutError)) or (
+                    isinstance(r, str) and "timed out" in r.lower()):
+                return out("timeout")
+            if isinstance(r, socket.gaierror):
+                return out("dns")
+            if isinstance(r, ssl.SSLError) or isinstance(
+                    r, getattr(ssl, "CertificateError", ssl.SSLError)):
+                return out("tls")
+            if isinstance(r, (ConnectionRefusedError, ConnectionResetError,
+                              ConnectionAbortedError, BrokenPipeError)):
+                return out("connection")
+        if isinstance(x, urllib.error.URLError):
+            return out("network")
+    first = chain[0]
+    text = str(first)
+    if text == "Addon URL is not from an allowed git host":
+        return out("source")
+    if text == "Could not resolve remote commit":
+        return out("lookup")
+    if isinstance(first, OSError):
+        code = getattr(first, "errno", None)
+        if code == _errno.ENOSPC:
+            return out("no_space")
+        if platforms.WINDOWS and code in (2, 13, 22):
+            return out("antivirus")
+        if code in (_errno.EACCES, _errno.EPERM, _errno.EROFS):
+            return out("permission")
+        return out("write", error=first.strerror or text)
+    if any(isinstance(x, (ValueError, KeyError, IndexError, TypeError))
+           for x in chain[1:]) and len(chain) > 1:
+        return out("lookup")
+    return out("unknown", error=text or type(first).__name__)
 
 
 def addon_remote_sha(git_url: str, branch=None, ref=None,
@@ -3043,9 +3180,25 @@ def install_addon_files(client_dir: str, folder: str, git_url: str, sha: str):
                 os.makedirs(os.path.dirname(target), exist_ok=True)
                 with zf.open(info) as src, open(target, "wb") as dst:
                     shutil.copyfileobj(src, dst)
-        if os.path.isdir(dest_root):
-            _rmtree_force(dest_root)
-        os.replace(tmp_root, dest_root)
+        # The installed copy is moved aside, not deleted, until the new one
+        # is in place: a failed replace puts it back as it was.
+        old_root = dest_root + ".old_install"
+        if os.path.isdir(old_root):
+            _rmtree_force(old_root)
+        had_old = os.path.isdir(dest_root)
+        if had_old:
+            os.replace(dest_root, old_root)
+        try:
+            os.replace(tmp_root, dest_root)
+        except BaseException:
+            if had_old:
+                os.replace(old_root, dest_root)
+            raise
+        if had_old:
+            try:
+                _rmtree_force(old_root)
+            except OSError as e:
+                log(f"  Could not remove {old_root}: {e}")
     except BaseException:
         # Never leave a half-written ".tmp_install" behind on failure
         if os.path.isdir(tmp_root):
@@ -7199,7 +7352,11 @@ class EqUpdaterApp(tk.Tk):
 
         self._addons_busy = True
         self._addons_installing = True
+        before = {}          # folder -> (status, was it listed as installed)
         for rec in recs:
+            before[rec["folder"]] = (
+                rec.get("status"),
+                rec["folder"] in self._addons_status["addons"])
             rec["status"] = "downloading"
             self._addons_status["addons"].setdefault(rec["folder"], rec)
         self._render_addons()
@@ -7207,10 +7364,14 @@ class EqUpdaterApp(tk.Tk):
         self._set_btn_busy(tr("Installing…"))
         self._status_var.set(tr("Downloading addons…"))
 
+        failures = []        # (folder, update?, template, values)
+
         def worker():
             for rec in recs:
                 self.after(0, lambda n=rec["folder"]: self._status_var.set(
                     tr("Installing {name}…", name=n)))
+                updating = before[rec["folder"]][1] or os.path.isdir(
+                    os.path.join(addons_path(client), rec["folder"]))
                 try:
                     rec["git"] = addon_install_source(rec.get("git"))
                     sha = addon_remote_sha(rec["git"], rec.get("branch"),
@@ -7240,24 +7401,82 @@ class EqUpdaterApp(tk.Tk):
                     update_config(lambda c, f=rec["folder"], r=record:
                                   c.setdefault("addons", {}).__setitem__(f, r))
                     self._addon_errors.pop(rec["folder"], None)
+                    rec.update(status="upToDate", error=None)
                     log(f"  ✓ Addon {rec['folder']} installed.")
                 except Exception as e:
-                    err = describe_install_error(e)
-                    log(f"  ✗ Addon {rec['folder']}: {err}")
-                    rec.update(status="invalid", error=err)
-                    self._addon_errors[rec["folder"]] = {
-                        "error": err, "git": rec.get("git")}
+                    _cat, template, values = addon_failure(e, rec.get("git"))
+                    op = "update" if updating else "install"
+                    log(f"  ✗ Addon {rec['folder']} ({op} failed): "
+                        f"{template.format(**values)}", "err")
+                    log("    " + " <- ".join(
+                        f"{type(x).__name__}: {x}" for x in _error_chain(e)),
+                        "dim")
+                    failures.append((rec["folder"], updating, template,
+                                     values))
+                    rec["error"] = None
+                    if not updating:
+                        # Shown under the catalogue row until it installs.
+                        self._addon_errors[rec["folder"]] = {
+                            "error": tr(template, **values),
+                            "git": rec.get("git")}
 
             def done():
                 self._addons_busy = False
                 self._addons_installing = False
                 self._addons_verified_ts = 0.0   # make the re-verify run
                 self._refresh_ready_state()      # PLAY active again
+                # No row is left reading "downloading…": a failed one is put
+                # back the way it was before it was asked for.
+                for folder, *_ in failures:
+                    status, listed = before.get(folder, (None, False))
+                    rec = next((r for r in recs if r["folder"] == folder), None)
+                    if rec is not None:
+                        rec["status"] = status or "available"
+                    if not listed:
+                        self._addons_status["addons"].pop(folder, None)
+                if failures:
+                    self._status_var.set(tr("Some addons failed — see the "
+                                            "message for details"))
                 # Cache-only refresh: the install itself already resolved and
                 # cached the shas — no further API requests are needed.
                 self._addons_verify(remote_checks=False)
+                if not self._addons_busy:        # the verify did not start
+                    self._render_addons()
+                if failures:
+                    self._report_addon_failures(failures, len(recs))
             self.after(0, done)
         threading.Thread(target=worker, daemon=True).start()
+
+    def _report_addon_failures(self, failures, total: int):
+        """One dialog for whatever failed: the addon and the reason when one
+        did, a single summary when several did. Offers the log, which has
+        the detail."""
+        from tkinter import messagebox
+        if len(failures) == 1:
+            folder, updating, template, values = failures[0]
+            title = (tr("Failed to update {name}", name=folder) if updating
+                     else tr("Failed to install {name}", name=folder))
+            body = tr(template, **values)
+            if updating:
+                body += "\n\n" + tr("The installed copy was left as it was.")
+        else:
+            title = tr("Addons: {n} of {total} failed", n=len(failures),
+                       total=total)
+            lines = []
+            for folder, updating, template, values in failures[:12]:
+                lines.append("• " + (tr("{name} (update)", name=folder)
+                                     if updating else folder)
+                             + ": " + tr(template, **values))
+            if len(failures) > 12:
+                lines.append(tr("…and {n} more", n=len(failures) - 12))
+            body = "\n".join(lines)
+            if total > len(failures):
+                body += "\n\n" + tr("The other {n} finished.",
+                                       n=total - len(failures))
+        body += "\n\n" + tr("Open the log for details?")
+        self._last_addon_failure = (title, body)
+        if messagebox.askyesno(title, body, icon="error", parent=self):
+            self._show_logs()
 
     def _addon_update_all(self):
         """Every addon that can be *proved* to have a newer commit on the

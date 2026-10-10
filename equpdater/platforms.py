@@ -71,6 +71,34 @@ LAUNCH_CONTEXT_VARS = ("DESKTOP_STARTUP_ID", "XDG_ACTIVATION_TOKEN",
 APPIMAGE_RUNTIME_VARS = ("APPIMAGE", "APPDIR", "ARGV0", "OWD")
 
 
+#: Linux: libraries a frozen build must take from the host, never bundle --
+#: fontconfig and what it needs to read its configuration and fonts.
+#: PyInstaller copies them from the build machine (Ubuntu 22.04 in CI:
+#: fontconfig 2.13) because Tk/Xft links them, but the library then reads
+#: the *player's* /etc/fonts, written for the player's own, newer
+#: fontconfig: on Fedora that printed a wall of "invalid attribute
+#: 'xsi:nil'" / "invalid constant used: system-ui" errors at every start.
+#: Every Linux desktop has these, each matching its own configuration, so
+#: build.py leaves them out (as AppImage's own exclusion list does) and the
+#: packaged --self-test fails if one comes back.
+HOST_FONT_STACK = ("libfontconfig.so.1", "libfreetype.so.6", "libexpat.so.1",
+                   "libpng16.so.16", "libbrotlidec.so.1", "libbrotlicommon.so.1")
+
+
+def loaded_library(stem: str, maps: str = "/proc/self/maps") -> str | None:
+    """The file of a shared library this process has loaded, by name stem
+    (``"libfontconfig.so"``), from /proc/self/maps; None if none."""
+    try:
+        with open(maps, encoding="utf-8", errors="replace") as f:
+            for line in f:
+                path = line.rstrip("\n").split(None, 5)[-1] if line.count(" ") >= 5 else ""
+                if os.path.basename(path).startswith(stem):
+                    return path
+    except OSError:
+        pass
+    return None
+
+
 _WINDOWS_PATH = re.compile(r"^[A-Za-z]:[\\/]")
 
 

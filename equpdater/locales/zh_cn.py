@@ -505,4 +505,62 @@ STRINGS = {
     'Two addon folders': '两个插件文件夹',
     'This game folder has two addon folders whose names differ only in letter case:\n    {other}\n    {addons}\n\nEverything that was in only one of them is now in {addons}. These addons are in both, with different files:\n{names}\n\nYes: keep the copies from {other}.\nNo: keep the copies in {addons}.\nCancel: decide later. Until then {app} installs, updates and removes no addons.\n\nThe copies you do not keep are moved into an AddOns-conflicts folder next to them, not deleted.':
         '此游戏文件夹中有两个插件文件夹，名称只有大小写不同：\n    {other}\n    {addons}\n\n只存在于其中一个文件夹里的内容现已移到 {addons}。以下插件在两个文件夹中都有，且文件不同：\n{names}\n\n是：保留 {other} 中的副本。\n否：保留 {addons} 中的副本。\n取消：稍后决定。在此之前 {app} 不会安装、更新或删除插件。\n\n未保留的副本会移到旁边的 AddOns-conflicts 文件夹中，不会被删除。',
+    'Addons: {n} of {total} failed':
+        '插件：{total} 个中有 {n} 个失败',
+    'Could not connect to {host}.':
+        '无法连接到 {host}。',
+    'Could not find the latest version of the addon at {host}.':
+        '无法在 {host} 上找到该插件的最新版本。',
+    'Could not look up {host}. Check your internet connection or DNS.':
+        '无法解析 {host}。请检查网络连接或 DNS。',
+    'Could not write the addon files ({error}).':
+        '无法写入插件文件（{error}）。',
+    'Failed to install {name}':
+        '安装 {name} 失败',
+    'Failed to update {name}':
+        '更新 {name} 失败',
+    'No permission to write to the AddOns folder.':
+        '没有写入 AddOns 文件夹的权限。',
+    'Not enough disk space to write the addon files.':
+        '磁盘空间不足，无法写入插件文件。',
+    'Open the log for details?':
+        '打开日志查看详情？',
+    'Some addons failed — see the message for details':
+        '部分插件失败——详情见提示',
+    'The AddOns folder exists twice with different copies of this addon. Choose which to keep, then try again.':
+        'AddOns 文件夹存在两份，且该插件的副本不同。请选择保留哪一份，然后重试。',
+    "The addon's address is not on an allowed git host.":
+        '该插件的地址不在允许的 git 托管站点上。',
+    'The file from {host} is not a valid addon archive. Try again later.':
+        '来自 {host} 的文件不是有效的插件压缩包。请稍后重试。',
+    "The files were blocked or removed while being written — usually antivirus. Open Settings (⚙) → 'Add game folder to Defender exclusions', then retry.":
+        '文件在写入时被拦截或删除——通常是杀毒软件所致。请打开设置 (⚙) →“将游戏文件夹加入 Defender 排除项”，然后重试。',
+    'The installed copy was left as it was.':
+        '已安装的版本保持不变。',
+    'The other {n} finished.':
+        '其余 {n} 个已完成。',
+    'The secure connection to {host} failed (TLS/certificate error).':
+        '与 {host} 的安全连接失败（TLS/证书错误）。',
+    'Unexpected error ({error}).':
+        '意外错误（{error}）。',
+    '{host} did not answer in time. Try again later.':
+        '{host} 未及时响应。请稍后重试。',
+    '{host} is having problems (HTTP {code}). Try again later.':
+        '{host} 出现问题（HTTP {code}）。请稍后重试。',
+    '{host} is limiting requests (HTTP 429). Try again later.':
+        '{host} 正在限制请求（HTTP 429）。请稍后重试。',
+    '{host} is showing its DDoS-protection check instead of the download. Try again later.':
+        '{host} 返回了 DDoS 防护检查页面而不是下载内容。请稍后重试。',
+    '{host} refused or dropped the connection. Try again later.':
+        '{host} 拒绝或中断了连接。请稍后重试。',
+    '{host} refused the download (HTTP 403). It may be limiting automated downloads. Try again later.':
+        '{host} 拒绝了下载（HTTP 403）。它可能在限制自动下载。请稍后重试。',
+    '{host} refused the download (HTTP {code}).':
+        '{host} 拒绝了下载（HTTP {code}）。',
+    '{host} says the repository or version does not exist (HTTP 404).':
+        '{host} 表示该仓库或版本不存在（HTTP 404）。',
+    '{name} (update)':
+        '{name}（更新）',
+    '…and {n} more':
+        '……还有 {n} 个',
 }

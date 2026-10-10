@@ -85,6 +85,26 @@ DIST = os.path.join(HERE, "dist")
 WORK = os.path.join(HERE, "build")
 
 
+#: Linux: the host's font stack is used, not the build machine's -- see
+#: platforms.HOST_FONT_STACK for why. Pillow's private, renamed copies
+#: (pillow.libs/libfreetype-<hash>...) are its own and stay.
+from equpdater.platforms import HOST_FONT_STACK  # noqa: E402
+
+
+def strip_host_font_stack(internal_dir: str) -> list:
+    """Remove HOST_FONT_STACK from a Linux folder build; returns the names
+    removed. A no-op on Windows."""
+    removed = []
+    if WINDOWS or not os.path.isdir(internal_dir):
+        return removed
+    for name in HOST_FONT_STACK:
+        path = os.path.join(internal_dir, name)
+        if os.path.lexists(path):
+            os.remove(path)
+            removed.append(name)
+    return removed
+
+
 def run(cmd: list) -> None:
     print("  $ " + " ".join(cmd))
     proc = subprocess.run(cmd, cwd=HERE)
@@ -244,6 +264,15 @@ def main() -> None:
 
     if not os.path.exists(built):
         raise SystemExit(f"PyInstaller reported success but {built} is missing")
+
+    if not onefile and not WINDOWS:
+        removed = strip_host_font_stack(os.path.join(DIST, NAME, "_internal"))
+        print("  Using the host's font stack; left out: "
+              + (", ".join(removed) or "nothing (not bundled)"))
+    elif onefile and not WINDOWS:
+        print("  Note: a Linux one-file build still carries the build "
+              "machine's fontconfig; the AppImage is built from the folder "
+              "build, which does not.")
 
     print(f"\n  {built}")
 
