@@ -2,8 +2,24 @@
 
 Both come straight from the public phpBB forum:
 
-    Announcements  forum 2   https://octowow.st/forum/viewforum.php?f=2
-    Changelog      forum 4   https://octowow.st/forum/viewforum.php?f=4
+    Announcements  topic 2848  https://octowow.st/forum/viewtopic.php?t=2848
+    Changelog      topic 2816  https://octowow.st/forum/viewtopic.php?t=2816
+
+Both are threads staff post into, one post per announcement or patch, so
+both are read newest-first: phpBB is asked for the topic sorted by time,
+descending (``sk=t&sd=d``), one request. The Announcements panel shows the
+newest post (``fetch_newest_post_in_topic``); the Changelog lists the newest
+few (``fetch_topic_posts``), each with its own date, author and link.
+
+**news.json** (https://octowow.st/news.json, the public feed OctoLauncher
+reads, generated from the forum) is the Announcements' fallback while the
+forum cannot be read -- typically while it shows apps its DDoS check.
+``parse_news_feed`` validates it against the launcher's NewsFeedSchema; a
+feed that does not match is an error, never content.
+
+The forum-listing readers below (``fetch_forum_topics``, ``fetch_latest_post``,
+``fetch_topic_list``) are what the panels used before the threads; they
+remain, tested, but nothing on screen uses them now.
 
 Two steps, as a person reading the forum would take them:
 
@@ -16,8 +32,7 @@ Two steps, as a person reading the forum would take them:
 2. ``fetch_first_post`` opens a topic and returns its first post -- the
    announcement itself -- never the replies beneath it.
 
-The Announcements panel is ``fetch_latest_post(2)``: one listing, one topic
-page. The Changelog list is ``fetch_topic_list(4)``: one listing, nothing else.
+The Changelog list is ``fetch_topic_list(4)``: one listing, nothing else.
 
 The approach follows OctoBot's ``octotracker/announcements.py``: ``a.topictitle``
 links, the topic id from ``t=``, the first ``.post``'s ``.content`` with quotes
@@ -26,9 +41,8 @@ OctoBot reads the first ``<time>`` and username in a row's ``.list-inner``:
 on phpBB 3.3 that is the hidden mobile "Last post by ..." line, i.e. the
 latest *reply*. Here the last-post parts of a row are skipped.
 
-There is no JSON feed behind this. ``octonews.php`` is not used, and
-``news.json`` (OctoBot's fallback) is not either: it holds two posts from
-April 2026, which is exactly the stale content this must not show.
+``octonews.php`` is not used. (``news.json`` once held two posts from April
+2026; it is now generated from the forum, and is only a fallback here.)
 
 **Every failure says which stage failed.** A listing with no topics is an
 error, not an empty news feed: the forum always has topics, so zero means the
@@ -42,6 +56,7 @@ Pure parsing is separate from fetching so it is tested without a network.
 
 from __future__ import annotations
 
+import json
 import re
 import urllib.request
 from dataclasses import dataclass
@@ -54,9 +69,17 @@ from .i18n import N_
 
 BASE = "https://octowow.st/forum/"
 ANNOUNCEMENTS_FORUM_ID = 2
+#: OctoWoW's announcements thread; the panel shows its newest post.
+ANNOUNCEMENTS_TOPIC_ID = 2848
+#: OctoWoW's patch notes thread; the Changelog lists its newest posts.
+PATCH_NOTES_TOPIC_ID = 2816
 CHANGELOG_FORUM_ID = 4
+#: The public news feed OctoLauncher reads (generated from the forum; no
+#: sign-in). The Announcements' fallback while the forum is unreadable.
+NEWS_FEED_URL = "https://octowow.st/news.json"
 
 _HTML_ACCEPT = "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5"
+_JSON_ACCEPT = "application/json"
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -127,6 +150,17 @@ def topic_url(topic_id: int, base: str = BASE) -> str:
     """The canonical address of a topic: no ``sid``, no forum id, page one,
     so its first post is the topic's opening post."""
     return f"{base}viewtopic.php?t={int(topic_id)}"
+
+
+def newest_first_topic_url(topic_id: int, base: str = BASE) -> str:
+    """A topic's first page with its posts sorted by time, newest first:
+    the first post on it is the topic's latest."""
+    return f"{base}viewtopic.php?t={int(topic_id)}&sk=t&sd=d"
+
+
+def post_url(post_id: int, base: str = BASE) -> str:
+    """The canonical address of one post, wherever it sits in its topic."""
+    return f"{base}viewtopic.php?p={int(post_id)}#p{int(post_id)}"
 
 
 def topic_id_from_href(href: str, base: str = BASE) -> int | None:
@@ -363,6 +397,9 @@ class _FirstPostParser(HTMLParser):
         self.time: str | None = None
         self.parts: list[str] = []
         self.found = False
+        self.post_id: int | None = None
+        self.subject: str | None = None
+        self._in_subject = False
         self._post_depth = 0       # div depth inside the first post
         self._done = False
         self._author_depth = 0     # inside p.author
@@ -381,6 +418,7 @@ class _FirstPostParser(HTMLParser):
                     and re.fullmatch(r"p\d+", a.get("id") or "")):
                 self._post_depth = 1
                 self.found = True
+                self.post_id = int(a["id"][1:])
             return
         if tag == "div":
             self._post_depth += 1
@@ -405,7 +443,10 @@ class _FirstPostParser(HTMLParser):
                 self.parts.append(a["alt"])
             return
 
-        if tag == "p" and "author" in cls:
+        if tag == "h3" and self.subject is None:
+            self._in_subject = True
+            self.subject = ""
+        elif tag == "p" and "author" in cls:
             self._author_depth = 1
         elif self._author_depth:
             if tag == "p":
@@ -429,6 +470,8 @@ class _FirstPostParser(HTMLParser):
             return
         if self._content_depth:
             self.parts.append(data)
+        elif self._in_subject:
+            self.subject += data
         elif self._in_user:
             self.author += data
 
@@ -446,6 +489,8 @@ class _FirstPostParser(HTMLParser):
                 self.parts.append("\n")
             if tag == "div":
                 self._content_depth -= 1
+        if tag == "h3":
+            self._in_subject = False
         if self._author_depth:
             if tag == "a":
                 self._in_user = False
@@ -558,3 +603,124 @@ def fetch_topic_list(forum_id: int, limit: int, *, opener, user_agent: str,
     """The ``limit`` newest-started topics of a forum. One request."""
     return fetch_forum_topics(forum_id, opener=opener, user_agent=user_agent,
                               timeout=timeout)[:max(1, int(limit))]
+
+
+def fetch_newest_post_in_topic(topic_id: int, *, opener, user_agent: str,
+                               timeout: int = 8, base: str = BASE) -> ForumPost:
+    """The newest post of a topic -- an announcements thread -- with its
+    own date, author and link (titled as in fetch_topic_posts). One request."""
+    return fetch_topic_posts(topic_id, 1, opener=opener, user_agent=user_agent,
+                             timeout=timeout, base=base)[0]
+
+
+_POST_START = re.compile(r'<div\b[^>]*\bid="p\d+"[^>]*>')
+
+
+def parse_topic_posts(html: str) -> list:
+    """Every post on a topic page, in page order, as (post id, subject,
+    author, created, content, is_reply). Each post is read by the same
+    parser as a topic's opening post, from where it starts."""
+    html = html or ""
+    starts = [m.start() for m in _POST_START.finditer(html)]
+    out = []
+    for i, start in enumerate(starts):
+        end = starts[i + 1] if i + 1 < len(starts) else len(html)
+        p = _FirstPostParser()
+        p.feed(html[start:end])
+        p.close()
+        if not p.found:
+            continue
+        raw = " ".join((p.subject or "").split())
+        reply = bool(re.match(r"^Re:", raw, re.I))
+        subject = re.sub(r"^Re:\s*", "", raw, flags=re.I)
+        author = " ".join((p.author or "").split()) or None
+        out.append((p.post_id, subject, author, parse_forum_date(p.time),
+                    p.content(), reply))
+    return out
+
+
+def fetch_topic_posts(topic_id: int, limit: int, *, opener, user_agent: str,
+                      timeout: int = 8, base: str = BASE) -> list[ForumPost]:
+    """The ``limit`` newest posts of a topic -- a patch notes thread --
+    newest first. One request. A reply's own subject is only "Re: <topic>",
+    so it is titled by its first line instead, and the rest is its body."""
+    url = newest_first_topic_url(topic_id, base)
+    html = _get(url, f"topic {topic_id}", opener=opener,
+                user_agent=user_agent, timeout=timeout)
+    posts = parse_topic_posts(html)
+    if not posts:
+        raise ForumError(f"topic {topic_id} parse", url,
+                         "no post found on the topic page",
+                         short=N_("the forum topic could not be read"))
+    out = []
+    for post_id, subject, author, created, content, reply in posts[:max(1, int(limit))]:
+        title, body = subject, content
+        if reply and content:
+            first, _, rest = content.partition("\n")
+            title, body = first.strip()[:90] or subject, rest.strip()
+        link = post_url(post_id, base) if post_id else topic_url(topic_id, base)
+        out.append(ForumPost(topic_id, title, author, _iso(created), link, body))
+    return out
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  news.json
+# ──────────────────────────────────────────────────────────────────────────────
+
+_REQUIRED = ("id", "title", "date", "body")
+
+
+def _absolute_url(value) -> bool:
+    if not isinstance(value, str):
+        return False
+    parts = urlparse(value)
+    return parts.scheme in ("http", "https") and bool(parts.netloc)
+
+
+def parse_news_feed(text: str, url: str = NEWS_FEED_URL) -> list[dict]:
+    """news.json's items as News items, in the feed's order (newest first).
+
+    The contract is OctoLauncher's NewsFeedSchema: an object whose ``items``
+    is a list; each item has string ``id``, ``title``, ``date`` and ``body``
+    (plain text), ``author`` a string, null or absent, and ``url`` absent or
+    an absolute http(s) URL. Anything else raises ForumError -- the whole
+    feed, as the launcher rejects it -- so a bad feed never becomes content
+    or replaces the last good one. Missing optional values stay missing."""
+    stage = "news.json parse"
+    short = N_("the news feed was malformed")
+
+    def bad(why):
+        return ForumError(stage, url, why, short=short)
+
+    try:
+        data = json.loads(text)
+    except ValueError as exc:
+        raise bad(f"not JSON: {exc}") from exc
+    if not isinstance(data, dict) or not isinstance(data.get("items"), list):
+        raise bad("expected an object with an 'items' list")
+    out = []
+    for n, item in enumerate(data["items"]):
+        if not isinstance(item, dict):
+            raise bad(f"item {n} is not an object")
+        for key in _REQUIRED:
+            if not isinstance(item.get(key), str):
+                raise bad(f"item {n}: '{key}' missing or not a string")
+        author = item.get("author")
+        if author is not None and not isinstance(author, str):
+            raise bad(f"item {n}: 'author' is not a string")
+        link = item.get("url")
+        if link is not None and not _absolute_url(link):
+            raise bad(f"item {n}: 'url' is not an absolute http(s) URL")
+        out.append({"id": item["id"], "title": item["title"],
+                    "date": item["date"], "body": item["body"], "html": "",
+                    "author": author, "url": link})
+    return out
+
+
+def fetch_news_feed(*, opener, user_agent: str, timeout: int = 8,
+                    url: str = NEWS_FEED_URL) -> list[dict]:
+    """GET news.json and validate it (parse_news_feed). One request; the
+    DDoS-protection page is ForumBlockedError, as on the forum."""
+    body = _get(url, "news.json", opener=opener, user_agent=user_agent,
+                timeout=timeout, accept=_JSON_ACCEPT)
+    return parse_news_feed(body, url)

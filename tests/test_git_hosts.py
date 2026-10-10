@@ -226,6 +226,117 @@ class TestAddonSources(unittest.TestCase):
                 self.assertIsNotNone(check(typed)[2])
 
 
+class TestOctowowGitAliases(unittest.TestCase):
+    """The launcher catalogue lists some OctoWoW Git addons as
+    ``git.octowow.st/git/...``, which the allowed-host check refused
+    ("Addon URL is not from an allowed git host" for LevelRange-Octo).
+    Known spellings of OctoWoW Git are rewritten to the canonical URL before
+    validation; nothing else is, so nothing else gets through."""
+
+    CANON = "https://octowow.st/git/Dusk/LevelRange-Octo"
+
+    @classmethod
+    def setUpClass(cls):
+        from equpdater import app
+        cls.app = app
+
+    def test_known_spellings_become_the_canonical_url(self):
+        canon = gitcompare.canonical_repo_url
+        for typed in (self.CANON,
+                      self.CANON + ".git", self.CANON + "/",
+                      "octowow.st/git/Dusk/LevelRange-Octo",
+                      "www.octowow.st/git/Dusk/LevelRange-Octo",
+                      "git.octowow.st/git/Dusk/LevelRange-Octo",
+                      "https://git.octowow.st/git/Dusk/LevelRange-Octo",
+                      "https://git.octowow.st/git/Dusk/LevelRange-Octo.git",
+                      "HTTPS://Git.OctoWoW.st/git/Dusk/LevelRange-Octo/",
+                      "  git.octowow.st/git/Dusk/LevelRange-Octo.git  "):
+            with self.subTest(typed=typed):
+                self.assertEqual(canon(typed), self.CANON)
+                self.assertTrue(self.app.is_allowed_git_url(canon(typed)))
+                self.assertEqual(self.app.addon_install_source(typed),
+                                 self.CANON)
+                self.assertEqual(self.app.check_custom_addon_url(typed),
+                                 (self.CANON, "LevelRange-Octo", None))
+
+    def test_the_canonical_url_is_what_gets_recorded(self):
+        """The installer records ``addon_install_source``'s answer as the
+        addon's provenance, so the alias never reaches config."""
+        self.assertEqual(
+            self.app.addon_install_source(
+                "https://git.octowow.st/git/shaga/AtlasLoot.git"),
+            "https://octowow.st/git/shaga/AtlasLoot")
+
+    def test_other_hosts_are_untouched_and_still_refused(self):
+        canon = gitcompare.canonical_repo_url
+        for typed in (
+                # arbitrary schemeless domains
+                "example.com/git/Dusk/LevelRange-Octo",
+                "github.com/shagu/pfUI",
+                "evil.example/git/Dusk/LevelRange-Octo",
+                # domains that only look like OctoWoW's
+                "octowow.st.evil.example/git/Dusk/LevelRange-Octo",
+                "https://octowow.st.evil.example/git/Dusk/LevelRange-Octo",
+                "git.octowow.st.evil.example/git/Dusk/LevelRange-Octo",
+                "evil-octowow.st/git/Dusk/LevelRange-Octo",
+                "https://evilgit.octowow.st/git/Dusk/LevelRange-Octo",
+                "https://octowow.st@evil.example/git/Dusk/LevelRange-Octo",
+                "octowow.st@evil.example/git/Dusk/LevelRange-Octo",
+                "https://user@git.octowow.st/git/Dusk/LevelRange-Octo",
+                "git.octowow.st:8443/git/Dusk/LevelRange-Octo",
+                "https://git.octowow.st:8443/git/Dusk/LevelRange-Octo",
+                # wrong scheme
+                "http://git.octowow.st/git/Dusk/LevelRange-Octo",
+                "ftp://octowow.st/git/Dusk/LevelRange-Octo",
+                "//git.octowow.st/git/Dusk/LevelRange-Octo"):
+            with self.subTest(typed=typed):
+                self.assertNotIn("https://octowow.st/", canon(typed))
+                self.assertFalse(self.app.is_allowed_git_url(canon(typed)))
+                self.assertIsNotNone(self.app.check_custom_addon_url(typed)[2])
+                with self.assertRaises(RuntimeError):
+                    self.app.addon_install_source(typed)
+
+    def test_malformed_paths_are_refused(self):
+        canon = gitcompare.canonical_repo_url
+        for typed in (
+                "git.octowow.st/Dusk/LevelRange-Octo",        # no /git/
+                "https://git.octowow.st/Dusk/LevelRange-Octo",
+                "git.octowow.st/git/Dusk",                    # no repo
+                "git.octowow.st/git/",
+                "git.octowow.st/",
+                "git.octowow.st/git/Dusk/LevelRange-Octo/archive/HEAD.zip",
+                "git.octowow.st/git/Dusk/LevelRange-Octo/src/branch/main",
+                "git.octowow.st/git//Dusk/LevelRange-Octo",
+                "git.octowow.st/git/Dusk/../LevelRange-Octo",
+                "git.octowow.st/git/Dusk/..",
+                "git.octowow.st/git/Du sk/LevelRange-Octo",
+                "git.octowow.st/git/Dusk/Level%20Range",
+                "git.octowow.st/git/Dusk/LevelRange-Octo?x=1",
+                "git.octowow.st/git/Dusk/LevelRange-Octo#readme",
+                "git.octowow.st/git/Dusk/LevelRange-Octo​"):
+            with self.subTest(typed=typed):
+                self.assertEqual(canon(typed), typed)
+                self.assertFalse(self.app.is_allowed_git_url(canon(typed)))
+                self.assertIsNotNone(self.app.check_custom_addon_url(typed)[2])
+
+    def test_the_alias_is_not_an_allowed_host_by_itself(self):
+        """The host check is unchanged: the alias passes only because it is
+        rewritten first, never because the check got looser."""
+        self.assertFalse(self.app.is_allowed_git_url(
+            "https://git.octowow.st/git/Dusk/LevelRange-Octo"))
+        self.assertFalse(self.app.is_allowed_git_url(
+            "octowow.st/git/Dusk/LevelRange-Octo"))
+        self.assertNotIn("git.octowow.st", self.app.ADDON_ZIP_HOSTS)
+        self.assertNotIn("git.octowow.st", self.app.ADDON_GIT_HOSTS)
+
+    def test_anything_else_comes_back_exactly_as_given(self):
+        canon = gitcompare.canonical_repo_url
+        for value in (None, "", "   ", "https://github.com/shagu/pfUI.git",
+                      "https://codeberg.org/a/b/", 42):
+            with self.subTest(value=value):
+                self.assertIs(canon(value), value)
+
+
 def make_archive(comment=b"", files=("Addon/Addon.toc",)):
     """A zip as Gitea's `git archive` makes it: the commit in the comment."""
     import io

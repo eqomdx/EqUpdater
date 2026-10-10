@@ -285,6 +285,39 @@ STRINGS = {
     "Updating {name}…": "{name} wird aktualisiert…",
     "Updating…": "Aktualisiere…",
     "Valid URL. Click Install to continue.": "Gültige URL. Klicke auf Installieren, um fortzufahren.",
+    "Cannot start the game":
+        "Spiel kann nicht gestartet werden",
+    "{app} found no way to run the Windows game client. Install Wine, or set a launch command in Settings → Game launcher.":
+        "{app} hat keine Möglichkeit gefunden, den Windows-Spielclient auszuführen. Installiere Wine oder lege unter Einstellungen → Spielstarter einen Startbefehl fest.",
+    "GAME LAUNCHER":
+        "SPIELSTARTER",
+    "Launch command":
+        "Startbefehl",
+    "Leave empty to use Wine, or UMU if Wine is not installed. {exe} stands for the game's path; without it, the path is added at the end.":
+        "Leer lassen, um Wine zu verwenden, oder UMU, wenn Wine nicht installiert ist. {exe} steht für den Pfad des Spiels; fehlt es, wird der Pfad am Ende angehängt.",
+    "Wine prefix":
+        "Wine-Präfix",
+    "Optional. The Wine prefix the game runs in; passed as WINEPREFIX.":
+        "Optional. Das Wine-Präfix, in dem das Spiel läuft; wird als WINEPREFIX übergeben.",
+    "Using your launch command.":
+        "Dein Startbefehl wird verwendet.",
+    "Automatic: {runner}":
+        "Automatisch: {runner}",
+    "Automatic: nothing found. Install Wine, or set a launch command.":
+        "Automatisch: nichts gefunden. Installiere Wine oder lege einen Startbefehl fest.",
+    "Environment variables":
+        "Umgebungsvariablen",
+    "Optional. One NAME=value per line, given only to the game when PLAY starts it - for example DXVK_HUD=fps.":
+        "Optional. Eine Zeile pro NAME=Wert; nur das Spiel erhält sie, wenn PLAY es startet – zum Beispiel DXVK_HUD=fps.",
+    "Line {line}: write it as NAME=value.":
+        "Zeile {line}: Schreibe sie als NAME=Wert.",
+    "Line {line}: a name starts with a letter or _ and has only letters, digits and _.":
+        "Zeile {line}: Ein Name beginnt mit einem Buchstaben oder _ und enthält nur Buchstaben, Ziffern und _.",
+    "Line {line}: the value contains a character that cannot be used.":
+        "Zeile {line}: Der Wert enthält ein Zeichen, das nicht verwendet werden kann.",
+    "Fix the environment variables in Settings → Game launcher:\n\n{problems}":
+        "Korrigiere die Umgebungsvariablen unter Einstellungen → Spielstarter:\n\n{problems}",
+    "Game launcher…": "Spielstarter…",
     "Verify game files": "Spieldateien überprüfen",
     "Verifying game files…": "Spieldateien werden überprüft…",
     "Verifying…": "Prüfe…",
@@ -360,4 +393,173 @@ STRINGS = {
     "{name} is installed and {app} did not install it.\n\nManaging it means {app} will track:\n    {source}\n\nYour current files are not changed now. {app} will tell you when that source has a newer version, and will never replace files you have edited without asking.\n\nManage it?":
         "{name} ist installiert, aber nicht von {app}.\n\nWenn {app} es verwaltet, verfolgt es:\n    {source}\n\nDeine aktuellen Dateien werden jetzt nicht geändert. {app} sagt dir, wenn diese Quelle eine neuere Version hat, und ersetzt nie ungefragt Dateien, die du bearbeitet hast.\n\nVerwalten?",
     "{section} unavailable: {reason}": "{section} nicht verfügbar: {reason}",
+    'Checking the connection…':
+        'Verbindung wird geprüft…',
+    'Client build looks correct ({version})':
+        'Client-Build sieht korrekt aus ({version})',
+    'Client download server':
+        'Client-Downloadserver',
+    'Config.wtf contains an obsolete realmList ({host})':
+        'Config.wtf enthält eine veraltete realmList ({host})',
+    'Config.wtf has a malformed patchList ({host})':
+        'Config.wtf hat eine fehlerhafte patchList ({host})',
+    'Config.wtf has a malformed realmList ({host})':
+        'Config.wtf hat eine fehlerhafte realmList ({host})',
+    'Config.wtf has no realmList of its own':
+        'Config.wtf hat keine eigene realmList',
+    'Config.wtf patchList points somewhere other than OctoWoW ({host})':
+        'Die patchList in Config.wtf zeigt nicht auf OctoWoW ({host})',
+    'Config.wtf realmList ({host}) disagrees with realmlist.wtf ({root})':
+        'realmList in Config.wtf ({host}) weicht von realmlist.wtf ab ({root})',
+    'Config.wtf realmList matches ({host})':
+        'realmList in Config.wtf stimmt überein ({host})',
+    'Config.wtf realmList uses a non-standard address ({host}); it may be stale':
+        'realmList in Config.wtf nutzt eine ungewöhnliche Adresse ({host}); sie ist womöglich veraltet',
+    'Connection':
+        'Verbindung',
+    'Could not read the client build from WoW.exe':
+        'Der Client-Build konnte nicht aus WoW.exe gelesen werden',
+    'Could not repair: {error}':
+        'Reparatur fehlgeschlagen: {error}',
+    "If login stops at “Authenticating”:\n• Turn off any VPN or proxy: OctoWoW login can hang behind one.\n• If normal login still fails, try launching the game through the official OctoLauncher using Priority Sign In.\n\nEqUpdater cannot currently use OctoLauncher's Priority Sign In directly.\nWarning: the official launcher may modify client files that EqUpdater manages.":
+        'Wenn die Anmeldung bei „Authentifizierung“ hängen bleibt:\n• Schalte VPN oder Proxy aus: Die Anmeldung bei OctoWoW kann dahinter hängen bleiben.\n• Wenn die normale Anmeldung weiterhin fehlschlägt, starte das Spiel über den offiziellen OctoLauncher mit der Priority-Anmeldung (Priority Sign In).\n\nEqUpdater kann die Priority-Anmeldung des OctoLaunchers derzeit nicht direkt nutzen.\nAchtung: Der offizielle Launcher kann Client-Dateien ändern, die EqUpdater verwaltet.',
+    'Game client':
+        'Spiel-Client',
+    'LOGIN DOCTOR':
+        'LOGIN-DOKTOR',
+    'Login Doctor…':
+        'Login-Doktor…',
+    'Login configuration':
+        'Login-Konfiguration',
+    'Login server did not answer a test connection ({host}:{port}, timed out). This alone does not mean login will fail: the server may ignore probes or be busy':
+        'Der Loginserver hat auf eine Testverbindung nicht geantwortet ({host}:{port}, Zeitüberschreitung). Das allein heißt nicht, dass die Anmeldung fehlschlägt: Der Server ignoriert womöglich Testverbindungen oder ist ausgelastet',
+    'Login server not tested: {host} does not resolve':
+        'Loginserver nicht geprüft: {host} lässt sich nicht auflösen',
+    'Login server reachable ({host}:{port})':
+        'Loginserver erreichbar ({host}:{port})',
+    'Login server refused a test connection ({host}:{port}). This alone does not mean login will fail: the server may ignore probes or be busy':
+        'Der Loginserver hat eine Testverbindung abgelehnt ({host}:{port}). Das allein heißt nicht, dass die Anmeldung fehlschlägt: Der Server ignoriert womöglich Testverbindungen oder ist ausgelastet',
+    'Network checks failed: {error}':
+        'Netzwerkprüfungen fehlgeschlagen: {error}',
+    'No Config.wtf yet; the game creates it':
+        'Noch keine Config.wtf; das Spiel legt sie an',
+    'No game folder is set':
+        'Kein Spielordner festgelegt',
+    "No local login problem was found.\n\nThe problem may be server-side or account-specific. If OctoWoW is currently under attack or congestion, the official launcher's Priority Sign In may provide a different login route.":
+        'Es wurde kein lokales Anmeldeproblem gefunden.\n\nDas Problem liegt möglicherweise beim Server oder beim Konto. Wenn OctoWoW gerade angegriffen wird oder überlastet ist, bietet die Priority-Anmeldung (Priority Sign In) des offiziellen Launchers eventuell einen anderen Anmeldeweg.',
+    'Priority Sign In':
+        'Priority-Anmeldung (Priority Sign In)',
+    'Repair login configuration':
+        'Login-Konfiguration reparieren',
+    'Run again':
+        'Erneut prüfen',
+    'The game is running. Close it first: it rewrites these files when it exits.':
+        'Das Spiel läuft. Schließe es zuerst: Beim Beenden schreibt es diese Dateien neu.',
+    'The game is running: repairs are disabled until it is closed':
+        'Das Spiel läuft: Reparaturen sind deaktiviert, bis es geschlossen ist',
+    'These files will be changed:\n\n{files}\n\nOnly their login lines change: the realm address is set to {host}. A copy of each is kept beside it as {ext} (an existing copy is never replaced).\n\nRepair now?':
+        'Diese Dateien werden geändert:\n\n{files}\n\nNur ihre Login-Zeilen ändern sich: Die Realm-Adresse wird auf {host} gesetzt. Von jeder wird daneben eine Kopie als {ext} aufbewahrt (eine vorhandene Kopie wird nie ersetzt).\n\nJetzt reparieren?',
+    'Unexpected client build {version} (OctoWoW uses {expected})':
+        'Unerwarteter Client-Build {version} (OctoWoW nutzt {expected})',
+    'WoW.exe found':
+        'WoW.exe gefunden',
+    'WoW.exe is too small to be the game client':
+        'WoW.exe ist zu klein, um der Spiel-Client zu sein',
+    'WoW.exe not found in the game folder':
+        'WoW.exe wurde im Spielordner nicht gefunden',
+    'octowow.st website':
+        'Website octowow.st',
+    '{file} ({host}) does not match the root realmlist ({root})':
+        '{file} ({host}) stimmt nicht mit der Haupt-realmlist überein ({root})',
+    '{file} has a malformed line: {line}':
+        '{file} hat eine fehlerhafte Zeile: {line}',
+    '{file} has a malformed realm address ({host})':
+        '{file} hat eine fehlerhafte Realm-Adresse ({host})',
+    '{file} has no realmlist line':
+        '{file} hat keine realmlist-Zeile',
+    '{file} is missing':
+        '{file} fehlt',
+    '{file} sets the realm more than once ({hosts})':
+        '{file} setzt den Realm mehrfach ({hosts})',
+    '{file} uses a non-standard address ({host}); it may be stale, for example left behind by an interrupted official launcher session':
+        '{file} nutzt eine ungewöhnliche Adresse ({host}); sie ist womöglich veraltet, etwa übrig geblieben aus einer abgebrochenen Sitzung des offiziellen Launchers',
+    '{file} uses the old address {host}':
+        '{file} nutzt die alte Adresse {host}',
+    '{file} uses {host}':
+        '{file} nutzt {host}',
+    '{file} uses {host}, not the normal route {expected}':
+        '{file} nutzt {host}, nicht den normalen Weg {expected}',
+    '{host} did not resolve (timed out)':
+        '{host} lässt sich nicht auflösen (Zeitüberschreitung)',
+    '{host} does not resolve':
+        '{host} lässt sich nicht auflösen',
+    '{host} resolves':
+        '{host} wird aufgelöst',
+    '{name} not reachable':
+        '{name} nicht erreichbar',
+    '{name} reachable':
+        '{name} erreichbar',
+    'the news feed was malformed': 'der News-Feed war fehlerhaft',
+    '{error} · showing the news feed instead': '{error} · stattdessen wird der News-Feed angezeigt',
+    'Two addon folders': 'Zwei Addon-Ordner',
+    'This game folder has two addon folders whose names differ only in letter case:\n    {other}\n    {addons}\n\nEverything that was in only one of them is now in {addons}. These addons are in both, with different files:\n{names}\n\nYes: keep the copies from {other}.\nNo: keep the copies in {addons}.\nCancel: decide later. Until then {app} installs, updates and removes no addons.\n\nThe copies you do not keep are moved into an AddOns-conflicts folder next to them, not deleted.':
+        'Dieser Spielordner hat zwei Addon-Ordner, deren Namen sich nur in Groß-/Kleinschreibung unterscheiden:\n    {other}\n    {addons}\n\nAlles, was nur in einem davon war, ist jetzt in {addons}. Diese Addons sind in beiden, mit unterschiedlichen Dateien:\n{names}\n\nJa: die Kopien aus {other} behalten.\nNein: die Kopien in {addons} behalten.\nAbbrechen: später entscheiden. Bis dahin installiert, aktualisiert und entfernt {app} keine Addons.\n\nDie Kopien, die du nicht behältst, werden in einen AddOns-conflicts-Ordner daneben verschoben, nicht gelöscht.',
+    'Addons: {n} of {total} failed':
+        'Addons: {n} von {total} fehlgeschlagen',
+    'Could not connect to {host}.':
+        'Keine Verbindung zu {host} möglich.',
+    'Could not find the latest version of the addon at {host}.':
+        'Die neueste Version des Addons wurde auf {host} nicht gefunden.',
+    'Could not look up {host}. Check your internet connection or DNS.':
+        '{host} konnte nicht aufgelöst werden. Prüfe deine Internetverbindung oder DNS.',
+    'Could not write the addon files ({error}).':
+        'Die Addon-Dateien konnten nicht geschrieben werden ({error}).',
+    'Failed to install {name}':
+        'Installation von {name} fehlgeschlagen',
+    'Failed to update {name}':
+        'Update von {name} fehlgeschlagen',
+    'No permission to write to the AddOns folder.':
+        'Keine Berechtigung, in den AddOns-Ordner zu schreiben.',
+    'Not enough disk space to write the addon files.':
+        'Nicht genug Speicherplatz für die Addon-Dateien.',
+    'Open the log for details?':
+        'Protokoll mit Details öffnen?',
+    'Some addons failed — see the message for details':
+        'Einige Addons sind fehlgeschlagen – Details in der Meldung',
+    'The AddOns folder exists twice with different copies of this addon. Choose which to keep, then try again.':
+        'Den AddOns-Ordner gibt es zweimal mit unterschiedlichen Kopien dieses Addons. Wähle, welche behalten wird, und versuche es erneut.',
+    "The addon's address is not on an allowed git host.":
+        'Die Adresse des Addons liegt nicht auf einem erlaubten Git-Host.',
+    'The file from {host} is not a valid addon archive. Try again later.':
+        'Die Datei von {host} ist kein gültiges Addon-Archiv. Versuche es später erneut.',
+    "The files were blocked or removed while being written — usually antivirus. Open Settings (⚙) → 'Add game folder to Defender exclusions', then retry.":
+        'Die Dateien wurden beim Schreiben blockiert oder entfernt – meist durch einen Virenscanner. Öffne Einstellungen (⚙) → „Spielordner zu den Defender-Ausnahmen hinzufügen“ und versuche es erneut.',
+    'The installed copy was left as it was.':
+        'Die installierte Version wurde nicht verändert.',
+    'The other {n} finished.':
+        'Die übrigen {n} wurden abgeschlossen.',
+    'The secure connection to {host} failed (TLS/certificate error).':
+        'Die sichere Verbindung zu {host} ist fehlgeschlagen (TLS-/Zertifikatsfehler).',
+    'Unexpected error ({error}).':
+        'Unerwarteter Fehler ({error}).',
+    '{host} did not answer in time. Try again later.':
+        '{host} hat nicht rechtzeitig geantwortet. Versuche es später erneut.',
+    '{host} is having problems (HTTP {code}). Try again later.':
+        '{host} hat Probleme (HTTP {code}). Versuche es später erneut.',
+    '{host} is limiting requests (HTTP 429). Try again later.':
+        '{host} begrenzt die Anfragen (HTTP 429). Versuche es später erneut.',
+    '{host} is showing its DDoS-protection check instead of the download. Try again later.':
+        '{host} zeigt statt des Downloads seine DDoS-Schutzprüfung. Versuche es später erneut.',
+    '{host} refused or dropped the connection. Try again later.':
+        '{host} hat die Verbindung abgelehnt oder getrennt. Versuche es später erneut.',
+    '{host} refused the download (HTTP 403). It may be limiting automated downloads. Try again later.':
+        '{host} hat den Download abgelehnt (HTTP 403). Möglicherweise werden automatische Downloads begrenzt. Versuche es später erneut.',
+    '{host} refused the download (HTTP {code}).':
+        '{host} hat den Download abgelehnt (HTTP {code}).',
+    '{host} says the repository or version does not exist (HTTP 404).':
+        '{host} meldet, dass das Repository oder die Version nicht existiert (HTTP 404).',
+    '{name} (update)':
+        '{name} (Update)',
+    '…and {n} more':
+        '…und {n} weitere',
 }

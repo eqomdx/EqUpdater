@@ -1,6 +1,17 @@
 # Installing EqUpdater
 
-**Windows — the easy way.** Download this repository (green *Code* button →
+> **Players and testers: you do not need this folder.** Download
+> `EqUpdater-vX.Y.Z-Windows.exe` (Windows installer) or
+> `EqUpdater-vX.Y.Z-Linux-x86_64.AppImage` from the
+> [Releases page](https://github.com/eqomdx/EqUpdater/releases/latest) -
+> or, to test a pull request, from its **Release** workflow run's
+> artifacts on GitHub Actions - and run it. Those are built and
+> self-tested by CI and are what users get. Everything below builds
+> EqUpdater from source on your own PC, which is for developers; a
+> hand-made build (a `dist/EqUpdater` folder with `EqUpdater.exe` and
+> `_internal`) is not the release and should not be used to test one.
+
+**Windows — from source.** Download this repository (green *Code* button →
 *Download ZIP*), unpack it, open the `install` folder and double-click
 **`INSTALL.cmd`**.
 

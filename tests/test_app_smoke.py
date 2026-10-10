@@ -116,7 +116,10 @@ class TestAppStarts(unittest.TestCase):
 
     def test_product_identity(self):
         self.assertEqual(self.app.title(), "EqUpdater")
-        self.assertEqual(self.app_mod.UA, "EqUpdater/2.0.6")
+        self.assertEqual(self.app_mod.UA,
+                         f"EqUpdater/{self.branding.APP_VERSION}")
+        # A release (2.1.0) or a numbered test build of one (2.0.6.1).
+        self.assertRegex(self.branding.APP_VERSION, r"^\d+\.\d+\.\d+(\.\d+)?$")
 
     def test_settings_live_under_the_new_name(self):
         self.assertIn("EqUpdater", self.app_mod.CONFIG_FILE)
@@ -137,6 +140,113 @@ class TestAppStarts(unittest.TestCase):
         update and the button must not invite a click."""
         self.app._refresh_update_all_btn()
         self.assertFalse(self.app._all_ready)
+
+    def test_game_environment_variables_are_saved_and_checked(self):
+        """Settings -> Game launcher -> Environment variables: saved as typed,
+        shown again next time, and a bad line named at once."""
+        tk, m = self.app_mod.tk, self.app_mod
+
+        def build():
+            frame = tk.Frame(self.app)
+            frame.pack()
+            self.app._build_game_launcher_settings(frame, "#000000",
+                                                   "#111111", "#222222")
+            self.app.update()
+            return frame, self.app._env_vars_box, self.app._env_vars_error
+
+        def type_into(box, text):
+            box.delete("1.0", "end")
+            box.insert("1.0", text)
+            self.app.update()
+
+        frame, box, error = build()
+        try:
+            self.assertFalse(error.winfo_ismapped())
+            text = "DXVK_HUD=fps\nWINEDLLOVERRIDES=d3d9=n,b\nbroken line"
+            type_into(box, text)
+            self.assertEqual(m.load_config()["game_launcher"]["env_vars"], text)
+            self.assertTrue(error.winfo_ismapped())
+            self.assertIn("3", error.cget("text"))
+            frame.destroy()
+
+            frame, box, error = build()          # Settings opened again
+            self.assertEqual(box.get("1.0", "end-1c"), text)
+            self.assertTrue(error.winfo_ismapped())
+            type_into(box, "DXVK_HUD=fps\n")
+            self.assertFalse(error.winfo_ismapped())
+            self.assertEqual(m.load_config()["game_launcher"]["env_vars"],
+                             "DXVK_HUD=fps\n")
+            type_into(box, "")
+            self.assertEqual(m.load_config()["game_launcher"]["env_vars"], "")
+        finally:
+            frame.destroy()
+            m.update_config(lambda c: c.pop("game_launcher", None))
+
+    def test_linux_settings_fit_and_open_the_game_launcher(self):
+        """On Linux the launcher's fields used to sit in Settings' left
+        column and, in OpenDyslexic, pushed its last row (SUPPORT ME) out of
+        the panel. They are in a panel of their own, opened from Settings."""
+        from unittest import mock
+        app, m = self.app, self.app_mod
+
+        def find(root, text):
+            if getattr(root, "cget", None) and isinstance(root, m.tk.Label) \
+                    and root.cget("text") == text:
+                return root
+            for child in root.winfo_children():
+                hit = find(child, text)
+                if hit is not None:
+                    return hit
+            return None
+
+        def bottom(w):
+            return w.winfo_rooty() + w.winfo_height()
+
+        # A first run opens Settings by itself 500 ms after start, built for
+        # the real platform (on Windows: no Game launcher item). Whether that
+        # has fired yet is timing; drop it so this test builds its own.
+        app.update()
+        if app._settings_overlay is not None:
+            app._settings_overlay.destroy()
+            app._settings_overlay = None
+        with mock.patch.object(m.platforms, "WINDOWS", False), \
+                mock.patch.object(m.platforms, "LINUX", True):
+            try:
+                for choice in ("arial", "friz", "opendyslexic"):
+                    with self.subTest(font=choice):
+                        app._font_choice_var.set(choice)
+                        app._change_font_choice()
+                        app._open_settings()
+                        app.update()
+                        ov = app._settings_overlay
+                        panel = ov.winfo_children()[0]
+                        last = find(ov, m.tr("Buy Me a Coffee"))
+                        self.assertIsNotNone(last)
+                        self.assertLessEqual(bottom(last), bottom(panel))
+                        self.assertIsNone(find(ov, m.tr("Environment variables")))
+
+                        item = find(ov, m.tr("Game launcher…"))
+                        item.event_generate("<Button-1>")
+                        app.update()
+                        shade = app._launcher_overlay
+                        self.assertIsNotNone(shade)
+                        box = find(shade, m.tr("Environment variables"))
+                        self.assertIsNotNone(box)
+                        launcher = shade.winfo_children()[0]
+                        self.assertLessEqual(bottom(app._env_vars_box),
+                                             bottom(launcher))
+                        app.event_generate("<Escape>")    # closes the panel...
+                        app.update()
+                        self.assertIsNone(app._launcher_overlay)
+                        self.assertIsNotNone(app._settings_overlay)  # ...only
+                        app._open_game_launcher()
+                        app._close_settings()
+                        self.assertIsNone(app._launcher_overlay)
+            finally:
+                if app._settings_overlay is not None:
+                    app._close_settings()
+                app._font_choice_var.set("arial")
+                app._change_font_choice()
 
 
 @unittest.skipUnless(HAVE_TK, "no display")
@@ -296,30 +406,46 @@ class TestAnimatedBackground(unittest.TestCase):
         self.assertEqual(_wait_for_animation_threads(), [],
                          "a bg-animation worker outlived its test")
 
-    def gif(self, frames, name="t.gif"):
+    def gif(self, frames, name="t.gif", duration=30):
         path = os.path.join(self.tmp, name)
         imgs = [self.Image.new("RGB", (32, 18), c) for c in frames]
         imgs[0].save(path, save_all=True, append_images=imgs[1:],
-                     duration=30, loop=0)
+                     duration=duration, loop=0)
         return path
 
-    def run_for(self, anim, ms, sample=None):
+    def run_for(self, anim, ms, sample=None, until=None):
+        """Run the loop for ``ms``; with ``until``, as soon as it is true,
+        or after 3 s at the latest (a loaded runner may need longer than
+        ``ms`` for the worker to report)."""
+        deadline = time.monotonic() + 3.0
+
         def tick():
             if sample:
                 sample()
+            if until is not None and (until() or time.monotonic() > deadline):
+                self.root.quit()
+                return
             self.root.after(10, tick)
         self.root.after(10, tick)
-        self.root.after(ms, self.root.quit)
+        if until is None:
+            self.root.after(ms, self.root.quit)
         anim.start()
         self.root.mainloop()
         # Wait for the worker: the window is destroyed in tearDown.
         self.assertTrue(anim.stop(wait=3.0), "bg-animation worker did not exit")
 
     def test_plays_every_frame_and_loops(self):
+        """Every frame, in order, then round again.
+
+        Sampled every 10 ms, so a frame shown for less than that between two
+        samples is missed -- which a loaded CI machine does produce (it once
+        dropped the second pass's first frame). So frames last 80 ms, strict
+        order is asserted on the first pass, and "round again" is the
+        sequence wrapping back to an earlier frame, not one exact frame."""
         seen = []
         anim = self.ui.AnimatedBackground(
-            self.root, self.canvas, self.item, self.gif(self.COLOURS),
-            40, 30, darken=1.0)
+            self.root, self.canvas, self.item,
+            self.gif(self.COLOURS, duration=80), 40, 30, darken=1.0)
 
         shown = []
 
@@ -330,11 +456,13 @@ class TestAnimatedBackground(unittest.TestCase):
                     seen.append(rgb)
                 shown.append(self.canvas.itemcget(self.item, "image")
                              == str(anim.photo))
-        self.run_for(anim, 700, sample)
+        self.run_for(anim, 1200, sample)
         self.assertIsNone(anim.error)
         self.assertEqual(set(seen), set(self.COLOURS))
-        self.assertGreater(len(seen), len(self.COLOURS))      # came round again
-        self.assertEqual(seen[:4], self.COLOURS + [self.COLOURS[0]])
+        self.assertEqual(seen[:3], self.COLOURS)              # in order
+        order = [self.COLOURS.index(c) for c in seen]
+        self.assertTrue(any(b < a for a, b in zip(order, order[1:])),
+                        f"never came round again: {seen}")
         self.assertTrue(shown and all(shown))                 # drawn on the canvas
         self.assertIsNone(anim.photo)                         # released on stop
 
@@ -345,7 +473,7 @@ class TestAnimatedBackground(unittest.TestCase):
         failed = []
         anim = self.ui.AnimatedBackground(self.root, self.canvas, self.item,
                                           path, 40, 30, on_fail=failed.append)
-        self.run_for(anim, 300)
+        self.run_for(anim, 300, until=lambda: failed)
         self.assertEqual(len(failed), 1)
         self.assertTrue(anim._stopped)
         self.assertIsNone(anim.photo)
@@ -355,7 +483,7 @@ class TestAnimatedBackground(unittest.TestCase):
         anim = self.ui.AnimatedBackground(
             self.root, self.canvas, self.item, self.gif(self.COLOURS[:1]),
             40, 30, on_fail=failed.append)
-        self.run_for(anim, 300)
+        self.run_for(anim, 300, until=lambda: failed)
         self.assertEqual(len(failed), 1)
         self.assertIn("1 frame", failed[0])
 
@@ -1128,6 +1256,231 @@ class TestNoDllWithoutConsent(unittest.TestCase):
         self.assertNotIn(mod, [a[0] for a in installs])
         with open(os.path.join(self.client, mod["installed_files"][0]), "rb") as fh:
             self.assertEqual(fh.read(), b"the user's own build")
+
+
+@unittest.skipUnless(HAVE_TK, "no display")
+class TestAddonSectionToggle(unittest.TestCase):
+    """Expanding or collapsing an addon section swaps in the finished list in
+    one step. It used to empty the list, jump to the top and refill it batch
+    by batch on screen -- the "brief visual glitch" a Linux tester saw."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="equ-addon-toggle-")
+        os.environ["LOCALAPPDATA"] = cls.tmp
+        os.environ["XDG_DATA_HOME"] = cls.tmp
+        for mod in [m for m in list(sys.modules) if m.startswith("equpdater")]:
+            del sys.modules[mod]
+        from equpdater import app
+        cls.app = app.EqUpdaterApp()
+        cls.app._addons_verify = lambda *a, **k: None   # no network, no disk
+        cls.app._switch_tab("ADDONS")
+        for _ in range(6):
+            cls.app.update()
+
+    @classmethod
+    def tearDownClass(cls):
+        _close_app(cls.app)
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def setUp(self):
+        a = self.app
+        a._addon_sections_open.clear()
+        a._addons_status = {
+            "state": "done", "addons": {},
+            "available": [{"folder": "Addon%03d" % i, "status": "available",
+                           "toc": {"Title": "Addon %d" % i}}
+                          for i in range(80)]}
+        a._render_addons()
+        self.finish()
+
+    def shown(self):
+        cv = self.app._addons_canvas
+        return cv.nametowidget(cv.itemcget(self.app._addons_win, "window"))
+
+    def click_header(self, title):
+        """Click a section's header, as the player does."""
+        for child in self.shown().winfo_children():
+            for label in child.winfo_children():
+                if isinstance(label, tk.Label) and label.cget("text") == title:
+                    label.event_generate("<Button-1>")
+                    return
+        self.fail("no %s header" % title)
+
+    def finish(self):
+        """Run the batched build to the end, checking at every step that
+        what is on screen is a finished list, never a partial one."""
+        # Bounded by time, not by update() calls: each batch is an after(1),
+        # and Windows' timer only makes it due every ~15 ms, so most calls
+        # there find nothing to run yet.
+        deadline = time.monotonic() + 30
+        while self.app._addons_build_queue:
+            self.app.update()
+            self.assertLess(time.monotonic(), deadline,
+                            "the build never finished")
+            time.sleep(0.002)
+            if self.app._addons_build_queue:
+                self.assertIsNot(self.shown(), self.app._addons_inner,
+                                 "a half-built list is on screen")
+        self.app.update()
+
+    def test_collapse_and_expand_swap_in_a_finished_list(self):
+        cv = self.app._addons_canvas
+        full = self.shown()
+        rows_full = len(full.winfo_children())
+        cv.yview_moveto(0.5)
+        self.app.update()
+        before = cv.yview()[0]
+
+        self.click_header("MANAGED")
+        self.assertFalse(self.app._addon_sections_open["MANAGED"])
+        self.assertIs(self.shown(), full)        # still the old list
+        self.assertTrue(full.winfo_exists())
+        self.finish()
+
+        new = self.shown()
+        self.assertIsNot(new, full)
+        self.assertFalse(full.winfo_exists())   # the old list is gone
+        self.assertEqual(len(new.winfo_children()), rows_full - 1)
+        # Scroll region set from the finished list, position kept.
+        region = [float(v) for v in str(cv.cget("scrollregion")).split()]
+        self.assertEqual(region[3], new.winfo_reqheight())
+        self.assertAlmostEqual(cv.yview()[0], before, delta=0.02)
+
+    def test_a_collapsed_section_has_no_rows(self):
+        self.click_header("AVAILABLE")
+        self.finish()
+        # Three headers and the two "Nothing here." lines.
+        self.assertEqual(len(self.shown().winfo_children()), 5)
+
+    def test_a_superseded_build_is_discarded(self):
+        self.app._render_addons()
+        first = self.app._addons_inner
+        self.app._render_addons()
+        self.assertFalse(first.winfo_exists())
+        self.finish()
+        self.assertIs(self.shown(), self.app._addons_inner)
+
+
+@unittest.skipUnless(HAVE_TK, "no display")
+class TestLoginDoctorWindow(unittest.TestCase):
+    """Settings -> Login Doctor: shows the checks, repairs only after
+    confirming, refuses while the game runs, and runs again afterwards.
+    The network checks are replaced; nothing here goes online."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="equ-doctor-ui-")
+        os.environ["LOCALAPPDATA"] = cls.tmp
+        os.environ["XDG_DATA_HOME"] = cls.tmp
+        for mod in [m for m in list(sys.modules) if m.startswith("equpdater")]:
+            del sys.modules[mod]
+        from equpdater import app
+        cls.m = app
+        cls.app = app.EqUpdaterApp()
+        for _ in range(4):
+            cls.app.update()
+
+    @classmethod
+    def tearDownClass(cls):
+        _close_app(cls.app)
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def setUp(self):
+        from unittest import mock
+        ld = self.m.logindoctor
+        self.client = tempfile.mkdtemp(prefix="client-", dir=self.tmp)
+        with open(os.path.join(self.client, "WoW.exe"), "wb") as f:
+            f.truncate(5_000_000)
+        with open(os.path.join(self.client, "realmlist.wtf"), "wb") as f:
+            f.write(b"set realmlist octowow.st\r\n")
+        self.app._game_path.set(self.client)
+        net = [ld.Check(ld.PASS, "{host} resolves", {"host": h}, "network")
+               for h in ld.DNS_HOSTS]
+        for p in (mock.patch.object(ld, "network_checks", return_value=net),
+                  mock.patch.object(self.m, "get_client_version",
+                                    return_value="1.18.1 (7272)"),
+                  mock.patch.object(self.m.platforms, "client_in_use",
+                                    return_value=False)):
+            p.start()
+            self.addCleanup(p.stop)
+        self.app._open_settings()
+        self.app.update()
+
+    def tearDown(self):
+        # Not _close_settings(): closing Settings is "Confirm", which on a
+        # fresh app (a first run) offers a reconcile -- and on Windows asks
+        # about a Defender exclusion in a real dialog that nobody answers.
+        if self.app._settings_overlay is not None:
+            self.app._settings_overlay.destroy()
+            self.app._settings_overlay = None
+            self.app._doctor_overlay = None
+        self.app._game_path.set("")
+
+    def open_doctor(self):
+        def find(root, text):
+            if isinstance(root, self.m.tk.Label) and root.cget("text") == text:
+                return root
+            for child in root.winfo_children():
+                hit = find(child, text)
+                if hit is not None:
+                    return hit
+        find(self.app._settings_overlay,
+             self.m.tr("Login Doctor…")).event_generate("<Button-1>")
+        self.wait()
+
+    def wait(self):
+        deadline = time.monotonic() + 10
+        while self.app._doctor_state["network"] is None:
+            self.app.update()
+            time.sleep(0.01)
+            self.assertLess(time.monotonic(), deadline)
+        self.app.update()
+
+    def text(self):
+        return self.app._doctor_text.get("1.0", "end")
+
+    def test_shows_problems_then_repairs_and_runs_again(self):
+        from unittest import mock
+        self.open_doctor()
+        self.assertIn("✗  realmlist.wtf uses the old address octowow.st", self.text())
+        self.assertNotIn("No local login problem", self.text())
+        self.assertEqual(self.app._doctor_repair_btn.cget("cursor"), "hand2")
+        with mock.patch("tkinter.messagebox.askyesno", return_value=True) as ask:
+            self.app._doctor_repair_btn.event_generate("<Button-1>")
+            self.wait()
+        self.assertIn("realmlist.wtf", ask.call_args[0][1])     # files listed
+        self.assertIn(".octobak", ask.call_args[0][1])
+        with open(os.path.join(self.client, "realmlist.wtf"), "rb") as f:
+            self.assertEqual(f.read(), b"set realmlist play.octowow.st\r\n")
+        self.assertTrue(os.path.exists(
+            os.path.join(self.client, "realmlist.wtf.octobak")))
+        self.assertIn("✓  realmlist.wtf uses play.octowow.st", self.text())
+        self.assertIn("No local login problem was found.", self.text())
+        self.assertNotEqual(self.app._doctor_repair_btn.cget("cursor"), "hand2")
+
+    def test_declining_changes_nothing(self):
+        from unittest import mock
+        self.open_doctor()
+        with mock.patch("tkinter.messagebox.askyesno", return_value=False):
+            self.app._repair_login_config()
+        with open(os.path.join(self.client, "realmlist.wtf"), "rb") as f:
+            self.assertEqual(f.read(), b"set realmlist octowow.st\r\n")
+
+    def test_refuses_while_the_game_runs(self):
+        from unittest import mock
+        self.open_doctor()
+        with mock.patch.object(self.m.platforms, "client_in_use", return_value=True), \
+                mock.patch("tkinter.messagebox.showerror") as err, \
+                mock.patch("tkinter.messagebox.askyesno") as ask:
+            self.app._repair_login_config()
+            self.wait()
+        err.assert_called_once()
+        ask.assert_not_called()
+        self.assertIn("The game is running", self.text())
+        self.assertNotEqual(self.app._doctor_repair_btn.cget("cursor"), "hand2")
+        with open(os.path.join(self.client, "realmlist.wtf"), "rb") as f:
+            self.assertEqual(f.read(), b"set realmlist octowow.st\r\n")
 
 
 if __name__ == "__main__":

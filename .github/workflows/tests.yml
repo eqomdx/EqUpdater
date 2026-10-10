@@ -1,8 +1,9 @@
 # The test suite is the gate for EqUpdater's safety rules (unmanaged addons
 # and mods, DLL overwrite protection, version ordering, consent, backups,
-# update planning). It runs here on every push and pull request, and before
-# any release build (python build.py --release) -- not on an end user's PC
-# during install.
+# update planning). It runs here on every push and pull request, on Windows
+# and on Linux -- one codebase, both platforms -- and before any release
+# build (python build.py --release) -- not on an end user's PC during
+# install. Packaging the release artifacts is release.yml.
 name: tests
 
 on:
@@ -11,7 +12,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  tests:
+  windows:
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
@@ -31,5 +32,32 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: test-log
+          name: test-log-windows
+          path: test-log.txt
+
+  linux:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      # The same Python as the AppImage is built with: deadsnakes' 3.12,
+      # whose tkinter uses the system's Tk (with Xft, so fontconfig fonts).
+      - name: Install Python 3.12 with Tk, and a virtual display
+        run: |
+          sudo add-apt-repository -y ppa:deadsnakes/ppa
+          sudo apt-get update
+          sudo apt-get install -y python3.12 python3.12-venv python3.12-tk \
+            xvfb fonts-liberation
+          python3.12 -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip pillow certifi
+
+      - name: Run the test suite
+        run: xvfb-run -a .venv/bin/python tools/check.py --log test-log.txt
+
+      - name: Keep the full log when something fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-log-linux
           path: test-log.txt

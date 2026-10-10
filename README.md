@@ -23,33 +23,80 @@
 
 ## Install
 
-**Close World of Warcraft first.**
+Download the latest release from the
+[**Releases page**](https://github.com/eqomdx/EqUpdater/releases/latest).
+Nothing else is needed: no Python, no build tools.
 
-1. Download this repository (**Code → Download ZIP**) and extract it.
-2. Double-click **`install/INSTALL.cmd`**.
-3. Launch EqUpdater from the desktop shortcut it offers.
+### Windows
 
-The installer sets up Python if you need it, builds EqUpdater and installs
-it to one permanent place:
+1. Download **`EqUpdater-vX.Y.Z-Windows.exe`**.
+2. Run it. It installs EqUpdater to
+   `%LOCALAPPDATA%\Programs\EqUpdater`, adds it to the Start menu (and,
+   if you like, the desktop), and starts it.
 
-    %LOCALAPPDATA%\Programs\EqUpdater\EqUpdater.exe
+No administrator rights are needed, and it never touches your game folder.
 
-It never touches your game folder, and no administrator rights are needed.
+**Updating:** download the newer `EqUpdater-vX.Y.Z-Windows.exe` and run it
+(close EqUpdater first). It replaces the app in that same place and points
+every EqUpdater shortcut there. Your settings, managed mods and addons, and
+backups live separately in `%LOCALAPPDATA%\EqUpdater` and are kept. If
+anything goes wrong part-way, the version you had stays in place.
 
-### Updating
+### Linux
 
-Download the new version, extract it anywhere and run its
-`install/INSTALL.cmd` the same way. The new version **replaces** the old one
-in that same place - versions no longer live in folders of their own - and
-every EqUpdater shortcut (desktop, Start menu, taskbar) is pointed at it,
-including shortcuts an older version made into its own download folder.
-Close EqUpdater first. Your settings, managed mods and addons, and backups
-live separately in `%LOCALAPPDATA%\EqUpdater` and are kept. If anything goes
-wrong part-way, the version you had stays in place; running the installer
-again is always safe.
+1. Download **`EqUpdater-vX.Y.Z-Linux-x86_64.AppImage`**.
+2. Make it executable and run it:
 
-Once installed, the folder you extracted (and any older version's folder) is
-not used any more and can be deleted.
+   ```sh
+   chmod +x EqUpdater-vX.Y.Z-Linux-x86_64.AppImage
+   ./EqUpdater-vX.Y.Z-Linux-x86_64.AppImage
+   ```
+
+EqUpdater runs natively on Linux (x86_64; Ubuntu 22.04 and newer, Mint,
+Fedora, Arch and others). The AppImage carries everything it needs,
+including the `aria2c` the client download uses. Settings live in
+`~/.local/share/EqUpdater`. **Updating:** download the newer AppImage and
+run that one instead.
+
+The OctoWoW client itself is a Windows program, so **PLAY needs a way to
+run Windows games: Wine, Proton or UMU.** By default EqUpdater uses `wine`
+if it is installed, otherwise `umu-run`. To use anything else - a
+particular Proton, Lutris, Faugus, a custom Wine prefix - open
+**Settings → Game launcher**:
+
+- **Launch command** - the command that starts the game. `{exe}` stands
+  for the path of `WoW.exe` (or `VanillaFixes.exe`); without `{exe}` the
+  path is added at the end. `{dir}` is the game folder. Examples:
+  `wine`, `gamemoderun wine {exe}`, `umu-run`,
+  `/path/to/proton run`.
+- **Wine prefix** - passed as `WINEPREFIX`; leave it empty for the default.
+- **Environment variables** - one `NAME=value` per line, for example
+  `DXVK_HUD=fps` or `PROTON_LOG=1`. They are given to the game only, when
+  PLAY starts it, and win over anything set above. The value is passed
+  exactly as typed (spaces and `=` included; nothing is expanded or run).
+  A line EqUpdater cannot use is pointed out straight away, and PLAY will
+  not start the game until it is fixed.
+
+The game runs on its own: closing EqUpdater never closes it. It gets your
+desktop session as EqUpdater got it, without EqUpdater's own launch details
+(the desktop's startup ID and the AppImage's variables), so its window is
+its own in the taskbar. If a game started through Bottles or another
+launcher still shows only in Alt+Tab, start the same command from a
+terminal: if it behaves the same there, it is that launcher's or the
+window manager's setting (for example a Wine virtual desktop), not
+EqUpdater's.
+
+Linux tells `Interface/AddOns` and `Interface/Addons` apart; Windows and
+Wine do not. EqUpdater finds the addons folder in whatever case it has and
+names it `Interface/AddOns`. If a game folder has two of them, everything
+only one holds is moved into `AddOns`, and for an addon both hold with
+different files you choose which copy to keep -- the other is moved into an
+`AddOns-conflicts-...` folder, never deleted. Settings copied from a Wine
+install keep their addon and mod records.
+
+Everything else - updates, mods, addons, texture packs, tweaks, the
+`WoW.exe` patch - works the same as on Windows. Keep the game anywhere,
+for example `~/Games/OctoWoW` or inside a Wine prefix.
 
 ---
 
@@ -98,7 +145,9 @@ confirmed, and skips the rest.
 - ★ **Recommended** addons, a wider list of maintained community versions,
   and search.
 - Add any addon from **GitHub, GitLab, Gitea, Codeberg and OctoWoW Git**
-  (`https://octowow.st/git/<owner>/<repo>`).
+  (`https://octowow.st/git/<owner>/<repo>`). OctoWoW Git links written
+  without `https://`, or on its other address `git.octowow.st/git/...`, are
+  read as that same canonical link; no other address is rewritten.
 - Knows the difference between newer, older and modified — a different
   commit is not assumed to be an update.
 - Switch an addon to another fork, ignore updates for one, or stop managing it.
@@ -114,9 +163,32 @@ confirmed, and skips the rest.
 - Client tweaks patched into `WoW.exe`.
 - **Reset** asks before putting everything back to defaults.
 
+### Login Doctor
+- **Settings → Login Doctor** checks what on your computer could stop the
+  game logging in: `WoW.exe` and its build (1.18.1, 7272), the realmlist
+  files (`realmlist.wtf`, and `Data/<locale>/realmlist.wtf` where there is
+  one), the login lines in `WTF/Config.wtf`, name lookups for
+  play.octowow.st, octowow.st and dl.octowow.st, the login server's port
+  (3724) and the HTTPS servers EqUpdater uses. It never tries to log in and
+  never reads accounts, launcher sign-ins or tokens.
+- **Repair login configuration** sets the realmlist to `play.octowow.st` and
+  removes a stale `SET realmList` from `Config.wtf`. It lists the files
+  first, refuses while the game is running, changes only those lines, and
+  keeps a copy of each file as `<file>.octobak` (an existing copy is never
+  replaced).
+- If nothing local is wrong it says so: the problem is then on the server or
+  the account. If login stops at "Authenticating", turn off any VPN or
+  proxy; if normal login still fails, try launching the game through the
+  official OctoLauncher using Priority Sign In. EqUpdater cannot use Priority
+  Sign In itself.
+
 ### News
-- Announcements and the Changelog, read straight from the OctoWoW forum:
-  once at launch, and again when you press refresh.
+- Announcements: the newest post in OctoWoW's announcements thread
+  ([t=2848](https://octowow.st/forum/viewtopic.php?t=2848)); while the forum
+  is unreadable, OctoWoW's public news feed (`news.json`) instead.
+- Changelog: the newest posts in the patch notes thread
+  ([t=2816](https://octowow.st/forum/viewtopic.php?t=2816)).
+- Both are read once at launch, and again when you press refresh.
 - If the forum cannot be read, the News tab says why and keeps the last news
   it received.
 
@@ -125,7 +197,7 @@ confirmed, and skips the rest.
   uses a still image and almost no CPU).
 - Fonts: **Arial** (default), **Friz Quadrata** or **OpenDyslexic**, switched
   live in Settings. All three come with EqUpdater; nothing to install.
-- Dark title bar to match.
+- Dark title bar to match (Windows).
 - In your language: English, Deutsch, Русский, 中文 (简体), Español or
   Português (BR). The first launch asks; after that it is **Tweaks →
   Language**, which sets both the game's language and EqUpdater's.
@@ -141,15 +213,37 @@ configuration is **copied, never moved**, so going back costs nothing.
 
 ---
 
-## Running from source
+## Building from source (developers)
+
+> **Testing EqUpdater? Do not build it yourself.** Use the files GitHub
+> Actions builds: `EqUpdater-vX.Y.Z-Windows.exe` (the installer) and
+> `EqUpdater-vX.Y.Z-Linux-x86_64.AppImage` - from a release, or for a pull
+> request from its **Release** workflow run's artifacts. Those are what
+> users get. A manual `python build.py` makes a developer folder
+> (`dist/EqUpdater/`: `EqUpdater.exe` beside an `_internal` folder), which
+> is not the installer and does not install, update or fix shortcuts.
+
+One codebase builds both platforms. With Python 3.10 or newer:
 
 ```sh
 python -m pip install pillow pyinstaller certifi
-python -m equpdater          # run it
-python build.py              # build dist/EqUpdater/EqUpdater.exe
+python -m equpdater              # run it from source
+python build.py                  # dist/EqUpdater/ - the folder build for this OS
+python build.py --setup          # Windows: also the release installer .exe
+python3 tools/build_appimage.py  # Linux: the release AppImage
 ```
 
-Python 3.10 or newer. On Linux, run it from source the same way.
+On Windows, `install/INSTALL.cmd` does the same from a downloaded source
+tree (installs Python if needed, builds, installs to
+`%LOCALAPPDATA%\Programs\EqUpdater`). Running from source on Linux needs
+Tk (`python3-tk`) and `aria2` from your distribution.
+
+Releases are built by GitHub Actions (`.github/workflows/release.yml`):
+publishing a release for tag `vX.Y.Z` builds, tests and attaches
+`EqUpdater-vX.Y.Z-Windows.exe` and
+`EqUpdater-vX.Y.Z-Linux-x86_64.AppImage`, both from that commit.
+Platform differences live in `equpdater/platforms.py`; everything else is
+shared.
 
 ### Tests
 
@@ -158,8 +252,9 @@ python tools/check.py           # the whole suite; prints only what failed
 python build.py --release       # builds only if the suite passes
 ```
 
-The suite guards EqUpdater's safety rules. It runs in CI on every change and
-before every release build; it is not part of installing.
+The suite guards EqUpdater's safety rules. It runs in CI on Windows and
+Linux for every change and before every release build; it is not part of
+installing.
 
 ---
 

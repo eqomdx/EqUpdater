@@ -173,6 +173,55 @@ Its processes see a private copy of %LOCALAPPDATA% (MSIX virtualization) but
 the real desktop, so the install would land in the private copy and the
 real shortcut would be pointed at it.
 
+The first-run default game folder is `~/Games/OctoWoW` (it was
+`<app folder>\OctoWoW`, which an update replaces), and `deploy` carries
+anything that is not part of the build out of the old app folder before
+deleting it (`carry_over`), so a game kept there by 2.0.6 survives.
+
+## Windows and Linux (2026-10-05)
+
+One codebase. `equpdater/platforms.py` holds only what differs by OS:
+
+| | Windows | Linux |
+|---|---|---|
+| open a folder / URL | `explorer.exe` / webbrowser | `xdg-open` |
+| sync's folder link | NTFS junction (`mklink /J`) | symlink |
+| aria2c | pinned download, sha-checked (app.ensure_aria2c) | AppImage's own (beside the exe, `$APPDIR/usr/bin`), then PATH; never aria2c.exe under Wine |
+| game running? | WoW.exe cannot be opened for writing | `/proc`: this client's WoW.exe / VanillaFixes.exe (Z:\ or Unix path, or working folder); wine/wineserver never count; unplaceable counts; read-only WoW.exe counts |
+| PLAY | the exe, detached from the job | launch command (`{exe}`, `{dir}`), else `wine`, else `umu-run`; `WINEPREFIX` from Settings |
+| child processes | no console | `child_env`: the frozen app's `LD_LIBRARY_PATH` and our `FONTCONFIG_FILE` are taken back out |
+| fonts | GDI `AddFontResourceExW` (FR_PRIVATE) | fontconfig file including `/etc/fonts/fonts.conf` + bundled dirs, set before Tk starts (`ui.prepare_fonts`) |
+| restart | `sys.executable` | `$APPIMAGE` when in an AppImage |
+
+Settings on Linux has **Game launcher** (`game_launcher` in config:
+`launch_command`, `wine_prefix`). Defender and Windows-firewall prompts are
+Windows-only. `WoW.exe` is the same file, patched at the same offsets, on
+both.
+
+TLS: `make_ssl_context` loads certifi, the frozen bundle's own
+`certifi/cacert.pem` (found directly, not only via certifi), and on Linux
+the distribution's bundle; `CA_SOURCES` says which. Verification, hostname
+checks and TLS >= 1.2 are never relaxed. (A Windows build under Wine failed
+"unable to get local issuer certificate": certifi's load failed silently
+and Wine's store is empty. dl.octowow.st verifies with certifi alone.)
+
+**Release artifacts** (`.github/workflows/release.yml`, on a published
+release; pull requests build them as workflow artifacts):
+- `EqUpdater-vX.Y.Z-Windows.exe` - `build.py --setup`: a one-file
+  installer (`equpdater/installer.py`, entry `EqUpdaterSetup.py`) holding
+  the folder build; installs it with `deploy`, Start-menu entry, desktop
+  shortcut on request, starts it. The app stays a folder build (no %TEMP%
+  unpacking per launch).
+- `EqUpdater-vX.Y.Z-Linux-x86_64.AppImage` - `tools/build_appimage.py` on
+  ubuntu-22.04 with deadsnakes Python 3.12 + system Tk: folder build,
+  pinned static aria2c (abcfy2 1.37.0 musl), pinned appimagetool 1.9.1
+  (static runtime: no libfuse2 needed). Both downloads sha256-pinned.
+- Each runs `EqUpdater.py --self-test=<json> --network` before upload.
+
+Not tested here (no Linux machine): the AppImage on a real desktop -
+window, fonts, PLAY through Wine/UMU, the client sync. CI proves it builds,
+starts headless and carries everything.
+
 ## Git hosts, OctoWoW Git included (2026-10-01)
 
 `gitcompare.GIT_HOSTS` is the one list of hosts addon sources may live on:

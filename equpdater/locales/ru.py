@@ -285,6 +285,39 @@ STRINGS = {
     "Updating {name}…": "Обновление {name}…",
     "Updating…": "Обновление…",
     "Valid URL. Click Install to continue.": "Адрес верный. Нажмите «Установить», чтобы продолжить.",
+    "Cannot start the game":
+        "Не удаётся запустить игру",
+    "{app} found no way to run the Windows game client. Install Wine, or set a launch command in Settings → Game launcher.":
+        "{app} не нашёл способа запустить Windows-клиент игры. Установите Wine или укажите команду запуска в Настройки → Запуск игры.",
+    "GAME LAUNCHER":
+        "ЗАПУСК ИГРЫ",
+    "Launch command":
+        "Команда запуска",
+    "Leave empty to use Wine, or UMU if Wine is not installed. {exe} stands for the game's path; without it, the path is added at the end.":
+        "Оставьте пустым, чтобы использовать Wine, или UMU, если Wine не установлен. {exe} обозначает путь к игре; если его нет, путь добавляется в конец.",
+    "Wine prefix":
+        "Префикс Wine",
+    "Optional. The Wine prefix the game runs in; passed as WINEPREFIX.":
+        "Необязательно. Префикс Wine, в котором работает игра; передаётся как WINEPREFIX.",
+    "Using your launch command.":
+        "Используется ваша команда запуска.",
+    "Automatic: {runner}":
+        "Автоматически: {runner}",
+    "Automatic: nothing found. Install Wine, or set a launch command.":
+        "Автоматически: ничего не найдено. Установите Wine или укажите команду запуска.",
+    "Environment variables":
+        "Переменные окружения",
+    "Optional. One NAME=value per line, given only to the game when PLAY starts it - for example DXVK_HUD=fps.":
+        "Необязательно. По одной NAME=значение в строке; передаются только игре, когда её запускает PLAY, — например DXVK_HUD=fps.",
+    "Line {line}: write it as NAME=value.":
+        "Строка {line}: запишите в виде NAME=значение.",
+    "Line {line}: a name starts with a letter or _ and has only letters, digits and _.":
+        "Строка {line}: имя начинается с буквы или _ и содержит только буквы, цифры и _.",
+    "Line {line}: the value contains a character that cannot be used.":
+        "Строка {line}: значение содержит недопустимый символ.",
+    "Fix the environment variables in Settings → Game launcher:\n\n{problems}":
+        "Исправьте переменные окружения в Настройки → Запуск игры:\n\n{problems}",
+    "Game launcher…": "Запуск игры…",
     "Verify game files": "Проверить файлы игры",
     "Verifying game files…": "Проверка файлов игры…",
     "Verifying…": "Проверка…",
@@ -360,4 +393,173 @@ STRINGS = {
     "{name} is installed and {app} did not install it.\n\nManaging it means {app} will track:\n    {source}\n\nYour current files are not changed now. {app} will tell you when that source has a newer version, and will never replace files you have edited without asking.\n\nManage it?":
         "{name} установлен, но не через {app}.\n\nЕсли {app} будет им управлять, он будет отслеживать:\n    {source}\n\nВаши текущие файлы сейчас не изменятся. {app} сообщит, когда в источнике появится новая версия, и никогда не заменит отредактированные вами файлы без спроса.\n\nУправлять?",
     "{section} unavailable: {reason}": "{section} — недоступно: {reason}",
+    'Checking the connection…':
+        'Проверка соединения…',
+    'Client build looks correct ({version})':
+        'Сборка клиента в порядке ({version})',
+    'Client download server':
+        'Сервер загрузки клиента',
+    'Config.wtf contains an obsolete realmList ({host})':
+        'В Config.wtf устаревший realmList ({host})',
+    'Config.wtf has a malformed patchList ({host})':
+        'В Config.wtf некорректный patchList ({host})',
+    'Config.wtf has a malformed realmList ({host})':
+        'В Config.wtf некорректный realmList ({host})',
+    'Config.wtf has no realmList of its own':
+        'В Config.wtf нет собственного realmList',
+    'Config.wtf patchList points somewhere other than OctoWoW ({host})':
+        'patchList в Config.wtf указывает не на OctoWoW ({host})',
+    'Config.wtf realmList ({host}) disagrees with realmlist.wtf ({root})':
+        'realmList в Config.wtf ({host}) не совпадает с realmlist.wtf ({root})',
+    'Config.wtf realmList matches ({host})':
+        'realmList в Config.wtf совпадает ({host})',
+    'Config.wtf realmList uses a non-standard address ({host}); it may be stale':
+        'realmList в Config.wtf использует нестандартный адрес ({host}); возможно, он устарел',
+    'Connection':
+        'Соединение',
+    'Could not read the client build from WoW.exe':
+        'Не удалось прочитать сборку клиента из WoW.exe',
+    'Could not repair: {error}':
+        'Не удалось исправить: {error}',
+    "If login stops at “Authenticating”:\n• Turn off any VPN or proxy: OctoWoW login can hang behind one.\n• If normal login still fails, try launching the game through the official OctoLauncher using Priority Sign In.\n\nEqUpdater cannot currently use OctoLauncher's Priority Sign In directly.\nWarning: the official launcher may modify client files that EqUpdater manages.":
+        'Если вход зависает на «Аутентификации»:\n• Отключите VPN или прокси: вход в OctoWoW через них может зависать.\n• Если обычный вход по-прежнему не работает, попробуйте запустить игру через официальный OctoLauncher с Priority Sign In (приоритетный вход).\n\nEqUpdater пока не может напрямую использовать Priority Sign In OctoLauncher.\nВнимание: официальный лаунчер может изменять файлы клиента, которыми управляет EqUpdater.',
+    'Game client':
+        'Игровой клиент',
+    'LOGIN DOCTOR':
+        'ДОКТОР ВХОДА',
+    'Login Doctor…':
+        'Доктор входа…',
+    'Login configuration':
+        'Настройки входа',
+    'Login server did not answer a test connection ({host}:{port}, timed out). This alone does not mean login will fail: the server may ignore probes or be busy':
+        'Сервер входа не ответил на тестовое подключение ({host}:{port}, время ожидания истекло). Само по себе это не значит, что войти не получится: сервер может игнорировать проверки или быть занят',
+    'Login server not tested: {host} does not resolve':
+        'Сервер входа не проверен: {host} не разрешается',
+    'Login server reachable ({host}:{port})':
+        'Сервер входа доступен ({host}:{port})',
+    'Login server refused a test connection ({host}:{port}). This alone does not mean login will fail: the server may ignore probes or be busy':
+        'Сервер входа отклонил тестовое подключение ({host}:{port}). Само по себе это не значит, что войти не получится: сервер может игнорировать проверки или быть занят',
+    'Network checks failed: {error}':
+        'Сетевые проверки не удались: {error}',
+    'No Config.wtf yet; the game creates it':
+        'Config.wtf ещё нет; игра создаст его',
+    'No game folder is set':
+        'Папка игры не задана',
+    "No local login problem was found.\n\nThe problem may be server-side or account-specific. If OctoWoW is currently under attack or congestion, the official launcher's Priority Sign In may provide a different login route.":
+        'Локальных проблем со входом не найдено.\n\nПроблема может быть на стороне сервера или связана с учётной записью. Если OctoWoW сейчас атакуют или он перегружен, Priority Sign In (приоритетный вход) официального лаунчера может дать другой путь входа.',
+    'Priority Sign In':
+        'Priority Sign In (приоритетный вход)',
+    'Repair login configuration':
+        'Исправить настройки входа',
+    'Run again':
+        'Проверить снова',
+    'The game is running. Close it first: it rewrites these files when it exits.':
+        'Игра запущена. Сначала закройте её: при выходе она перезаписывает эти файлы.',
+    'The game is running: repairs are disabled until it is closed':
+        'Игра запущена: исправления недоступны, пока она не закрыта',
+    'These files will be changed:\n\n{files}\n\nOnly their login lines change: the realm address is set to {host}. A copy of each is kept beside it as {ext} (an existing copy is never replaced).\n\nRepair now?':
+        'Будут изменены эти файлы:\n\n{files}\n\nМеняются только строки входа: адрес сервера станет {host}. Копия каждого файла сохраняется рядом как {ext} (существующая копия никогда не заменяется).\n\nИсправить сейчас?',
+    'Unexpected client build {version} (OctoWoW uses {expected})':
+        'Неожиданная сборка клиента {version} (OctoWoW использует {expected})',
+    'WoW.exe found':
+        'WoW.exe найден',
+    'WoW.exe is too small to be the game client':
+        'WoW.exe слишком мал, чтобы быть игровым клиентом',
+    'WoW.exe not found in the game folder':
+        'WoW.exe не найден в папке игры',
+    'octowow.st website':
+        'сайт octowow.st',
+    '{file} ({host}) does not match the root realmlist ({root})':
+        '{file} ({host}) не совпадает с основным realmlist ({root})',
+    '{file} has a malformed line: {line}':
+        'В {file} некорректная строка: {line}',
+    '{file} has a malformed realm address ({host})':
+        'В {file} некорректный адрес сервера ({host})',
+    '{file} has no realmlist line':
+        'В {file} нет строки realmlist',
+    '{file} is missing':
+        '{file} отсутствует',
+    '{file} sets the realm more than once ({hosts})':
+        '{file} задаёт сервер больше одного раза ({hosts})',
+    '{file} uses a non-standard address ({host}); it may be stale, for example left behind by an interrupted official launcher session':
+        '{file} использует нестандартный адрес ({host}); возможно, он устарел — например, остался после прерванной сессии официального лаунчера',
+    '{file} uses the old address {host}':
+        '{file} использует старый адрес {host}',
+    '{file} uses {host}':
+        '{file} использует {host}',
+    '{file} uses {host}, not the normal route {expected}':
+        '{file} использует {host}, а не обычный путь {expected}',
+    '{host} did not resolve (timed out)':
+        '{host} не разрешился (время ожидания истекло)',
+    '{host} does not resolve':
+        '{host} не разрешается',
+    '{host} resolves':
+        '{host} разрешается',
+    '{name} not reachable':
+        '{name} недоступен',
+    '{name} reachable':
+        '{name} доступен',
+    'the news feed was malformed': 'лента новостей была повреждена',
+    '{error} · showing the news feed instead': '{error} · вместо этого показана лента новостей',
+    'Two addon folders': 'Две папки аддонов',
+    'This game folder has two addon folders whose names differ only in letter case:\n    {other}\n    {addons}\n\nEverything that was in only one of them is now in {addons}. These addons are in both, with different files:\n{names}\n\nYes: keep the copies from {other}.\nNo: keep the copies in {addons}.\nCancel: decide later. Until then {app} installs, updates and removes no addons.\n\nThe copies you do not keep are moved into an AddOns-conflicts folder next to them, not deleted.':
+        'В этой папке игры две папки аддонов, названия которых различаются только регистром букв:\n    {other}\n    {addons}\n\nВсё, что было только в одной из них, теперь в {addons}. Эти аддоны есть в обеих, с разными файлами:\n{names}\n\nДа: оставить копии из {other}.\nНет: оставить копии в {addons}.\nОтмена: решить позже. До тех пор {app} не устанавливает, не обновляет и не удаляет аддоны.\n\nКопии, которые вы не оставите, переносятся в папку AddOns-conflicts рядом, а не удаляются.',
+    'Addons: {n} of {total} failed':
+        'Аддоны: не удалось {n} из {total}',
+    'Could not connect to {host}.':
+        'Не удалось подключиться к {host}.',
+    'Could not find the latest version of the addon at {host}.':
+        'Не удалось найти последнюю версию аддона на {host}.',
+    'Could not look up {host}. Check your internet connection or DNS.':
+        'Не удалось найти адрес {host}. Проверьте подключение к интернету или DNS.',
+    'Could not write the addon files ({error}).':
+        'Не удалось записать файлы аддона ({error}).',
+    'Failed to install {name}':
+        'Не удалось установить {name}',
+    'Failed to update {name}':
+        'Не удалось обновить {name}',
+    'No permission to write to the AddOns folder.':
+        'Нет прав на запись в папку AddOns.',
+    'Not enough disk space to write the addon files.':
+        'Недостаточно места на диске для файлов аддона.',
+    'Open the log for details?':
+        'Открыть журнал с подробностями?',
+    'Some addons failed — see the message for details':
+        'Некоторые аддоны не установлены — подробности в сообщении',
+    'The AddOns folder exists twice with different copies of this addon. Choose which to keep, then try again.':
+        'Папка AddOns существует дважды с разными копиями этого аддона. Выберите, какую оставить, и повторите попытку.',
+    "The addon's address is not on an allowed git host.":
+        'Адрес аддона не относится к разрешённому git-хостингу.',
+    'The file from {host} is not a valid addon archive. Try again later.':
+        'Файл с {host} не является корректным архивом аддона. Повторите попытку позже.',
+    "The files were blocked or removed while being written — usually antivirus. Open Settings (⚙) → 'Add game folder to Defender exclusions', then retry.":
+        'Файлы были заблокированы или удалены во время записи — обычно это антивирус. Откройте Настройки (⚙) → «Добавить папку игры в исключения Defender» и повторите попытку.',
+    'The installed copy was left as it was.':
+        'Установленная копия осталась без изменений.',
+    'The other {n} finished.':
+        'Остальные {n} завершены.',
+    'The secure connection to {host} failed (TLS/certificate error).':
+        'Не удалось установить защищённое соединение с {host} (ошибка TLS/сертификата).',
+    'Unexpected error ({error}).':
+        'Непредвиденная ошибка ({error}).',
+    '{host} did not answer in time. Try again later.':
+        '{host} не ответил вовремя. Повторите попытку позже.',
+    '{host} is having problems (HTTP {code}). Try again later.':
+        'У {host} проблемы (HTTP {code}). Повторите попытку позже.',
+    '{host} is limiting requests (HTTP 429). Try again later.':
+        '{host} ограничивает запросы (HTTP 429). Повторите попытку позже.',
+    '{host} is showing its DDoS-protection check instead of the download. Try again later.':
+        '{host} показывает проверку защиты от DDoS вместо загрузки. Повторите попытку позже.',
+    '{host} refused or dropped the connection. Try again later.':
+        '{host} отклонил или разорвал соединение. Повторите попытку позже.',
+    '{host} refused the download (HTTP 403). It may be limiting automated downloads. Try again later.':
+        '{host} отклонил загрузку (HTTP 403). Возможно, он ограничивает автоматические загрузки. Повторите попытку позже.',
+    '{host} refused the download (HTTP {code}).':
+        '{host} отклонил загрузку (HTTP {code}).',
+    '{host} says the repository or version does not exist (HTTP 404).':
+        '{host} сообщает, что репозиторий или версия не существует (HTTP 404).',
+    '{name} (update)':
+        '{name} (обновление)',
+    '…and {n} more':
+        '…и ещё {n}',
 }

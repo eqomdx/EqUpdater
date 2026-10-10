@@ -334,5 +334,330 @@ class TestFetch(unittest.TestCase):
         self.assertFalse(hasattr(news, "OCTONEWS_URL"))
 
 
+def thread_page_newest_first():
+    """Topic 2848 as phpBB serves it with sk=t&sd=d: the newest post first,
+    a reply ("Re: ...") by a staff member, then older posts."""
+    def post(pid, subject, author, when, body):
+        return f'''
+    <div id="p{pid}" class="post has-profile bg1">
+      <div class="inner"><div class="postbody"><div id="post_content{pid}">
+        <h3><a href="./viewtopic.php?p={pid}&amp;{SID}#p{pid}">{subject}</a></h3>
+        <p class="author"><span class="responsive-hide">by <strong>
+          <a href="./memberlist.php?u=2" class="username-coloured">{author}</a></strong>
+          &raquo; </span><time datetime="{when}">x</time></p>
+        <div class="content">{body}</div>
+        <div id="sig{pid}" class="signature">sig</div>
+      </div></div></div>
+    </div>'''
+    return ("<!DOCTYPE html><html><body id=\"phpbb\">"
+            "<h2 class=\"topic-title\"><a href=\"#\">Announcements</a></h2>"
+            + post(31010, "Re: Announcements", "Kestrel",
+                   "2026-10-09T12:00:00+00:00", "Realm restart at 18:00.<br>Thanks!")
+            + post(30500, "Re: Announcements", "Octo",
+                   "2026-10-01T09:00:00+00:00", "Older news.")
+            + post(28480, "Announcements", "Octo",
+                   "2026-06-01T09:00:00+00:00", "Thread opened.")
+            + "</body></html>")
+
+
+class TestAnnouncementsThread(unittest.TestCase):
+    """Announcements are the newest post in topic 2848."""
+
+    def test_newest_post_with_its_own_details(self):
+        site = FakeSite({"viewtopic.php?t=2848": thread_page_newest_first()})
+        item = news.fetch_newest_post_in_topic(2848, **kw(site)).to_item()
+        # A reply's subject is only "Re: Announcements": titled by its
+        # first line, the rest is the body.
+        self.assertEqual(item["title"], "Realm restart at 18:00.")
+        self.assertEqual(item["author"], "Kestrel")
+        self.assertEqual(item["date"], "2026-10-09T12:00:00+00:00")
+        self.assertEqual(item["body"], "Thanks!")
+        self.assertNotIn("sig", item["body"])
+        self.assertEqual(item["url"],
+                         "https://octowow.st/forum/viewtopic.php?p=31010#p31010")
+
+    def test_one_request_sorted_newest_first(self):
+        site = FakeSite({"viewtopic.php?t=2848": thread_page_newest_first()})
+        news.fetch_newest_post_in_topic(2848, **kw(site))
+        self.assertEqual(site.asked, [
+            "https://octowow.st/forum/viewtopic.php?t=2848&sk=t&sd=d"])
+        self.assertEqual(news.ANNOUNCEMENTS_TOPIC_ID, 2848)
+
+    def test_challenge_is_blocked_not_content(self):
+        site = FakeSite({"viewtopic.php?t=2848": CHALLENGE})
+        with self.assertRaises(news.ForumBlockedError) as cm:
+            news.fetch_newest_post_in_topic(2848, **kw(site))
+        self.assertEqual(cm.exception.stage, "topic 2848")
+
+    def test_a_page_with_no_post_is_an_error(self):
+        site = FakeSite({"viewtopic.php?t=2848": "<html><body>gone</body></html>"})
+        with self.assertRaises(news.ForumError) as cm:
+            news.fetch_newest_post_in_topic(2848, **kw(site))
+        self.assertEqual(cm.exception.stage, "topic 2848 parse")
+
+    def test_network_errors_name_the_stage(self):
+        with self.assertRaises(news.ForumError) as cm:
+            news.fetch_newest_post_in_topic(2848, **kw(FakeSite({})))
+        self.assertEqual(cm.exception.stage, "topic 2848")
+
+    def test_a_topic_page_still_yields_its_opening_post(self):
+        """parse_first_post is unchanged by the subject/id capture."""
+        page = topic_page(2600, "2026-09-23", PATCH_BODY)
+        author, _created, content = news.parse_first_post(page)
+        self.assertEqual(author, "Kestrel")
+        self.assertIn("Fixed Onyxia breath.", content)
+
+
+class TestPatchNotesThread(unittest.TestCase):
+    """The Changelog is the newest posts in topic 2816."""
+
+    def page(self):
+        def post(pid, subject, when, body):
+            return (f'<div id="p{pid}" class="post bg2"><div class="inner">'
+                    f'<h3><a href="#p{pid}">{subject}</a></h3>'
+                    f'<p class="author">by <a href="./memberlist.php?u=2" '
+                    f'class="username">Kestrel</a> <time datetime="{when}">x</time></p>'
+                    f'<div class="content">{body}</div></div></div>')
+        return ("<html><body>"
+                + post(30003, "Re: Patch Notes", "2026-10-08T16:00:00+00:00",
+                       "Patch 2026-10-08<br>Fixed Onyxia breath.<br>Mages: blink works.")
+                + post(30002, "Hotfix: Warden", "2026-10-02T10:00:00+00:00",
+                       "Warden false positives fixed.")
+                + post(30001, "Re: Patch Notes", "2026-09-30T16:00:00+00:00",
+                       "Patch 2026-09-30<br>Older fixes.")
+                + "</body></html>")
+
+    def test_newest_posts_in_order_with_their_own_links(self):
+        site = FakeSite({"viewtopic.php?t=2816": self.page()})
+        items = [p.to_item() for p in news.fetch_topic_posts(2816, 8, **kw(site))]
+        self.assertEqual(site.asked, [
+            "https://octowow.st/forum/viewtopic.php?t=2816&sk=t&sd=d"])
+        self.assertEqual([i["title"] for i in items],
+                         ["Patch 2026-10-08", "Hotfix: Warden", "Patch 2026-09-30"])
+        self.assertEqual(items[0]["body"], "Fixed Onyxia breath.\nMages: blink works.")
+        self.assertEqual(items[1]["body"], "Warden false positives fixed.")
+        self.assertEqual(items[0]["url"],
+                         "https://octowow.st/forum/viewtopic.php?p=30003#p30003")
+        self.assertEqual(items[0]["date"], "2026-10-08T16:00:00+00:00")
+        self.assertEqual(items[0]["author"], "Kestrel")
+        self.assertEqual(news.PATCH_NOTES_TOPIC_ID, 2816)
+
+    def test_limit(self):
+        site = FakeSite({"viewtopic.php?t=2816": self.page()})
+        self.assertEqual(len(news.fetch_topic_posts(2816, 2, **kw(site))), 2)
+
+    def test_challenge_and_empty_page(self):
+        with self.assertRaises(news.ForumBlockedError):
+            news.fetch_topic_posts(2816, 8, **kw(FakeSite({"t=2816": CHALLENGE})))
+        with self.assertRaises(news.ForumError) as cm:
+            news.fetch_topic_posts(2816, 8, **kw(FakeSite({"t=2816": "<html></html>"})))
+        self.assertEqual(cm.exception.stage, "topic 2816 parse")
+
+
+import json  # noqa: E402
+
+FEED_ITEM = {"id": "2026-10-08-ddos", "title": "DDoS Updates",
+             "date": "2026-10-08", "body": "Mitigation is live.\nThanks!",
+             "author": "Kestrel",
+             "url": "https://octowow.st/forum/viewtopic.php?t=2595"}
+
+
+def feed(*items, **top):
+    return json.dumps(dict({"items": list(items)}, **top))
+
+
+class TestNewsFeed(unittest.TestCase):
+    """news.json against OctoLauncher's NewsFeedSchema. No network."""
+
+    def test_valid_feed_maps_to_the_news_item(self):
+        (item,) = news.parse_news_feed(feed(FEED_ITEM))
+        self.assertEqual(item, {"id": "2026-10-08-ddos", "title": "DDoS Updates",
+                                "date": "2026-10-08",
+                                "body": "Mitigation is live.\nThanks!",
+                                "html": "", "author": "Kestrel",
+                                "url": "https://octowow.st/forum/viewtopic.php?t=2595"})
+
+    def test_multiple_items_keep_the_feed_order(self):
+        older = dict(FEED_ITEM, id="old", title="Older", date="2026-09-01")
+        items = news.parse_news_feed(feed(FEED_ITEM, older))
+        self.assertEqual([i["id"] for i in items], ["2026-10-08-ddos", "old"])
+
+    def test_empty_items_is_valid(self):
+        self.assertEqual(news.parse_news_feed('{"items": []}'), [])
+
+    def test_author_and_url_optional_and_not_invented(self):
+        for item in ({k: v for k, v in FEED_ITEM.items() if k != "author"},
+                     dict(FEED_ITEM, author=None)):
+            with self.subTest(item=item):
+                self.assertIsNone(news.parse_news_feed(feed(item))[0]["author"])
+        no_url = {k: v for k, v in FEED_ITEM.items() if k != "url"}
+        self.assertIsNone(news.parse_news_feed(feed(no_url))[0]["url"])
+
+    def test_unknown_extra_fields_are_ignored(self):
+        self.assertEqual(len(news.parse_news_feed(
+            feed(dict(FEED_ITEM, pinned=True), version=2))), 1)
+
+    def assertMalformed(self, text):
+        with self.assertRaises(news.ForumError) as cm:
+            news.parse_news_feed(text)
+        self.assertEqual(cm.exception.stage, "news.json parse")
+        self.assertEqual(cm.exception.short, "the news feed was malformed")
+
+    def test_malformed_top_level(self):
+        for text in ("[]", '"news"', "null", "{}", '{"items": {}}',
+                     '{"items": null}', '{"Items": []}'):
+            with self.subTest(text=text):
+                self.assertMalformed(text)
+
+    def test_missing_required_fields(self):
+        for key in ("id", "title", "date", "body"):
+            with self.subTest(missing=key):
+                self.assertMalformed(feed({k: v for k, v in FEED_ITEM.items()
+                                           if k != key}))
+
+    def test_invalid_field_types(self):
+        for key, value in (("id", 7), ("title", None), ("date", 20261008),
+                           ("body", ["x"]), ("author", 5), ("author", {})):
+            with self.subTest(key=key, value=value):
+                self.assertMalformed(feed(dict(FEED_ITEM, **{key: value})))
+        self.assertMalformed(feed("not an object"))
+
+    def test_invalid_url(self):
+        for link in ("viewtopic.php?t=1", "/forum/x", "ftp://octowow.st/x",
+                     "javascript:alert(1)", "https://", "", 42):
+            with self.subTest(url=link):
+                self.assertMalformed(feed(dict(FEED_ITEM, url=link)))
+
+    def test_one_bad_item_rejects_the_whole_feed(self):
+        self.assertMalformed(feed(FEED_ITEM, {"id": "x"}))
+
+    def test_malformed_json(self):
+        for text in ("", "{", "<html>oops</html>", '{"items": [}'):
+            with self.subTest(text=text):
+                self.assertMalformed(text)
+
+    # ── fetching ───────────────────────────────────────────────────────────
+
+    def test_fetch_is_one_request_to_news_json(self):
+        site = FakeSite({"news.json": feed(FEED_ITEM)})
+        items = news.fetch_news_feed(**kw(site))
+        self.assertEqual(site.asked, ["https://octowow.st/news.json"])
+        self.assertEqual(items[0]["url"], FEED_ITEM["url"])
+
+    def test_timeout_and_http_errors(self):
+        import socket
+        import urllib.error
+        for exc in (socket.timeout("timed out"),
+                    urllib.error.HTTPError(news.NEWS_FEED_URL, 503, "busy", {}, None),
+                    urllib.error.URLError("unreachable")):
+            with self.subTest(exc=type(exc).__name__):
+                with self.assertRaises(news.ForumError) as cm:
+                    news.fetch_news_feed(**kw(FakeSite({"news.json": exc})))
+                self.assertEqual(cm.exception.stage, "news.json")
+                self.assertEqual(cm.exception.short,
+                                 "octowow.st could not be reached")
+
+    def test_challenge_is_blocked_not_content(self):
+        for page in (CHALLENGE, (feed(FEED_ITEM), {"X-BF-Challenge": "pending"})):
+            with self.subTest(page=str(page)[:30]):
+                with self.assertRaises(news.ForumBlockedError) as cm:
+                    news.fetch_news_feed(**kw(FakeSite({"news.json": page})))
+                self.assertEqual(cm.exception.stage, "news.json")
+                self.assertIn("DDoS-protection", cm.exception.short)
+
+    def test_the_timeout_is_passed_through(self):
+        seen = []
+
+        def opener(req, timeout):
+            seen.append(timeout)
+            return _Resp(feed(FEED_ITEM))
+        news.fetch_news_feed(opener=opener, user_agent="t", timeout=8)
+        self.assertEqual(seen, [8])
+
+try:
+    import tkinter  # noqa: F401
+    HAVE_TK = True
+except ImportError:
+    HAVE_TK = False
+
+
+@unittest.skipUnless(HAVE_TK, "the app needs tkinter")
+class TestAnnouncementsFallbackOrder(unittest.TestCase):
+    """Topic 2848 first; news.json only when the forum fails; if both fail
+    the forum's error is raised and the panel keeps its cached post."""
+
+    def setUp(self):
+        # The app's own news module: other test files reload the package,
+        # and an exception class from a stale copy is not the one the app
+        # catches.
+        from equpdater import app
+        self.app, self.n = app, sys.modules["equpdater.news"]
+        self.POST = self.n.ForumPost(2848, "Realm restart", "Kestrel",
+                                     "2026-10-09T12:00:00+00:00",
+                                     "https://octowow.st/forum/viewtopic.php?p=1#p1", "b")
+
+    def run_with(self, forum, feed):
+        from unittest import mock
+        app = self.app
+        calls = []
+
+        def topic(*a, **k):
+            calls.append("forum")
+            if isinstance(forum, Exception):
+                raise forum
+            return forum
+
+        def news_feed(**k):
+            calls.append("news.json")
+            if isinstance(feed, Exception):
+                raise feed
+            return feed
+        with mock.patch.object(app, "fetch_newest_post_in_topic", topic), \
+                mock.patch.object(app, "fetch_news_feed", news_feed):
+            try:
+                return app.fetch_featured_post(), calls
+            except self.n.ForumError as exc:
+                return exc, calls
+
+    def blocked(self):
+        return self.n.ForumBlockedError("topic 2848", "u", "challenge",
+                                      short="octowow.st is showing its "
+                                            "DDoS-protection check to apps right now")
+
+    def test_forum_first(self):
+        item, calls = self.run_with(self.POST, [dict(FEED_ITEM)])
+        self.assertEqual(item["title"], "Realm restart")
+        self.assertEqual(calls, ["forum"])
+
+    def test_news_json_when_the_forum_is_blocked(self):
+        item, calls = self.run_with(self.blocked(),
+                                    self.n.parse_news_feed(feed(FEED_ITEM)))
+        self.assertEqual(item["id"], "2026-10-08-ddos")
+        self.assertEqual(calls, ["forum", "news.json"])
+        # Says why the feed stands in (shown under the post, not cached).
+        self.assertIn("DDoS-protection", item["_note"])
+
+    def test_the_newest_dated_feed_item_wins(self):
+        """A pinned older post may lead the feed: the panel shows the
+        newest by date, not the first."""
+        pinned = dict(FEED_ITEM, id="beta", title="Beta Test Info",
+                      date="2026-04-28")
+        newer = dict(FEED_ITEM, id="new", date="2026-10-09")
+        item, _calls = self.run_with(self.blocked(),
+                                     self.n.parse_news_feed(feed(pinned, FEED_ITEM, newer)))
+        self.assertEqual(item["id"], "new")
+
+    def test_empty_feed_keeps_the_cache(self):
+        item, _calls = self.run_with(self.blocked(), [])
+        self.assertIsNone(item)            # _load_featured keeps the cache
+
+    def test_both_failing_reports_the_forum(self):
+        malformed = self.n.ForumError("news.json parse", "u", "bad",
+                                    short="the news feed was malformed")
+        exc, calls = self.run_with(self.blocked(), malformed)
+        self.assertIsInstance(exc, self.n.ForumBlockedError)
+        self.assertEqual(calls, ["forum", "news.json"])
+
+
 if __name__ == "__main__":
     unittest.main()

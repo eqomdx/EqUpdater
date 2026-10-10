@@ -42,20 +42,22 @@ from functools import cache
 import tkinter as tk
 from tkinter import filedialog
 
-from . import branding, i18n, mpq
+from . import branding, gamepaths, i18n, logindoctor, mpq, platforms
 from .i18n import N_, tr
 from .config import (APP_DATA_DIR, BACKUP_DIR, CONFIG_FILE, bootstrap_config,
                      ensure_dir, load_config, new_addon_record,
                      new_mod_record, update_config)
-from .gitcompare import (GIT_HOSTS, Ancestry, ancestry, forge_named,
-                         repo_ref, same_repo, short as short_sha)
+from .gitcompare import (GIT_HOSTS, Ancestry, ancestry, canonical_repo_url,
+                         forge_named, repo_ref, same_repo,
+                         short as short_sha)
 from .hashing import files_hash, folder_hash
 from .planner import (Component, plan, skipped_notably,
                       updatable)
 from .states import Action, Plan, Status
-from .news import (ANNOUNCEMENTS_FORUM_ID, CHANGELOG_FORUM_ID,
-                   fetch_latest_post, fetch_topic_list, is_challenge_page)
-from .ui import (AnimatedBackground, FontManager, GradientButton,
+from .news import (ANNOUNCEMENTS_TOPIC_ID, PATCH_NOTES_TOPIC_ID, ForumError,
+                   fetch_news_feed, fetch_newest_post_in_topic,
+                   fetch_topic_posts, is_challenge_page)
+from .ui import (AnimatedBackground, FontManager, GradientButton, prepare_fonts,
                  GradientPalette, apply_edge_fades, cover_background,
                  BackdropCanvas, blend, edge_fade_layers, photo_image,
                  style_title_bar)
@@ -143,32 +145,75 @@ BUSY_GRADIENT = GradientPalette(
     disabled_top="#293a53", disabled_bottom="#1b2a40",
     border="#304966", disabled_fg=C_TEXT_DIM)
 
-FONT_MONO   = ("Consolas", 9)
+FONT_MONO   = ("Consolas", 9) if platforms.WINDOWS else ("Monospace", 9)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
 #  Secure networking
 # ──────────────────────────────────────────────────────────────────────────────
 
-# Hardened TLS: verify the server certificate against the system trust store,
-# require the hostname to match, and refuse anything below TLS 1.2. This is
-# the primary defence against a man-in-the-middle tampering with downloads.
-SSL_CTX = ssl.create_default_context()
-SSL_CTX.check_hostname = True
-SSL_CTX.verify_mode = ssl.CERT_REQUIRED
-# Trust certifi's curated roots *in addition to* the system store, so a stale
-# or incomplete Windows root store (Python's ssl uses a static snapshot and
-# never triggers Windows' on-demand root update) can't break verification.
-# If certifi isn't bundled, fall back to the system store alone.
-try:
-    import certifi
-    SSL_CTX.load_verify_locations(certifi.where())
-except Exception:
-    pass
-try:
-    SSL_CTX.minimum_version = ssl.TLSVersion.TLSv1_2
-except (AttributeError, ValueError):
-    pass
+#: System CA bundles on Linux distributions, by family. Used besides certifi:
+#: a frozen build's own OpenSSL looks for the build machine's paths, which
+#: another distribution need not have.
+SYSTEM_CA_BUNDLES = (
+    "/etc/ssl/certs/ca-certificates.crt",                  # Debian, Ubuntu, Arch
+    "/etc/pki/tls/certs/ca-bundle.crt",                    # Fedora, RHEL
+    "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem",   # Fedora, newer
+    "/etc/ssl/ca-bundle.pem",                              # openSUSE
+    "/etc/ssl/cert.pem",                                   # Alpine, others
+)
+
+
+def ca_bundles() -> list:
+    """The CA bundles EqUpdater trusts, besides the system's own store.
+
+    certifi's curated roots always: on Windows, Python's ssl reads a static
+    snapshot of the root store and never triggers Windows' on-demand root
+    update, and under Wine that store is empty. In a frozen build certifi's
+    file is looked for directly in the bundle as well, so a packaging quirk
+    in certifi's own lookup cannot quietly leave the app with no roots.
+    On Linux the distribution's bundle is added too."""
+    found = []
+    try:
+        import certifi
+        found.append(certifi.where())
+    except Exception:
+        pass
+    bundle = getattr(sys, "_MEIPASS", None)
+    if bundle:
+        found.append(os.path.join(bundle, "certifi", "cacert.pem"))
+    if not platforms.WINDOWS:
+        found.extend(SYSTEM_CA_BUNDLES)
+    out = []
+    for path in found:
+        if path and os.path.isfile(path) and path not in out:
+            out.append(path)
+    return out
+
+
+def make_ssl_context():
+    """(context, CA files loaded). Hardened TLS: the server certificate is
+    verified, the hostname must match, and nothing below TLS 1.2 is
+    accepted -- the primary defence against a man-in-the-middle tampering
+    with downloads. Never relaxed for any platform."""
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = True
+    ctx.verify_mode = ssl.CERT_REQUIRED
+    loaded = []
+    for path in ca_bundles():
+        try:
+            ctx.load_verify_locations(path)
+            loaded.append(path)
+        except (OSError, ssl.SSLError):
+            continue
+    try:
+        ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+    except (AttributeError, ValueError):
+        pass
+    return ctx, loaded
+
+
+SSL_CTX, CA_SOURCES = make_ssl_context()
 
 # Binaries may only be fetched from these hosts. TLS already stops a MITM from
 # impersonating them; this additionally stops a tampered API response from
@@ -250,7 +295,7 @@ def log(msg: str, tag: str = ""):
 
 def remove_wdb(client_dir: str):
     """Delete the client's WDB folder (server-data cache, safe to drop)."""
-    wdb = os.path.join(client_dir, "WDB")
+    wdb = gamepaths.game_path(client_dir, "WDB")
     if not os.path.isdir(wdb):
         return
     try:
@@ -308,8 +353,10 @@ def fmt_speed(bytes_per_sec: float) -> str:
 
 CLIENT_TORRENT_URL = "https://dl.octowow.st/download/client.torrent"
 
-# Pinned aria2 Windows build. aria2 is GPLv2+, fetched and run unmodified; only
-# aria2c.exe is used. The sha256 is of the release .zip (verified once).
+# aria2 is GPLv2+, run unmodified. Windows: the pinned official build below,
+# fetched on first use and checked against its sha256 (of the release .zip).
+# Linux: a native aria2c -- the AppImage carries a pinned static build (see
+# tools/build_appimage.py), otherwise the system's (platforms.find_aria2c).
 ARIA2_ZIP_URL    = ("https://github.com/aria2/aria2/releases/download/"
                     "release-1.37.0/aria2-1.37.0-win-32bit-build1.zip")
 ARIA2_ZIP_SHA256 = "35f6514cc5dd7e98a87b3c4c2d25a0754b9b063dbe59bc0f22d483464f61e5b6"
@@ -367,14 +414,22 @@ def locale_patches(locale: str):
     ]
 
 
-_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+_NO_WINDOW = platforms.no_window_flags()
 
 
 def ensure_aria2c(log_fn=log) -> str:
-    """Return the path to aria2c.exe, downloading + checksum-verifying it into
-    APP_DATA_DIR on first use. Raises on failure."""
-    if os.path.exists(ARIA2C_PATH):
-        return ARIA2C_PATH
+    """Return the aria2c to run. Windows: aria2c.exe, downloaded and
+    checksum-verified into APP_DATA_DIR on first use. Linux: a native
+    aria2c, the AppImage's own or the system's -- never the Windows build
+    under Wine. Raises on failure."""
+    found = platforms.find_aria2c(APP_DATA_DIR)
+    if found:
+        return found
+    if not platforms.WINDOWS:
+        raise RuntimeError(
+            "aria2c was not found. The EqUpdater AppImage includes it; "
+            "running from source, install aria2 (for example "
+            "'sudo apt install aria2' or 'sudo dnf install aria2').")
     log_fn("Fetching aria2c (one-time, ~2.5 MB)…", "acct")
     req = urllib.request.Request(ARIA2_ZIP_URL, headers={"User-Agent": UA})
     with secure_urlopen(req, timeout=60, allowed_hosts=ALLOWED_DOWNLOAD_HOSTS) as r:
@@ -613,7 +668,7 @@ def prune_stale_client_files(client_dir: str, files) -> list:
     current torrent no longer ships. Folders are removed by name (unless the torrent
     still uses them); archives only when the name AND the exact size match a known
     legacy one. Returns removed names."""
-    data_dir = os.path.join(client_dir, "Data")
+    data_dir = gamepaths.game_path(client_dir, "Data")
     if not os.path.isdir(data_dir):
         return []
     # what the current torrent puts directly in Data/ (.mpq files and subdirs)
@@ -832,9 +887,10 @@ def read_pristine_wow(client_dir: str) -> bytes:
 
 
 def _ensure_torrent_junction(client_dir: str) -> str:
-    """Point <staging>/client at client_dir via an NTFS junction (no admin) so
-    aria2 writes the torrent's files straight into the real client dir. Returns
-    the staging dir to pass as aria2 --dir."""
+    """Point <staging>/client at client_dir through a directory link (an NTFS
+    junction on Windows, no admin needed; a symlink on Linux) so aria2 writes
+    the torrent's files straight into the real client dir. Returns the
+    staging dir to pass as aria2 --dir."""
     staging = TORRENT_STAGING_DIR
     ensure_dir(staging)
     link   = os.path.join(staging, TORRENT_NAME)
@@ -854,11 +910,7 @@ def _ensure_torrent_junction(client_dir: str) -> str:
             os.remove(link)
         except OSError:
             pass
-    r = subprocess.run(["cmd", "/c", "mklink", "/J", link, target],
-                       capture_output=True, text=True, creationflags=_NO_WINDOW)
-    if not os.path.isdir(link):
-        raise RuntimeError("could not create download junction: "
-                           + (r.stderr or r.stdout or "").strip())
+    platforms.link_dir(link, target)
     return staging
 
 
@@ -1002,36 +1054,31 @@ def run_aria2c(client_dir, select_files=None, check_integrity=False,
 
 
 def client_exe_locked(out_dir: str) -> bool:
-    """True when WoW.exe in *out_dir* cannot be opened for writing.
+    """True when WoW.exe in *out_dir* must not be written now.
 
-    Asked by trying to open WoW.exe for writing rather than by listing
-    processes, because the question that matters is not "is a program called
-    WoW running somewhere" -- it is "can I write *this* file". Windows locks a
-    running image against writing, so the answer is exact for the file we are
-    about to patch, it needs no extra dependency, and it is right when the
-    player is running a second install from another folder.
+    Windows: asked by trying to open WoW.exe for writing rather than by
+    listing processes, because the question that matters is not "is a
+    program called WoW running somewhere" -- it is "can I write *this*
+    file". Windows locks a running image against writing, so the answer is
+    exact for the file we are about to patch, it needs no extra dependency,
+    and it is right when the player is running a second install from
+    another folder. "r+b" does not truncate, where the "wb" the patcher
+    itself uses would.
 
-    Read-write is opened and closed without writing a byte; "r+b" does not
-    truncate, where the "wb" the patcher itself uses would.
+    Linux locks nothing: a game running under Wine would simply be
+    overwritten. There the processes are asked whether this client's
+    WoW.exe is running, and a read-only WoW.exe counts as well -- see
+    platforms.client_in_use.
 
-    Named for what it tests rather than for the usual cause. A running game is
-    why this is nearly always true, but a read-only file is the same answer to
-    the same question, and the message below says both rather than asserting the
-    one it cannot know.
+    Named for what it tests rather than for the usual cause. A running game
+    is why this is nearly always true, but a read-only file is the same
+    answer to the same question, and the message below says both rather
+    than asserting the one it cannot know.
     """
     exe = os.path.join(out_dir, "WoW.exe")
     if not os.path.exists(exe):
         return False
-
-    try:
-        with open(exe, "r+b"):
-            return False
-    except PermissionError:
-        return True
-    except OSError:
-        # Anything else -- a missing drive, a permissions problem of its own --
-        # is not this question, and refusing to update over it would be a guess.
-        return False
+    return platforms.client_in_use(out_dir)
 
 
 CLOSE_THE_GAME = ("WoW.exe cannot be written. Close World of Warcraft if it is "
@@ -1230,7 +1277,7 @@ class UpdateWorker:
 
             # Config.wtf is user game config, not in the torrent — (re)write it
             # on a reconcile (overwrite_config), or when missing.
-            cfg_wtf = os.path.join(self.out_dir, "WTF", "Config.wtf")
+            cfg_wtf = gamepaths.game_path(self.out_dir, "WTF", "Config.wtf")
             if self.overwrite_config or not os.path.exists(cfg_wtf):
                 write_config_wtf(self.out_dir)
 
@@ -1370,9 +1417,13 @@ def write_config_wtf(client_dir: str, tweaks: dict | None = None):
                                 TWEAKS_DEFAULTS["soundInBackground"]) else 0
 
     di  = _get_display_info_safe()
-    srv = "octowow.st"
+    # No realmList here. The login route lives in realmlist.wtf
+    # (play.octowow.st, see logindoctor.LOGIN_HOST) and the client saves the
+    # value it used back into Config.wtf itself; a realmList written here
+    # could only disagree with it. EqUpdater used to write "octowow.st",
+    # the website's address, which Login Doctor now reports and repairs.
     vars_ = {
-        "realmList": srv, "patchList": srv,
+        "patchList": "octowow.st",
         "readTOS": 1, "readEULA": 1,
         "profanityFilter": 0,
         "gxResolution": f"{di['width']}x{di['height']}",
@@ -1433,9 +1484,9 @@ def write_config_wtf(client_dir: str, tweaks: dict | None = None):
         "ChatBubblesParty": 1,
     }
     try:
-        cfg_dir = os.path.join(client_dir, "WTF")
+        cfg_dir = gamepaths.game_path(client_dir, "WTF")
         ensure_dir(cfg_dir)
-        with open(os.path.join(cfg_dir, "Config.wtf"), "w",
+        with open(gamepaths.game_path(client_dir, "WTF", "Config.wtf"), "w",
                   encoding="utf-8") as f:
             for k, v in vars_.items():
                 f.write(f'SET {k} "{v}"\n')
@@ -1445,7 +1496,7 @@ def write_config_wtf(client_dir: str, tweaks: dict | None = None):
 
 
 def update_config_wtf(client_dir: str, tweaks: dict):
-    cfg_path = os.path.join(client_dir, "WTF", "Config.wtf")
+    cfg_path = gamepaths.game_path(client_dir, "WTF", "Config.wtf")
     if not os.path.exists(cfg_path):
         write_config_wtf(client_dir, tweaks)
         return
@@ -2571,14 +2622,54 @@ ADDON_GIT_HOSTS = tuple(h.label for h in GIT_HOSTS)
 ADDON_ZIP_HOSTS = frozenset().union(*(h.downloads_from for h in GIT_HOSTS))
 
 
+#: The last conflict set logged, so a standing conflict is logged once.
+_ADDON_CONFLICT_LOGGED: list = []
+
+
+def _log_addon_dir_state(state) -> None:
+    if state.renamed:
+        log(f"Addons folder: renamed Interface/{state.renamed} to "
+            f"Interface/{gamepaths.ADDONS} (letter case only; no addon changed).", "ok")
+    for entry in state.moved:
+        log(f"Addons folder: moved Interface/{entry} into Interface/{gamepaths.ADDONS}.", "ok")
+    for entry in state.collapsed:
+        log(f"Addons folder: Interface/{entry} was identical to the copy in "
+            f"Interface/{gamepaths.ADDONS}; kept one.", "dim")
+    for note in state.notes:
+        log(f"Addons folder: {note}.", "dim")
+    names = sorted(c[0] for c in state.conflicts)
+    if names != _ADDON_CONFLICT_LOGGED:
+        _ADDON_CONFLICT_LOGGED[:] = names
+        for entry, other, mine in state.conflicts:
+            log(f"Addons folder: {entry} exists in both {other} and {mine} with "
+                f"different contents; both kept. Addon changes are paused until "
+                f"you choose which to keep.", "err")
+
+
 def addons_path(client_dir: str) -> str:
-    return os.path.join(client_dir, "Interface", "AddOns")
+    """Interface/AddOns of ``client_dir``, the one place the addons folder is
+    named. On a case-sensitive filesystem an existing Interface/Addons (or
+    any other case) is found and settled first -- see equpdater.gamepaths."""
+    state = gamepaths.prepare_addons_dir(client_dir)
+    _log_addon_dir_state(state)
+    return state.path
+
+
+def writable_addons_path(client_dir: str) -> str:
+    """addons_path for installing, updating or removing: raises
+    gamepaths.AddonDirConflict while two case variants of the folder hold
+    different copies of the same addon."""
+    state = gamepaths.prepare_addons_dir(client_dir)
+    _log_addon_dir_state(state)
+    if state.conflicts:
+        raise gamepaths.AddonDirConflict(state)
+    return state.path
 
 
 def check_custom_addon_url(text: str):
     """(repository URL, folder, None) for a link the custom-addon dialog
     can install, or (None, None, message) saying why not."""
-    url = (text or "").strip().rstrip("/")
+    url = canonical_repo_url((text or "").strip()).rstrip("/")
     if url.lower().endswith(".git"):
         url = url[:-4]
     if not is_allowed_git_url(url):
@@ -2587,6 +2678,33 @@ def check_custom_addon_url(text: str):
     if not folder or folder in (".", "..") or "\\" in folder:
         return None, None, N_("Could not derive addon folder name.")
     return url, folder, None
+
+
+#: What is wrong with a line of the Game launcher's environment variables,
+#: by platforms.parse_env_lines reason.
+ENV_PROBLEMS = {
+    "no_equals": N_("Line {line}: write it as NAME=value."),
+    "bad_name":  N_("Line {line}: a name starts with a letter or _ and has "
+                    "only letters, digits and _."),
+    "nul":       N_("Line {line}: the value contains a character that "
+                    "cannot be used."),
+}
+
+
+def env_problem_text(problems) -> str:
+    """One translated line per unusable environment variable line."""
+    return "\n".join(tr(ENV_PROBLEMS[reason], line=number)
+                     for number, reason in problems)
+
+
+def addon_install_source(git):
+    """The URL an addon is installed from, and recorded as its source: the
+    canonical form of ``git``. Raises when it is not a repository on an
+    allowed host -- the check is the same one, made on the canonical URL."""
+    url = canonical_repo_url(git) if git else git
+    if not url or not is_allowed_git_url(url):
+        raise RuntimeError(N_("Addon URL is not from an allowed git host"))
+    return url
 
 
 def is_allowed_git_url(url: str) -> bool:
@@ -2791,7 +2909,8 @@ def describe_install_error(e: Exception) -> str:
     import urllib.error
     if isinstance(e, (urllib.error.HTTPError, urllib.error.URLError)):
         return _describe_net_error(e)
-    if isinstance(e, OSError) and getattr(e, "errno", None) in (2, 13, 22):
+    if (platforms.WINDOWS and isinstance(e, OSError)
+            and getattr(e, "errno", None) in (2, 13, 22)):
         # The archive/file vanished or got locked mid-operation — on Windows
         # that's almost always the antivirus quarantining the download.
         return N_("Blocked by antivirus — open Settings (⚙) → "
@@ -2801,6 +2920,142 @@ def describe_install_error(e: Exception) -> str:
                   "antivirus) — retry, or use Settings (⚙) → "
                   "'Add game folder to Defender exclusions'")
     return str(e)
+
+
+
+# ── Why an addon install/update failed, for the person who asked for it ────
+#
+# Each failure is put in one of a few plain categories, and the one sentence
+# shown names the host that failed -- a remote that is down or behind its
+# DDoS check is not the player's internet. The English text and the full
+# exception chain go to the log; the dialog shows the translated sentence.
+
+ADDON_FAILURES = {
+    "challenge": N_("{host} is showing its DDoS-protection check instead of "
+                    "the download. Try again later."),
+    "forbidden": N_("{host} refused the download (HTTP 403). It may be "
+                    "limiting automated downloads. Try again later."),
+    "rate_limit": N_("{host} is limiting requests (HTTP 429). Try again "
+                     "later."),
+    "not_found": N_("{host} says the repository or version does not exist "
+                    "(HTTP 404)."),
+    "server": N_("{host} is having problems (HTTP {code}). Try again later."),
+    "http": N_("{host} refused the download (HTTP {code})."),
+    "timeout": N_("{host} did not answer in time. Try again later."),
+    "dns": N_("Could not look up {host}. Check your internet connection or "
+              "DNS."),
+    "tls": N_("The secure connection to {host} failed (TLS/certificate "
+              "error)."),
+    "connection": N_("{host} refused or dropped the connection. Try again "
+                     "later."),
+    "network": N_("Could not connect to {host}."),
+    "archive": N_("The file from {host} is not a valid addon archive. Try "
+                  "again later."),
+    "lookup": N_("Could not find the latest version of the addon at "
+                 "{host}."),
+    "conflict": N_("The AddOns folder exists twice with different copies of "
+                   "this addon. Choose which to keep, then try again."),
+    "source": N_("The addon's address is not on an allowed git host."),
+    "no_space": N_("Not enough disk space to write the addon files."),
+    "permission": N_("No permission to write to the AddOns folder."),
+    "antivirus": N_("The files were blocked or removed while being written — "
+                    "usually antivirus. Open Settings (⚙) → 'Add game "
+                    "folder to Defender exclusions', then retry."),
+    "write": N_("Could not write the addon files ({error})."),
+    "unknown": N_("Unexpected error ({error})."),
+}
+
+
+def _error_chain(e: BaseException) -> list:
+    """``e`` and every exception it was raised from, outermost first."""
+    chain, seen = [], set()
+    while e is not None and id(e) not in seen:
+        seen.add(id(e))
+        chain.append(e)
+        e = e.__cause__ or e.__context__
+    return chain
+
+
+def addon_failure(e: BaseException, url: str | None = None) -> tuple:
+    """(category, ADDON_FAILURES template, values) for a failed addon
+    install or update. ``url`` is the addon's source, for the host name when
+    the exception does not carry one."""
+    import errno as _errno
+    import socket
+    import urllib.error
+    import zipfile
+    from urllib.parse import urlsplit
+
+    def host_of(u):
+        try:
+            return urlsplit(u or "").hostname or ""
+        except ValueError:
+            return ""
+
+    chain = _error_chain(e)
+    host = ""
+    for x in chain:
+        if isinstance(x, urllib.error.HTTPError):
+            host = host_of(getattr(x, "url", None) or x.geturl())
+            break
+    host = host or host_of(url) or "?"
+
+    def out(category, **values):
+        return category, ADDON_FAILURES[category], dict(host=host, **values)
+
+    for x in chain:
+        if isinstance(x, gamepaths.AddonDirConflict):
+            return out("conflict")
+        if isinstance(x, DdosCheckError):
+            return out("challenge")
+        if isinstance(x, urllib.error.HTTPError):
+            if x.code == 403:
+                return out("forbidden", code=x.code)
+            if x.code == 429:
+                return out("rate_limit", code=x.code)
+            if x.code == 404:
+                return out("not_found", code=x.code)
+            if x.code >= 500:
+                return out("server", code=x.code)
+            return out("http", code=x.code)
+        if isinstance(x, zipfile.BadZipFile):
+            return out("archive")
+    for x in chain:
+        reason = getattr(x, "reason", None) if isinstance(
+            x, urllib.error.URLError) else x
+        for r in (x, reason):
+            if isinstance(r, (socket.timeout, TimeoutError)) or (
+                    isinstance(r, str) and "timed out" in r.lower()):
+                return out("timeout")
+            if isinstance(r, socket.gaierror):
+                return out("dns")
+            if isinstance(r, ssl.SSLError) or isinstance(
+                    r, getattr(ssl, "CertificateError", ssl.SSLError)):
+                return out("tls")
+            if isinstance(r, (ConnectionRefusedError, ConnectionResetError,
+                              ConnectionAbortedError, BrokenPipeError)):
+                return out("connection")
+        if isinstance(x, urllib.error.URLError):
+            return out("network")
+    first = chain[0]
+    text = str(first)
+    if text == "Addon URL is not from an allowed git host":
+        return out("source")
+    if text == "Could not resolve remote commit":
+        return out("lookup")
+    if isinstance(first, OSError):
+        code = getattr(first, "errno", None)
+        if code == _errno.ENOSPC:
+            return out("no_space")
+        if platforms.WINDOWS and code in (2, 13, 22):
+            return out("antivirus")
+        if code in (_errno.EACCES, _errno.EPERM, _errno.EROFS):
+            return out("permission")
+        return out("write", error=first.strerror or text)
+    if any(isinstance(x, (ValueError, KeyError, IndexError, TypeError))
+           for x in chain[1:]) and len(chain) > 1:
+        return out("lookup")
+    return out("unknown", error=text or type(first).__name__)
 
 
 def addon_remote_sha(git_url: str, branch=None, ref=None,
@@ -2887,7 +3142,10 @@ def _rmtree_force(path):
 
 def install_addon_files(client_dir: str, folder: str, git_url: str, sha: str):
     """Download the repo archive at `sha` and unpack it into
-    Interface/AddOns/<folder>, atomically replacing any existing copy."""
+    Interface/AddOns/<folder>, atomically replacing any existing copy.
+    Refused (gamepaths.AddonDirConflict) before anything is downloaded while
+    the addons folder has a case conflict."""
+    addons_root = writable_addons_path(client_dir)
     kept = _ARCHIVES.pop(sha, None)
     if kept and time.time() - kept[0] <= _ARCHIVE_KEEP:
         data = kept[1]               # fetched moments ago to read its commit
@@ -2898,7 +3156,7 @@ def install_addon_files(client_dir: str, folder: str, git_url: str, sha: str):
 
     import zipfile
     import io
-    dest_root = os.path.join(addons_path(client_dir), folder)
+    dest_root = os.path.join(addons_root, folder)
     tmp_root  = dest_root + ".tmp_install"
     tmp_abs   = os.path.abspath(tmp_root)
     if os.path.isdir(tmp_root):
@@ -2922,9 +3180,25 @@ def install_addon_files(client_dir: str, folder: str, git_url: str, sha: str):
                 os.makedirs(os.path.dirname(target), exist_ok=True)
                 with zf.open(info) as src, open(target, "wb") as dst:
                     shutil.copyfileobj(src, dst)
-        if os.path.isdir(dest_root):
-            _rmtree_force(dest_root)
-        os.replace(tmp_root, dest_root)
+        # The installed copy is moved aside, not deleted, until the new one
+        # is in place: a failed replace puts it back as it was.
+        old_root = dest_root + ".old_install"
+        if os.path.isdir(old_root):
+            _rmtree_force(old_root)
+        had_old = os.path.isdir(dest_root)
+        if had_old:
+            os.replace(dest_root, old_root)
+        try:
+            os.replace(tmp_root, dest_root)
+        except BaseException:
+            if had_old:
+                os.replace(old_root, dest_root)
+            raise
+        if had_old:
+            try:
+                _rmtree_force(old_root)
+            except OSError as e:
+                log(f"  Could not remove {old_root}: {e}")
     except BaseException:
         # Never leave a half-written ".tmp_install" behind on failure
         if os.path.isdir(tmp_root):
@@ -3187,7 +3461,29 @@ def fov_default_for_display() -> int:
     return 110
 
 
+#: What Config.wtf gets where the display cannot be asked (Linux, or a
+#: failed query). The game runs windowed and maximised (gxWindow,
+#: gxMaximize), so the window still fills the screen.
+_DISPLAY_FALLBACK = {"width": 1920, "height": 1080, "refresh_rate": 60}
+
+
 def _get_display_info_safe() -> dict:
+    """The primary display's mode; never raises. Windows asks the display
+    driver. Elsewhere -- this runs on worker threads, where Tk may not be
+    asked -- it is the fallback: before, ctypes.windll raised on Linux and
+    a fresh Config.wtf was never written there."""
+    if not platforms.WINDOWS:
+        return dict(_DISPLAY_FALLBACK)
+    try:
+        info = _query_display_info()
+    except Exception:
+        return dict(_DISPLAY_FALLBACK)
+    if not info["width"] or not info["height"]:
+        return dict(_DISPLAY_FALLBACK)
+    return info
+
+
+def _query_display_info() -> dict:
     import ctypes
     ENUM_CURRENT_SETTINGS = -1
 
@@ -3278,20 +3574,39 @@ def _news_open(req, timeout):
 
 
 def fetch_patch_notes() -> list:
-    """The newest Patch Notes and Changelog topics: title, start date,
-    author and topic link, from one request for the forum listing.
+    """The newest posts of OctoWoW's patch notes thread (topic 2816), newest
+    first, each with its own date, author, text and link. One request.
     Raises news.ForumError, naming the stage that failed."""
-    return [row.to_item() for row in fetch_topic_list(
-        CHANGELOG_FORUM_ID, NEWS_CHANGELOG_COUNT,
+    return [post.to_item() for post in fetch_topic_posts(
+        PATCH_NOTES_TOPIC_ID, NEWS_CHANGELOG_COUNT,
         opener=_news_open, user_agent=UA, timeout=NEWS_TIMEOUT)]
 
 
-def fetch_featured_post() -> dict:
-    """The newest announcement, by the date it was posted -- not the pinned
-    topic at the top of the forum, and not the latest reply -- with its
-    opening post. Two requests: the listing and that topic."""
-    return fetch_latest_post(ANNOUNCEMENTS_FORUM_ID, opener=_news_open,
-                             user_agent=UA, timeout=NEWS_TIMEOUT).to_item()
+def fetch_featured_post() -> dict | None:
+    """The newest post in OctoWoW's announcements thread (topic 2848). When
+    the forum cannot be read -- above all while it shows apps its DDoS check
+    -- the first item of the public news.json instead (as OctoLauncher reads
+    it; fetched directly, no launcher needed), or None when that feed is
+    validly empty. If both fail, the forum's error is raised: it is the
+    reason the panel cannot update."""
+    try:
+        return fetch_newest_post_in_topic(
+            ANNOUNCEMENTS_TOPIC_ID, opener=_news_open, user_agent=UA,
+            timeout=NEWS_TIMEOUT).to_item()
+    except ForumError as forum_exc:
+        log(f"Announcements: {forum_exc}; trying news.json", "dim")
+        try:
+            items = fetch_news_feed(opener=_news_open, user_agent=UA,
+                                    timeout=NEWS_TIMEOUT)
+        except ForumError as feed_exc:
+            log(f"Announcements: {feed_exc}", "dim")
+            raise forum_exc
+        if not items:
+            return None
+        # The newest by date: a pinned older post may lead the feed.
+        item = dict(max(items, key=lambda i: i["date"]))
+        item["_note"] = getattr(forum_exc, "short", "") or str(forum_exc)
+        return item
 
 
 def _news_error(section: str, exc: Exception) -> str:
@@ -3367,6 +3682,9 @@ class EqUpdaterApp(tk.Tk):
         # Give EqUpdater its own Windows taskbar identity before Tk creates
         # the native window. This prevents Windows from grouping it under an
         # older Octo/EqUpdater shortcut and reusing that cached taskbar icon.
+        # Fonts first: on Linux fontconfig reads its configuration when the
+        # first Tk window opens, which is the next line but one.
+        prepare_fonts()
         if os.name == "nt":
             try:
                 import ctypes
@@ -3495,6 +3813,13 @@ class EqUpdaterApp(tk.Tk):
         # Game folder path — shared by the Settings modal. A change takes
         # effect only once Settings is closed (see _close_settings), so no
         # live trace fires mid-edit.
+        # Settings copied from a Wine install can name the game folder as
+        # Wine sees it (Z:\\home\\...); where that folder exists here, use it.
+        native = platforms.native_path_for(self._cfg.get("out_dir") or "")
+        if native:
+            log(f"Game folder from Wine settings: {self._cfg['out_dir']} is "
+                f"{native} here.", "acct")
+            self._cfg = update_config(lambda c: c.__setitem__("out_dir", native))
         self._game_path = tk.StringVar(
             value=os.path.normpath(self._cfg.get("out_dir", DEFAULT_GAME_DIR)))
 
@@ -4314,8 +4639,10 @@ class EqUpdaterApp(tk.Tk):
         self._load_patch_notes()
 
     def _load_featured(self):
-        """Read the Announcements forum once, in the background. A click on
-        refresh while a read is already running does not start a second."""
+        """Read the Announcements once, in the background: the thread, else
+        news.json (fetch_featured_post); if both fail, the last good one
+        stays on screen. A click on refresh while a read is already running
+        does not start a second."""
         if getattr(self, "_feat_loading", False):
             return
         self._feat_loading = True
@@ -4331,16 +4658,18 @@ class EqUpdaterApp(tk.Tk):
             def apply():
                 self._feat_loading = False
                 if feat is not None:
+                    # Set only when the forum failed and news.json stood in.
+                    note = feat.pop("_note", "")
                     self._featured = feat
                     self._save_news_cache("announcements", "item", feat)
-                    self._render_featured(feat)
+                    self._render_featured(feat, note=note)
                 else:
                     self._render_featured(self._featured, error=err)
             self.after(0, apply)
         threading.Thread(target=worker, daemon=True).start()
 
     def _load_patch_notes(self):
-        """Read the Patch Notes forum listing once, in the background."""
+        """Read the patch notes thread once, in the background."""
         if getattr(self, "_patch_loading", False):
             return
         self._patch_loading = True
@@ -4385,7 +4714,7 @@ class EqUpdaterApp(tk.Tk):
         rf.bind("<Leave>", lambda e: rf.configure(fg=C_TEXT_DIM))
         tk.Frame(parent, bg=C_DIVIDER, height=self._px(1)).pack(fill="x")
 
-    def _render_featured(self, post, loading=False, error=""):
+    def _render_featured(self, post, loading=False, error="", note=""):
         f = self._feat_frame
         for w in f.winfo_children():
             w.destroy()
@@ -4449,9 +4778,11 @@ class EqUpdaterApp(tk.Tk):
         txt.pack(fill="both", expand=True, padx=self._px(18),
                  pady=(self._px(6), self._px(2)))
 
-        if error:
-            tk.Label(f, text=tr("{error} · showing cached content",
-                                error=error),
+        if error or note:
+            text = (tr("{error} · showing cached content", error=error) if error
+                    else tr("{error} · showing the news feed instead",
+                            error=tr(note)))
+            tk.Label(f, text=text,
                      font=self._font(8), fg=C_TEXT_DIM, bg=C_PANEL,
                      wraplength=self._news_left_w - self._px(40),
                      justify="left", anchor="w").pack(
@@ -4901,14 +5232,10 @@ class EqUpdaterApp(tk.Tk):
 
     def _restart(self):
         """Start a fresh EqUpdater, then close this one."""
-        if getattr(sys, "frozen", False):
-            cmd = [sys.executable]
-        else:
-            cmd = [sys.executable, os.path.join(branding.app_dir(), "EqUpdater.py")]
+        cmd = platforms.self_command(
+            os.path.join(branding.app_dir(), "EqUpdater.py"))
         try:
-            subprocess.Popen(cmd, cwd=branding.app_dir(),
-                             creationflags=getattr(subprocess, "DETACHED_PROCESS", 0),
-                             close_fds=True)
+            platforms.spawn_detached(cmd, cwd=os.path.expanduser("~"))
         except OSError as e:
             self._log_line(f"Could not restart: {e}\n", "err")
             return
@@ -4964,7 +5291,7 @@ class EqUpdaterApp(tk.Tk):
                 self._apply_tweaks_worker(out, load_tweaks_config())
 
         # frillDensity (Config.wtf value). Raise to 128 if it's lower
-        cfg_path = os.path.join(out, "WTF", "Config.wtf") if out else ""
+        cfg_path = gamepaths.game_path(out, "WTF", "Config.wtf") if out else ""
         if cfg_path and os.path.exists(cfg_path):
             try:
                 with open(cfg_path, "r", encoding="utf-8") as f:
@@ -5447,8 +5774,10 @@ class EqUpdaterApp(tk.Tk):
             self._apply_btn.pack_forget()
 
     def _open_url(self, url: str):
-        import webbrowser
-        webbrowser.open(url)
+        try:
+            platforms.open_url(url)
+        except OSError as e:
+            self._log_line(f"Could not open {url}: {e}\n", "err")
 
     #: What each planner status offers on a mod row: the label, its colour,
     #: whether clicking it does anything, and the tooltip that explains it.
@@ -6216,7 +6545,7 @@ class EqUpdaterApp(tk.Tk):
         """Lettered patch archives (patch-<letter>.mpq, case-insensitive) present in the
         game's Data folder, e.g. Patch-A.mpq / patch-b.MPQ. Sorted by letter."""
         out = self._game_path.get().strip()
-        data_dir = os.path.join(out, "Data") if out else ""
+        data_dir = gamepaths.game_path(out, "Data") if out else ""
         found = []
         if data_dir and os.path.isdir(data_dir):
             for name in os.listdir(data_dir):
@@ -6272,7 +6601,7 @@ class EqUpdaterApp(tk.Tk):
         self._render_mpq()
 
         out = self._game_path.get().strip()
-        data_dir = os.path.join(out, "Data") if out else ""
+        data_dir = gamepaths.game_path(out, "Data") if out else ""
         linked = [r for r in rows if r["source"]]
         if not (linked and data_dir):
             self._mpq_updates_count = 0
@@ -6522,7 +6851,7 @@ class EqUpdaterApp(tk.Tk):
             return None
         self._mpq_busy, self._mpq_busy_text = filename, text
         self._render_mpq()
-        return os.path.join(out, "Data")
+        return gamepaths.game_path(out, "Data")
 
     def _mpq_finish(self):
         self._mpq_busy = None
@@ -6734,6 +7063,53 @@ class EqUpdaterApp(tk.Tk):
 
     # ── addons engine (app side) ─────────────────────────────────────────────
 
+    def _addon_dir_conflict_prompt(self, client: str) -> bool:
+        """When Interface/AddOns and another case of it (Interface/Addons)
+        both hold different copies of the same addon: ask, once per
+        session, which copies to keep. The others are moved aside, never
+        deleted. Returns True when the scan should wait (the player chose
+        to decide later), False to go on."""
+        try:
+            state = gamepaths.prepare_addons_dir(client)
+        except OSError as e:
+            self._log_line(f"Could not check the addons folder: {e}\n", "err")
+            return False
+        _log_addon_dir_state(state)
+        if not state.conflicts or getattr(self, "_addon_conflict_asked", False):
+            return False
+        self._addon_conflict_asked = True
+        from tkinter import messagebox
+        other = os.path.dirname(state.conflicts[0][1])
+        names = "\n".join("    " + c[0] for c in state.conflicts)
+        choice = messagebox.askyesnocancel(
+            tr("Two addon folders"),
+            tr("This game folder has two addon folders whose names differ only "
+               "in letter case:\n    {other}\n    {addons}\n\nEverything that "
+               "was in only one of them is now in {addons}. These addons are "
+               "in both, with different files:\n{names}\n\nYes: keep the "
+               "copies from {other}.\nNo: keep the copies in {addons}.\n"
+               "Cancel: decide later. Until then {app} installs, updates and "
+               "removes no addons.\n\nThe copies you do not keep are moved "
+               "into an AddOns-conflicts folder next to them, not deleted.",
+               other=other, addons=state.path, names=names,
+               app=branding.APP_NAME),
+            icon="warning", parent=self)
+        if choice is None:
+            self._log_line("Addon changes are paused until the two addon "
+                           "folders are resolved (ADDONS tab, Check for "
+                           "updates, asks again after a restart).\n", "err")
+            return False
+        try:
+            aside, moved = gamepaths.resolve_conflicts(
+                client, "other" if choice else "addons")
+        except OSError as e:
+            self._log_line(f"Could not resolve the addon folders: {e}\n", "err")
+            return False
+        _ADDON_CONFLICT_LOGGED[:] = []
+        for entry in moved:
+            self._log_line(f"Moved {entry} aside to {aside}\n", "ok")
+        return False
+
     def _addons_verify(self, force=False, remote_checks=True):
         """Scan Interface/AddOns, match against the catalog, and check every
         tracked addon's remote commit sha (config-cached). With
@@ -6748,6 +7124,8 @@ class EqUpdaterApp(tk.Tk):
                 < ADDONS_VERIFY_TTL):
             return
         client = self._game_path.get().strip()
+        if client and self._addon_dir_conflict_prompt(client):
+            return
         self._addons_busy = True
         had_content = bool(self._addons_status["addons"]
                            or self._addons_status["available"])
@@ -6766,8 +7144,12 @@ class EqUpdaterApp(tk.Tk):
                 catalog = (load_config().get("addons_catalog_cache", {})
                            .get("catalog") or [])
 
+            # The catalogue writes some OctoWoW Git sources under another
+            # name for the same forge; read them as the canonical URL so
+            # they validate, and are saved, as octowow.st/git.
             available = [{"folder": a.get("name"), "status": "available",
-                          "git": a.get("git"), "branch": a.get("branch"),
+                          "git": canonical_repo_url(a.get("git")),
+                          "branch": a.get("branch"),
                           "ref": a.get("ref"), "toc": a.get("toc") or {},
                           "description": a.get("description"), "error": None}
                          for a in catalog
@@ -6831,7 +7213,8 @@ class EqUpdaterApp(tk.Tk):
                         # manually installed addon and putting a different
                         # copy there. It is shown, its .toc is read, a
                         # possible source is offered, and nothing is touched.
-                        rec.update(git=saved.get("git") if saved else None,
+                        rec.update(git=canonical_repo_url(saved.get("git"))
+                                   if saved else None,
                                    status="unmanaged")
                         addons[name] = rec
                         continue
@@ -6841,7 +7224,7 @@ class EqUpdaterApp(tk.Tk):
                     # current preference. Asking a different fork for "the
                     # latest commit" and comparing it with ours is not a
                     # question with a meaningful answer.
-                    rec.update(git=saved.get("git"),
+                    rec.update(git=canonical_repo_url(saved.get("git")),
                                branch=saved.get("branch"),
                                ref=saved.get("ref"),
                                custom=saved.get("custom_source",
@@ -6969,7 +7352,11 @@ class EqUpdaterApp(tk.Tk):
 
         self._addons_busy = True
         self._addons_installing = True
+        before = {}          # folder -> (status, was it listed as installed)
         for rec in recs:
+            before[rec["folder"]] = (
+                rec.get("status"),
+                rec["folder"] in self._addons_status["addons"])
             rec["status"] = "downloading"
             self._addons_status["addons"].setdefault(rec["folder"], rec)
         self._render_addons()
@@ -6977,14 +7364,16 @@ class EqUpdaterApp(tk.Tk):
         self._set_btn_busy(tr("Installing…"))
         self._status_var.set(tr("Downloading addons…"))
 
+        failures = []        # (folder, update?, template, values)
+
         def worker():
             for rec in recs:
                 self.after(0, lambda n=rec["folder"]: self._status_var.set(
                     tr("Installing {name}…", name=n)))
+                updating = before[rec["folder"]][1] or os.path.isdir(
+                    os.path.join(addons_path(client), rec["folder"]))
                 try:
-                    if not rec.get("git") or not is_allowed_git_url(rec["git"]):
-                        raise RuntimeError(N_("Addon URL is not from an "
-                                              "allowed git host"))
+                    rec["git"] = addon_install_source(rec.get("git"))
                     sha = addon_remote_sha(rec["git"], rec.get("branch"),
                                            rec.get("ref"), raise_errors=True)
                     if not sha:
@@ -7012,24 +7401,82 @@ class EqUpdaterApp(tk.Tk):
                     update_config(lambda c, f=rec["folder"], r=record:
                                   c.setdefault("addons", {}).__setitem__(f, r))
                     self._addon_errors.pop(rec["folder"], None)
+                    rec.update(status="upToDate", error=None)
                     log(f"  ✓ Addon {rec['folder']} installed.")
                 except Exception as e:
-                    err = describe_install_error(e)
-                    log(f"  ✗ Addon {rec['folder']}: {err}")
-                    rec.update(status="invalid", error=err)
-                    self._addon_errors[rec["folder"]] = {
-                        "error": err, "git": rec.get("git")}
+                    _cat, template, values = addon_failure(e, rec.get("git"))
+                    op = "update" if updating else "install"
+                    log(f"  ✗ Addon {rec['folder']} ({op} failed): "
+                        f"{template.format(**values)}", "err")
+                    log("    " + " <- ".join(
+                        f"{type(x).__name__}: {x}" for x in _error_chain(e)),
+                        "dim")
+                    failures.append((rec["folder"], updating, template,
+                                     values))
+                    rec["error"] = None
+                    if not updating:
+                        # Shown under the catalogue row until it installs.
+                        self._addon_errors[rec["folder"]] = {
+                            "error": tr(template, **values),
+                            "git": rec.get("git")}
 
             def done():
                 self._addons_busy = False
                 self._addons_installing = False
                 self._addons_verified_ts = 0.0   # make the re-verify run
                 self._refresh_ready_state()      # PLAY active again
+                # No row is left reading "downloading…": a failed one is put
+                # back the way it was before it was asked for.
+                for folder, *_ in failures:
+                    status, listed = before.get(folder, (None, False))
+                    rec = next((r for r in recs if r["folder"] == folder), None)
+                    if rec is not None:
+                        rec["status"] = status or "available"
+                    if not listed:
+                        self._addons_status["addons"].pop(folder, None)
+                if failures:
+                    self._status_var.set(tr("Some addons failed — see the "
+                                            "message for details"))
                 # Cache-only refresh: the install itself already resolved and
                 # cached the shas — no further API requests are needed.
                 self._addons_verify(remote_checks=False)
+                if not self._addons_busy:        # the verify did not start
+                    self._render_addons()
+                if failures:
+                    self._report_addon_failures(failures, len(recs))
             self.after(0, done)
         threading.Thread(target=worker, daemon=True).start()
+
+    def _report_addon_failures(self, failures, total: int):
+        """One dialog for whatever failed: the addon and the reason when one
+        did, a single summary when several did. Offers the log, which has
+        the detail."""
+        from tkinter import messagebox
+        if len(failures) == 1:
+            folder, updating, template, values = failures[0]
+            title = (tr("Failed to update {name}", name=folder) if updating
+                     else tr("Failed to install {name}", name=folder))
+            body = tr(template, **values)
+            if updating:
+                body += "\n\n" + tr("The installed copy was left as it was.")
+        else:
+            title = tr("Addons: {n} of {total} failed", n=len(failures),
+                       total=total)
+            lines = []
+            for folder, updating, template, values in failures[:12]:
+                lines.append("• " + (tr("{name} (update)", name=folder)
+                                     if updating else folder)
+                             + ": " + tr(template, **values))
+            if len(failures) > 12:
+                lines.append(tr("…and {n} more", n=len(failures) - 12))
+            body = "\n".join(lines)
+            if total > len(failures):
+                body += "\n\n" + tr("The other {n} finished.",
+                                       n=total - len(failures))
+        body += "\n\n" + tr("Open the log for details?")
+        self._last_addon_failure = (title, body)
+        if messagebox.askyesno(title, body, icon="error", parent=self):
+            self._show_logs()
 
     def _addon_update_all(self):
         """Every addon that can be *proved* to have a newer commit on the
@@ -7053,7 +7500,7 @@ class EqUpdaterApp(tk.Tk):
         if not client or self._addons_busy:
             return
         try:
-            dirp = os.path.join(addons_path(client), folder)
+            dirp = os.path.join(writable_addons_path(client), folder)
             if os.path.isdir(dirp):
                 shutil.rmtree(dirp)
             update_config(lambda c: c.get("addons", {}).pop(folder, None))
@@ -7156,24 +7603,50 @@ class EqUpdaterApp(tk.Tk):
     # ── addons rendering ─────────────────────────────────────────────────────
 
     def _reset_addons_inner(self):
-        """Replace the whole rows container with a fresh frame. A single
-        destroy() tears the old subtree down inside Tk (C code) — far faster
-        than destroying hundreds of row widgets one by one from Python."""
+        """Start a fresh rows container. A single destroy() tears an old
+        subtree down inside Tk (C code) -- far faster than destroying
+        hundreds of row widgets one by one from Python.
+
+        Once a list is on screen, the new container is built off-screen:
+        the old one stays visible until the batched build has finished and
+        _addons_show_inner swaps the finished list in, in one step. Built in
+        place, every batch was drawn as it came, so expanding or collapsing
+        a section showed an emptied list filling back in from the top."""
         cv  = self._addons_canvas
-        old = getattr(self, "_addons_inner", None)
-        if old is not None:
-            old.destroy()
+        pending = getattr(self, "_addons_inner", None)
+        shown = getattr(self, "_addons_shown", None)
+        if pending is not None and pending is not shown:
+            pending.destroy()          # an abandoned, never-shown build
         inner = tk.Frame(cv, bg=C_PANEL)
-        inner.bind("<Configure>",
-                   lambda e: cv.configure(scrollregion=cv.bbox("all")))
+        self._addons_inner = inner
+        if self._addons_win is None or shown is None:
+            self._addons_show_inner(top=True)
+
+    def _addons_show_inner(self, top: bool = True):
+        """Put the built rows container on screen in place of the old one,
+        with its scroll region set once, from its finished size."""
+        cv = self._addons_canvas
+        inner = self._addons_inner
+        old = getattr(self, "_addons_shown", None)
+        if old is inner:
+            return
+        first = top or old is None
+        y = 0.0 if first else cv.yview()[0]
+        inner.update_idletasks()       # lay out before it is ever drawn
         if self._addons_win is None:
             self._addons_win = cv.create_window((0, 0), window=inner,
                                                 anchor="nw",
                                                 width=cv.winfo_width() or 1)
         else:
             cv.itemconfigure(self._addons_win, window=inner)
-        cv.yview_moveto(0)
-        self._addons_inner = inner
+        inner.bind("<Configure>",
+                   lambda e: cv.configure(scrollregion=cv.bbox("all")))
+        cv.configure(scrollregion=(0, 0, cv.winfo_width() or 1,
+                                   inner.winfo_reqheight()))
+        cv.yview_moveto(y)
+        self._addons_shown = inner
+        if old is not None:
+            old.destroy()
 
     def _on_addon_filter_changed(self, *_args):
         """Debounce search input — re-render once typing pauses, not on
@@ -7186,11 +7659,15 @@ class EqUpdaterApp(tk.Tk):
         self._addon_filter_job = None
         self._render_addons()
 
-    def _render_addons(self):
+    def _render_addons(self, keep_scroll: bool = False):
         """Rebuild the addons list. Rows are created in small batches on the
-        Tk event loop so a large catalog doesn't freeze the UI."""
+        Tk event loop so a large catalog doesn't freeze the UI; the finished
+        list replaces the shown one in one step (see _reset_addons_inner).
+        ``keep_scroll`` keeps the scroll position (expanding/collapsing a
+        section) instead of returning to the top."""
         if not hasattr(self, "_addons_inner"):
             return
+        self._addons_keep_scroll = keep_scroll
         self._addons_render_gen = getattr(self, "_addons_render_gen", 0) + 1
         gen = self._addons_render_gen
         self._reset_addons_inner()
@@ -7254,6 +7731,9 @@ class EqUpdaterApp(tk.Tk):
             built += 1
         if queue:
             self.after(1, lambda: self._addons_build_step(gen))
+        else:
+            self._addons_show_inner(
+                top=not getattr(self, "_addons_keep_scroll", False))
 
     def _addon_section_header(self, title: str, rows: list):
         f = self._addons_inner
@@ -7275,7 +7755,7 @@ class EqUpdaterApp(tk.Tk):
         def toggle(_e=None, t=title):
             self._addon_sections_open[t] = \
                 not self._addon_sections_open.get(t, True)
-            self._render_addons()
+            self._render_addons(keep_scroll=True)
         arrow.bind("<Button-1>", toggle)
         lbl.bind("<Button-1>", toggle)
 
@@ -7835,11 +8315,25 @@ class EqUpdaterApp(tk.Tk):
 
         # Wipe folder-scoped config and set the new path in one atomic merge.
         # This also re-arms the default-mods / recommended-addons auto-install.
+        # Settings copied from a Windows or Wine install name the old folder
+        # as a Windows path, which is no folder here at all: choosing the
+        # game folder then is moving the settings across, not switching to
+        # another game, so the mod and addon records are kept. Each is
+        # checked against the files in the new folder as usual -- a record
+        # whose files differ shows as changed, never as up to date.
+        old_dir = self._cfg.get("out_dir") or ""
+        keep_records = platforms.foreign_windows_path(old_dir)
+
         def _wipe(c):
             c["out_dir"] = new_val
-            for k in ("mods", "addons"):
-                c.pop(k, None)
+            if not keep_records:
+                for k in ("mods", "addons"):
+                    c.pop(k, None)
         self._cfg = update_config(_wipe)
+        if keep_records:
+            self._log_line(f"Settings came from a Windows/Wine install "
+                           f"({old_dir}); mod and addon records kept and "
+                           f"checked against the new folder.\n", "acct")
 
         self._mod_pending_state = {}
         self._default_mods_install_started = False
@@ -8051,9 +8545,13 @@ class EqUpdaterApp(tk.Tk):
                 w.bind("<Leave>", lambda e: tl.configure(fg=C_TEXT))
 
         _titem("✓", tr("Verify game files"), self._settings_verify)
+        _titem("✚", tr("Login Doctor…"), self._open_login_doctor)
         _titem("☰", tr("Show logs"), self._show_logs)
-        _titem("⛊", tr("Add game folder to Defender exclusions"),
-               self._allow_through_antivirus)
+        if platforms.WINDOWS:
+            _titem("⛊", tr("Add game folder to Defender exclusions"),
+                   self._allow_through_antivirus)
+        else:
+            _titem("⚙", tr("Game launcher…"), self._open_game_launcher)
 
         tk.Label(lcol, text=tr("SUPPORT ME"),
                  font=self._font(10, bold=True),
@@ -8185,6 +8683,378 @@ class EqUpdaterApp(tk.Tk):
         self._settings_panel = (panel, MW, MH)
         self._fit_settings_panel(panel, MW, MH)
 
+    def _open_game_launcher(self):
+        """Linux: Settings -> Game launcher, in a panel of its own over
+        Settings. Its fields do not fit in Settings' left column: with
+        OpenDyslexic they pushed the bottom of that column out of the panel."""
+        if self._settings_overlay is None:
+            return
+        old = getattr(self, "_launcher_overlay", None)
+        if old is not None and old.winfo_exists():
+            return
+        P_BG, P_HDR, P_BDR, P_INP = C_PANEL, C_HDR, C_PANEL_BDR, "#0f0b16"
+        shade = tk.Frame(self._settings_overlay, bg="#0a0a0e")
+        shade.place(x=0, y=0, relwidth=1, relheight=1)
+        self._launcher_overlay = shade
+
+        def close():
+            self._launcher_overlay = None
+            try:
+                shade.destroy()
+            except tk.TclError:
+                pass
+            if self._settings_overlay is not None:
+                self.bind("<Escape>", lambda e: self._close_settings())
+        shade.bind("<Button-1>", lambda e: close())
+        self.bind("<Escape>", lambda e: close())
+
+        panel = tk.Frame(shade, bg=P_BG, highlightthickness=1,
+                         highlightbackground=P_BDR, highlightcolor=P_BDR)
+        hdr = tk.Frame(panel, bg=P_HDR, height=self._px(46))
+        hdr.pack(fill="x")
+        hdr.pack_propagate(False)
+        tk.Label(hdr, text=tr("GAME LAUNCHER"), font=self._font(13, bold=True),
+                 fg=C_PURPLE, bg=P_HDR).pack(side="left", padx=self._px(18))
+        x_btn = tk.Label(hdr, text="✕", font=self._font(12),
+                         fg=C_TEXT_DIM, bg=P_HDR, cursor="hand2")
+        x_btn.pack(side="right", padx=self._px(16))
+        x_btn.bind("<Button-1>", lambda e: close())
+        x_btn.bind("<Enter>",    lambda e: x_btn.configure(fg=C_TEXT))
+        x_btn.bind("<Leave>",    lambda e: x_btn.configure(fg=C_TEXT_DIM))
+        tk.Frame(panel, bg=P_BDR, height=self._px(1)).pack(fill="x")
+        body = tk.Frame(panel, bg=P_BG)
+        body.pack(fill="both", expand=True, padx=self._px(22),
+                  pady=(self._px(8), self._px(18)))
+        self._build_game_launcher_settings(body, P_BG, P_INP, P_BDR)
+
+        # Centred at its natural height, so it grows when an error line
+        # appears under the environment variables instead of clipping it.
+        panel.place(relx=0.5, rely=0.5, anchor="center",
+                    width=min(self._px(560), WIN_W - 2 * self._px(10)))
+
+    # ── Login Doctor ────────────────────────────────────────────────────────
+
+    _DOCTOR_MARKS = {logindoctor.PASS: ("✓", C_OK),
+                     logindoctor.WARN: ("⚠", "#d4b43c"),
+                     logindoctor.FAIL: ("✗", C_ERR)}
+
+    def _doctor_fetch(self, url: str, timeout: float) -> int:
+        """One HTTPS request for Login Doctor. Any HTTP answer -- an error
+        status or the DDoS-protection page included -- means the host was
+        reached; only a failure to connect raises."""
+        import urllib.error
+        req = urllib.request.Request(url, headers={"User-Agent": UA})
+        try:
+            with secure_urlopen(req, timeout=timeout,
+                                allowed_hosts={"octowow.st", "dl.octowow.st"}) as r:
+                r.read(4096)
+                return r.status
+        except urllib.error.HTTPError as e:
+            return e.code
+
+    def _open_login_doctor(self):
+        """Settings -> Login Doctor: local login checks, safe connectivity
+        checks and an explicit repair of the login configuration. See
+        equpdater/logindoctor.py for what it does and does not touch."""
+        if self._settings_overlay is None:
+            return
+        old = getattr(self, "_doctor_overlay", None)
+        if old is not None and old.winfo_exists():
+            return
+        P_BG, P_HDR, P_BDR = C_PANEL, C_HDR, C_PANEL_BDR
+        shade = tk.Frame(self._settings_overlay, bg="#0a0a0e")
+        shade.place(x=0, y=0, relwidth=1, relheight=1)
+        self._doctor_overlay = shade
+
+        def close():
+            self._doctor_overlay = None
+            self._doctor_gen = getattr(self, "_doctor_gen", 0) + 1
+            try:
+                shade.destroy()
+            except tk.TclError:
+                pass
+            if self._settings_overlay is not None:
+                self.bind("<Escape>", lambda e: self._close_settings())
+        self.bind("<Escape>", lambda e: close())
+
+        panel = tk.Frame(shade, bg=P_BG, highlightthickness=1,
+                         highlightbackground=P_BDR, highlightcolor=P_BDR)
+        hdr = tk.Frame(panel, bg=P_HDR, height=self._px(46))
+        hdr.pack(fill="x")
+        hdr.pack_propagate(False)
+        tk.Label(hdr, text=tr("LOGIN DOCTOR"), font=self._font(13, bold=True),
+                 fg=C_PURPLE, bg=P_HDR).pack(side="left", padx=self._px(18))
+        x_btn = tk.Label(hdr, text="✕", font=self._font(12),
+                         fg=C_TEXT_DIM, bg=P_HDR, cursor="hand2")
+        x_btn.pack(side="right", padx=self._px(16))
+        x_btn.bind("<Button-1>", lambda e: close())
+        tk.Frame(panel, bg=P_BDR, height=self._px(1)).pack(fill="x")
+        body = tk.Frame(panel, bg=P_BG)
+        body.pack(fill="both", expand=True, padx=self._px(22),
+                  pady=(self._px(10), self._px(16)))
+
+        box = tk.Frame(body, bg=C_LOG_BG)
+        box.pack(fill="both", expand=True)
+        txt = tk.Text(box, height=12, wrap="word", bg=C_LOG_BG, fg=C_TEXT,
+                      font=self._font(10), relief="flat", bd=0,
+                      padx=self._px(10), pady=self._px(8),
+                      highlightthickness=0, cursor="arrow")
+        sb = SlimScrollbar(box, command=txt.yview, bg=C_LOG_BG,
+                           width=self._px(8))
+        txt.configure(yscrollcommand=sb.set)
+        sb.pack(side="right", fill="y")
+        txt.pack(side="left", fill="both", expand=True)
+        for state, (_mark, colour) in self._DOCTOR_MARKS.items():
+            txt.tag_configure(state, foreground=colour)
+        txt.tag_configure("head", foreground=C_GOLD,
+                          font=self._font(10, bold=True))
+        txt.tag_configure("dim", foreground=C_TEXT_DIM)
+        self._doctor_text = txt
+
+        row = tk.Frame(body, bg=P_BG)
+        row.pack(fill="x", pady=(self._px(10), 0))
+        self._doctor_repair_btn = tk.Label(
+            row, text=tr("Repair login configuration"), font=self._font(10),
+            fg=C_TEXT_DIM, bg=C_PANEL_BDR, padx=self._px(12), pady=self._px(5))
+        self._doctor_repair_btn.pack(side="left")
+        again = tk.Label(row, text="⟳  " + tr("Run again"), font=self._font(10),
+                         fg=C_TEXT, bg=C_PANEL_BDR, cursor="hand2",
+                         padx=self._px(12), pady=self._px(5))
+        again.pack(side="right")
+        again.bind("<Button-1>", lambda e: self._run_login_doctor())
+
+        tk.Label(body, text=tr("Priority Sign In"), font=self._font(10, bold=True),
+                 fg=C_GOLD, bg=P_BG).pack(anchor="w", pady=(self._px(14), 0))
+        tk.Label(body, text=tr(logindoctor.PRIORITY_NOTE), font=self._font(9),
+                 fg=C_TEXT_DIM, bg=P_BG, justify="left", anchor="w",
+                 wraplength=min(self._px(600), WIN_W - 2 * self._px(60))
+                 ).pack(anchor="w", fill="x", pady=(self._px(4), 0))
+
+        panel.place(relx=0.5, rely=0.5, anchor="center",
+                    width=min(self._px(660), WIN_W - 2 * self._px(10)))
+        self._run_login_doctor()
+
+    def _run_login_doctor(self):
+        """Local checks now (file reads), network checks on a worker; the
+        window polls for them so Tk is only touched on this thread."""
+        if getattr(self, "_doctor_overlay", None) is None:
+            return
+        self._doctor_gen = gen = getattr(self, "_doctor_gen", 0) + 1
+        client = self._game_path.get().strip()
+        if not client or not os.path.isdir(client):
+            local = [logindoctor.Check(logindoctor.FAIL,
+                                       N_("No game folder is set"), {})]
+            running = False
+        else:
+            running = platforms.client_in_use(client)
+            local = logindoctor.local_checks(client, get_client_version(client),
+                                             running)
+        self._doctor_state = {"client": client, "local": local,
+                              "running": running, "network": None}
+        result = []
+
+        def work():
+            try:
+                result.append(logindoctor.network_checks(self._doctor_fetch))
+            except Exception as e:           # never leave the window waiting
+                result.append([logindoctor.Check(
+                    logindoctor.FAIL, N_("Network checks failed: {error}"),
+                    {"error": str(e)}, "network")])
+
+        threading.Thread(target=work, daemon=True, name="login-doctor").start()
+
+        def poll():
+            if gen != self._doctor_gen or self._doctor_overlay is None:
+                return
+            if result:
+                self._doctor_state["network"] = result[0]
+                self._render_login_doctor()
+            else:
+                self.after(100, poll)
+        self._render_login_doctor()
+        self.after(100, poll)
+
+    def _render_login_doctor(self):
+        st, txt = self._doctor_state, getattr(self, "_doctor_text", None)
+        if txt is None or not txt.winfo_exists():
+            return
+        txt.configure(state="normal")
+        txt.delete("1.0", "end")
+
+        def section(title, checks):
+            txt.insert("end", tr(title) + "\n", "head")
+            for c in checks:
+                mark, _colour = self._DOCTOR_MARKS[c.state]
+                txt.insert("end", "  " + mark + "  ", c.state)
+                txt.insert("end", tr(c.message, **c.values) + "\n")
+            txt.insert("end", "\n")
+
+        local = st["local"]
+        section(N_("Game client"), [c for c in local if c.group == "client"])
+        realm = [c for c in local if c.group in ("realmlist", "config")]
+        if realm:
+            section(N_("Login configuration"), realm)
+        net = st["network"]
+        if net is None:
+            txt.insert("end", tr("Checking the connection…") + "\n", "dim")
+        else:
+            section(N_("Connection"), net)
+            done = logindoctor.summary(local + net)
+            if done:
+                txt.insert("end", tr(done) + "\n")
+        txt.configure(state="disabled")
+
+        btn = self._doctor_repair_btn
+        plan = (logindoctor.repair_plan(st["client"])
+                if st["client"] and os.path.isdir(st["client"]) else [])
+        ready = bool(plan) and not st["running"]
+        btn.configure(fg=C_TEXT if ready else C_TEXT_DIM,
+                      cursor="hand2" if ready else "arrow")
+        btn.unbind("<Button-1>")
+        if ready:
+            btn.bind("<Button-1>", lambda e: self._repair_login_config())
+
+    def _repair_login_config(self):
+        """Show exactly what changes, back up, repair, run the checks again."""
+        from tkinter import messagebox
+        client = self._doctor_state["client"]
+        if platforms.client_in_use(client):
+            messagebox.showerror(tr("Repair login configuration"),
+                                 tr("The game is running. Close it first: it "
+                                    "rewrites these files when it exits."),
+                                 parent=self)
+            self._run_login_doctor()
+            return
+        plan = logindoctor.repair_plan(client)
+        if not plan:
+            self._run_login_doctor()
+            return
+        files = "\n".join("    " + os.path.relpath(p, client) for p, _t in plan)
+        if not messagebox.askyesno(
+                tr("Repair login configuration"),
+                tr("These files will be changed:\n\n{files}\n\nOnly their login "
+                   "lines change: the realm address is set to {host}. A copy of "
+                   "each is kept beside it as {ext} (an existing copy is never "
+                   "replaced).\n\nRepair now?", files=files,
+                   host=logindoctor.LOGIN_HOST, ext=logindoctor.BACKUP_EXT),
+                parent=self):
+            return
+        try:
+            changed = logindoctor.repair(client, platforms.client_in_use)
+            for path in changed:
+                log(f"Login Doctor repaired {path}", "ok")
+        except logindoctor.GameRunning:
+            messagebox.showerror(tr("Repair login configuration"),
+                                 tr("The game is running. Close it first: it "
+                                    "rewrites these files when it exits."),
+                                 parent=self)
+        except OSError as e:
+            messagebox.showerror(tr("Repair login configuration"),
+                                 tr("Could not repair: {error}", error=e),
+                                 parent=self)
+        self._run_login_doctor()
+
+    def _build_game_launcher_settings(self, parent, bg, inp, bdr):
+        """Linux: how PLAY starts the Windows game client. Empty fields mean
+        automatic (Wine, else UMU); a launch command covers Proton, Lutris,
+        Faugus or anything else. Saved as typed."""
+        saved = load_config().get("game_launcher") or {}
+
+        def field(key, label, tip):
+            tk.Label(parent, text=label, font=self._font(9), fg=C_TEXT,
+                     bg=bg).pack(anchor="w", pady=(self._px(10), 0))
+            var = tk.StringVar(value=saved.get(key, ""))
+            ent = tk.Entry(parent, textvariable=var, bg=inp, fg=C_TEXT,
+                           insertbackground=C_GOLD, relief="flat",
+                           font=FONT_MONO, width=36, highlightthickness=1,
+                           highlightbackground=bdr, highlightcolor=C_GOLD)
+            ent.pack(anchor="w", fill="x", ipady=self._px(3))
+            self._add_tooltip(ent, tip)
+
+            def store(*_a, k=key, v=var):
+                value = v.get().strip()
+
+                def merge(c):
+                    launcher = c.setdefault("game_launcher", {})
+                    launcher[k] = value
+                self._cfg = update_config(merge)
+                show_runner()
+            var.trace_add("write", store)
+            return var
+
+        field("launch_command", tr("Launch command"),
+              tr("Leave empty to use Wine, or UMU if Wine is not installed. "
+                 "{exe} stands for the game's path; without it, the path is "
+                 "added at the end."))
+        field("wine_prefix", tr("Wine prefix"),
+              tr("Optional. The Wine prefix the game runs in; passed as "
+                 "WINEPREFIX."))
+        runner = tk.Label(parent, text="", font=self._font(9), fg=C_TEXT_DIM,
+                          bg=bg, justify="left", wraplength=self._px(500))
+        runner.pack(anchor="w", pady=(self._px(4), 0))
+
+        # Environment variables for the game only: one NAME=value per line,
+        # saved as typed. A line that cannot be used is named here at once,
+        # and PLAY refuses to start without it rather than dropping it.
+        tk.Label(parent, text=tr("Environment variables"), font=self._font(9),
+                 fg=C_TEXT, bg=bg).pack(anchor="w", pady=(self._px(8), 0))
+        env_box = tk.Text(parent, height=3, width=36, wrap="none", bg=inp,
+                          fg=C_TEXT, insertbackground=C_GOLD, relief="flat",
+                          font=FONT_MONO, highlightthickness=1,
+                          highlightbackground=bdr, highlightcolor=C_GOLD,
+                          undo=True)
+        env_box.insert("1.0", saved.get("env_vars", ""))
+        env_box.edit_modified(False)
+        env_box.pack(anchor="w", fill="x")
+        self._add_tooltip(env_box, tr(
+            "Optional. One NAME=value per line, given only to the game when "
+            "PLAY starts it - for example DXVK_HUD=fps."))
+        env_error = tk.Label(parent, text="", font=self._font(9), fg=C_ERR,
+                             bg=bg, justify="left", wraplength=self._px(500))
+        self._env_vars_box, self._env_vars_error = env_box, env_error
+
+        def show_env_problems(text):
+            _vars, problems = platforms.parse_env_lines(text)
+            try:
+                if problems:
+                    env_error.configure(text=env_problem_text(problems))
+                    env_error.pack(anchor="w", after=env_box,
+                                   pady=(self._px(2), 0))
+                else:
+                    env_error.configure(text="")
+                    env_error.pack_forget()
+            except tk.TclError:
+                pass
+
+        def store_env(_event=None):
+            if not env_box.edit_modified():
+                return
+            env_box.edit_modified(False)
+            text = env_box.get("1.0", "end-1c")
+
+            def merge(c):
+                c.setdefault("game_launcher", {})["env_vars"] = text
+            self._cfg = update_config(merge)
+            show_env_problems(text)
+        env_box.bind("<<Modified>>", store_env)
+        show_env_problems(saved.get("env_vars", ""))
+
+        def show_runner():
+            launcher = load_config().get("game_launcher") or {}
+            if (launcher.get("launch_command") or "").strip():
+                text = tr("Using your launch command.")
+            else:
+                name, path = platforms.detect_runner()
+                text = (tr("Automatic: {runner}", runner=f"{name} ({path})")
+                        if name else
+                        tr("Automatic: nothing found. Install Wine, or set "
+                           "a launch command."))
+            try:
+                runner.configure(text=text)
+            except tk.TclError:
+                pass
+        show_runner()
+
     def _fit_settings_panel(self, panel, min_w: int, min_h: int):
         """Grow the Settings panel to what its content needs, up to the
         window. OpenDyslexic sets far wider and taller than Friz at the same
@@ -8198,6 +9068,8 @@ class EqUpdaterApp(tk.Tk):
 
     def _close_settings(self):
         self.unbind("<Escape>")
+        self._launcher_overlay = None         # destroyed with the overlay
+        self._doctor_overlay = None
         if self._settings_overlay is not None:
             self._settings_overlay.destroy()
             self._settings_overlay = None
@@ -8234,22 +9106,20 @@ class EqUpdaterApp(tk.Tk):
         # added one via Settings since the last reconcile. Reset after, so a
         # later reconcile (e.g. another folder change) offers it again.
         if needs_reconcile:
-            if not self._av_excluded:
+            if not self._av_excluded and platforms.WINDOWS:
                 self._prompt_av_exclusion()
             self._av_excluded = False
 
     def _open_client_folder(self):
-        import subprocess
         path = os.path.normpath(self._game_path.get().strip())
-        if os.path.isdir(path):
-            # Explicit explorer.exe, not os.startfile: ShellExecute resolves
-            # extensionless paths against PATHEXT/.lnk, so a Desktop shortcut
-            # named like the folder (e.g. "OctoWoW.lnk") gets *executed*
-            # instead of the folder being opened.
-            subprocess.Popen(["explorer.exe", path])
-            self._log_line(f"Opened folder: {path}\n", "dim")
-        else:
+        if not os.path.isdir(path):
             self._log_line(f"Folder not found: {path}\n", "err")
+            return
+        try:
+            platforms.open_folder(path)
+            self._log_line(f"Opened folder: {path}\n", "dim")
+        except OSError as e:
+            self._log_line(f"Could not open {path}: {e}\n", "err")
 
     def _settings_change_dir(self):
         cur     = self._game_path.get()
@@ -8288,7 +9158,7 @@ class EqUpdaterApp(tk.Tk):
         aria2c downloader may trigger a Windows Firewall prompt — so it doesn't
         look sketchy to a non-technical user. Purely informational; tracked in
         the config so it appears only once."""
-        if self._cfg.get("aria2_firewall_notice_shown"):
+        if self._cfg.get("aria2_firewall_notice_shown") or not platforms.WINDOWS:
             return
         from tkinter import messagebox
         messagebox.showinfo(
@@ -8770,8 +9640,9 @@ class EqUpdaterApp(tk.Tk):
     def _launch_game(self):
         """Launch the game detached.
         If VanillaFixes is installed use VanillaFixes.exe (it injects dlls then
-        starts WoW.exe itself). Otherwise fall back to WoW.exe directly."""
-        import subprocess
+        starts WoW.exe itself). Otherwise fall back to WoW.exe directly. On
+        Linux either one is started through the game runner (see
+        platforms.launch_plan)."""
         client_dir = self._game_path.get().strip()
         cfg        = load_config()
 
@@ -8825,21 +9696,42 @@ class EqUpdaterApp(tk.Tk):
                    "switch to DXVK 2.5.3"),
                 parent=self)
 
+        # How to start it: the executable itself on Windows; on Linux the
+        # player's launch command, else Wine, else UMU (platforms.launch_plan).
+        plan = platforms.launch_plan(client_dir, exe,
+                                     load_config().get("game_launcher"))
+        if plan.env_problems:
+            from tkinter import messagebox
+            self._log_line("Not launched: the game launcher's environment "
+                           "variables have lines that cannot be used.\n",
+                           "err")
+            messagebox.showerror(
+                tr("Cannot start the game"),
+                tr("Fix the environment variables in Settings → Game "
+                   "launcher:\n\n{problems}",
+                   problems=env_problem_text(plan.env_problems)),
+                parent=self)
+            return
+        if not plan.ok:
+            from tkinter import messagebox
+            self._log_line("No way to run the Windows game client was found "
+                           "(no launch command set, no wine or umu-run on "
+                           "PATH).\n", "err")
+            messagebox.showerror(
+                tr("Cannot start the game"),
+                tr("{app} found no way to run the Windows game client. "
+                   "Install Wine, or set a launch command in Settings \u2192 "
+                   "Game launcher.", app=branding.APP_NAME),
+                parent=self)
+            return
+
         if self._cfg.get("clear_wdb_on_launch", False):
             remove_wdb(client_dir)
 
         try:
-            flags = (getattr(subprocess, "DETACHED_PROCESS", 0)
-                     | getattr(subprocess, "CREATE_BREAKAWAY_FROM_JOB", 0))
-            try:
-                subprocess.Popen([exe], cwd=client_dir,
-                                 creationflags=flags, close_fds=True)
-            except OSError:
-                # The job object doesn't permit breakaway — retry without it.
-                flags &= ~getattr(subprocess, "CREATE_BREAKAWAY_FROM_JOB", 0)
-                subprocess.Popen([exe], cwd=client_dir,
-                                 creationflags=flags, close_fds=True)
-            self._log_line(f"Launched {exe_lbl}!\n", "ok")
+            platforms.spawn_detached(plan.argv, cwd=plan.cwd, env=plan.env)
+            how = "" if plan.runner == "windows" else f" with {plan.runner}"
+            self._log_line(f"Launched {exe_lbl}{how}!\n", "ok")
             # Briefly disable PLAY so a double-click can't spawn two clients.
             self._set_btn_busy(tr("PLAY"))
             self._status_var.set(tr("Launching..."))

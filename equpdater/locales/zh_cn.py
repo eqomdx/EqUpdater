@@ -286,6 +286,39 @@ STRINGS = {
     "Updating {name}…": "正在更新 {name}…",
     "Updating…": "正在更新…",
     "Valid URL. Click Install to continue.": "链接有效。点击“安装”继续。",
+    "Cannot start the game":
+        "无法启动游戏",
+    "{app} found no way to run the Windows game client. Install Wine, or set a launch command in Settings → Game launcher.":
+        "{app} 找不到运行 Windows 游戏客户端的方法。请安装 Wine，或在 设置 → 游戏启动方式 中设置启动命令。",
+    "GAME LAUNCHER":
+        "游戏启动方式",
+    "Launch command":
+        "启动命令",
+    "Leave empty to use Wine, or UMU if Wine is not installed. {exe} stands for the game's path; without it, the path is added at the end.":
+        "留空则使用 Wine；未安装 Wine 时使用 UMU。{exe} 代表游戏的路径；如果命令中没有它，路径会加在命令末尾。",
+    "Wine prefix":
+        "Wine 前缀",
+    "Optional. The Wine prefix the game runs in; passed as WINEPREFIX.":
+        "可选。游戏运行所在的 Wine 前缀；作为 WINEPREFIX 传递。",
+    "Using your launch command.":
+        "正在使用你的启动命令。",
+    "Automatic: {runner}":
+        "自动：{runner}",
+    "Automatic: nothing found. Install Wine, or set a launch command.":
+        "自动：未找到。请安装 Wine，或设置启动命令。",
+    "Environment variables":
+        "环境变量",
+    "Optional. One NAME=value per line, given only to the game when PLAY starts it - for example DXVK_HUD=fps.":
+        "可选。每行一个 NAME=值，仅在 PLAY 启动游戏时传给游戏，例如 DXVK_HUD=fps。",
+    "Line {line}: write it as NAME=value.":
+        "第 {line} 行：请写成 NAME=值 的形式。",
+    "Line {line}: a name starts with a letter or _ and has only letters, digits and _.":
+        "第 {line} 行：名称须以字母或 _ 开头，且只能包含字母、数字和 _。",
+    "Line {line}: the value contains a character that cannot be used.":
+        "第 {line} 行：值中包含无法使用的字符。",
+    "Fix the environment variables in Settings → Game launcher:\n\n{problems}":
+        "请在 设置 → 游戏启动方式 中修正环境变量：\n\n{problems}",
+    "Game launcher…": "游戏启动方式…",
     "Verify game files": "校验游戏文件",
     "Verifying game files…": "正在校验游戏文件…",
     "Verifying…": "正在校验…",
@@ -361,4 +394,173 @@ STRINGS = {
     "{name} is installed and {app} did not install it.\n\nManaging it means {app} will track:\n    {source}\n\nYour current files are not changed now. {app} will tell you when that source has a newer version, and will never replace files you have edited without asking.\n\nManage it?":
         "{name} 已安装，但不是由 {app} 安装的。\n\n托管后，{app} 将跟踪：\n    {source}\n\n你当前的文件现在不会被更改。当该来源有较新版本时，{app} 会告诉你，并且绝不会未经询问就替换你修改过的文件。\n\n要托管吗？",
     "{section} unavailable: {reason}": "{section}不可用：{reason}",
+    'Checking the connection…':
+        '正在检查连接…',
+    'Client build looks correct ({version})':
+        '客户端版本正确（{version}）',
+    'Client download server':
+        '客户端下载服务器',
+    'Config.wtf contains an obsolete realmList ({host})':
+        'Config.wtf 含有过时的 realmList（{host}）',
+    'Config.wtf has a malformed patchList ({host})':
+        'Config.wtf 的 patchList 格式错误（{host}）',
+    'Config.wtf has a malformed realmList ({host})':
+        'Config.wtf 的 realmList 格式错误（{host}）',
+    'Config.wtf has no realmList of its own':
+        'Config.wtf 没有自己的 realmList',
+    'Config.wtf patchList points somewhere other than OctoWoW ({host})':
+        'Config.wtf 的 patchList 未指向 OctoWoW（{host}）',
+    'Config.wtf realmList ({host}) disagrees with realmlist.wtf ({root})':
+        'Config.wtf 的 realmList（{host}）与 realmlist.wtf 不一致（{root}）',
+    'Config.wtf realmList matches ({host})':
+        'Config.wtf 的 realmList 一致（{host}）',
+    'Config.wtf realmList uses a non-standard address ({host}); it may be stale':
+        'Config.wtf 的 realmList 使用非标准地址（{host}），可能已过时',
+    'Connection':
+        '连接',
+    'Could not read the client build from WoW.exe':
+        '无法从 WoW.exe 读取客户端版本',
+    'Could not repair: {error}':
+        '无法修复：{error}',
+    "If login stops at “Authenticating”:\n• Turn off any VPN or proxy: OctoWoW login can hang behind one.\n• If normal login still fails, try launching the game through the official OctoLauncher using Priority Sign In.\n\nEqUpdater cannot currently use OctoLauncher's Priority Sign In directly.\nWarning: the official launcher may modify client files that EqUpdater manages.":
+        '如果登录卡在“正在验证”：\n• 关闭所有 VPN 或代理：使用它们时 OctoWoW 的登录可能会卡住。\n• 如果常规登录仍然失败，请尝试通过官方 OctoLauncher 使用 Priority Sign In（优先登录）启动游戏。\n\nEqUpdater 目前无法直接使用 OctoLauncher 的 Priority Sign In。\n警告：官方启动器可能会修改由 EqUpdater 管理的客户端文件。',
+    'Game client':
+        '游戏客户端',
+    'LOGIN DOCTOR':
+        '登录诊断',
+    'Login Doctor…':
+        '登录诊断…',
+    'Login configuration':
+        '登录配置',
+    'Login server did not answer a test connection ({host}:{port}, timed out). This alone does not mean login will fail: the server may ignore probes or be busy':
+        '登录服务器未响应测试连接（{host}:{port}，超时）。仅凭这一点并不意味着无法登录：服务器可能会忽略探测或正忙',
+    'Login server not tested: {host} does not resolve':
+        '未测试登录服务器：{host} 无法解析',
+    'Login server reachable ({host}:{port})':
+        '登录服务器可连接（{host}:{port}）',
+    'Login server refused a test connection ({host}:{port}). This alone does not mean login will fail: the server may ignore probes or be busy':
+        '登录服务器拒绝了测试连接（{host}:{port}）。仅凭这一点并不意味着无法登录：服务器可能会忽略探测或正忙',
+    'Network checks failed: {error}':
+        '网络检查失败：{error}',
+    'No Config.wtf yet; the game creates it':
+        '尚无 Config.wtf；游戏会创建它',
+    'No game folder is set':
+        '未设置游戏文件夹',
+    "No local login problem was found.\n\nThe problem may be server-side or account-specific. If OctoWoW is currently under attack or congestion, the official launcher's Priority Sign In may provide a different login route.":
+        '未发现本地登录问题。\n\n问题可能出在服务器端或账号本身。如果 OctoWoW 正遭受攻击或拥堵，官方启动器的 Priority Sign In（优先登录）可能提供另一条登录线路。',
+    'Priority Sign In':
+        'Priority Sign In（优先登录）',
+    'Repair login configuration':
+        '修复登录配置',
+    'Run again':
+        '重新检查',
+    'The game is running. Close it first: it rewrites these files when it exits.':
+        '游戏正在运行。请先关闭：游戏退出时会重写这些文件。',
+    'The game is running: repairs are disabled until it is closed':
+        '游戏正在运行：关闭游戏前无法修复',
+    'These files will be changed:\n\n{files}\n\nOnly their login lines change: the realm address is set to {host}. A copy of each is kept beside it as {ext} (an existing copy is never replaced).\n\nRepair now?':
+        '将修改以下文件：\n\n{files}\n\n只修改其中的登录行：服务器地址设为 {host}。每个文件旁会保留一份 {ext} 副本（已有副本不会被替换）。\n\n现在修复吗？',
+    'Unexpected client build {version} (OctoWoW uses {expected})':
+        '客户端版本异常 {version}（OctoWoW 使用 {expected}）',
+    'WoW.exe found':
+        '已找到 WoW.exe',
+    'WoW.exe is too small to be the game client':
+        'WoW.exe 太小，不可能是游戏客户端',
+    'WoW.exe not found in the game folder':
+        '游戏文件夹中未找到 WoW.exe',
+    'octowow.st website':
+        'octowow.st 网站',
+    '{file} ({host}) does not match the root realmlist ({root})':
+        '{file}（{host}）与主 realmlist 不一致（{root}）',
+    '{file} has a malformed line: {line}':
+        '{file} 中有格式错误的行：{line}',
+    '{file} has a malformed realm address ({host})':
+        '{file} 中的服务器地址格式错误（{host}）',
+    '{file} has no realmlist line':
+        '{file} 中没有 realmlist 行',
+    '{file} is missing':
+        '缺少 {file}',
+    '{file} sets the realm more than once ({hosts})':
+        '{file} 多次设置服务器（{hosts}）',
+    '{file} uses a non-standard address ({host}); it may be stale, for example left behind by an interrupted official launcher session':
+        '{file} 使用非标准地址（{host}），可能已过时，例如官方启动器会话中断后遗留',
+    '{file} uses the old address {host}':
+        '{file} 使用旧地址 {host}',
+    '{file} uses {host}':
+        '{file} 使用 {host}',
+    '{file} uses {host}, not the normal route {expected}':
+        '{file} 使用 {host}，而不是常规线路 {expected}',
+    '{host} did not resolve (timed out)':
+        '{host} 解析超时',
+    '{host} does not resolve':
+        '{host} 无法解析',
+    '{host} resolves':
+        '{host} 可以解析',
+    '{name} not reachable':
+        '{name} 无法访问',
+    '{name} reachable':
+        '{name} 可以访问',
+    'the news feed was malformed': '新闻源格式错误',
+    '{error} · showing the news feed instead': '{error} · 改为显示新闻源',
+    'Two addon folders': '两个插件文件夹',
+    'This game folder has two addon folders whose names differ only in letter case:\n    {other}\n    {addons}\n\nEverything that was in only one of them is now in {addons}. These addons are in both, with different files:\n{names}\n\nYes: keep the copies from {other}.\nNo: keep the copies in {addons}.\nCancel: decide later. Until then {app} installs, updates and removes no addons.\n\nThe copies you do not keep are moved into an AddOns-conflicts folder next to them, not deleted.':
+        '此游戏文件夹中有两个插件文件夹，名称只有大小写不同：\n    {other}\n    {addons}\n\n只存在于其中一个文件夹里的内容现已移到 {addons}。以下插件在两个文件夹中都有，且文件不同：\n{names}\n\n是：保留 {other} 中的副本。\n否：保留 {addons} 中的副本。\n取消：稍后决定。在此之前 {app} 不会安装、更新或删除插件。\n\n未保留的副本会移到旁边的 AddOns-conflicts 文件夹中，不会被删除。',
+    'Addons: {n} of {total} failed':
+        '插件：{total} 个中有 {n} 个失败',
+    'Could not connect to {host}.':
+        '无法连接到 {host}。',
+    'Could not find the latest version of the addon at {host}.':
+        '无法在 {host} 上找到该插件的最新版本。',
+    'Could not look up {host}. Check your internet connection or DNS.':
+        '无法解析 {host}。请检查网络连接或 DNS。',
+    'Could not write the addon files ({error}).':
+        '无法写入插件文件（{error}）。',
+    'Failed to install {name}':
+        '安装 {name} 失败',
+    'Failed to update {name}':
+        '更新 {name} 失败',
+    'No permission to write to the AddOns folder.':
+        '没有写入 AddOns 文件夹的权限。',
+    'Not enough disk space to write the addon files.':
+        '磁盘空间不足，无法写入插件文件。',
+    'Open the log for details?':
+        '打开日志查看详情？',
+    'Some addons failed — see the message for details':
+        '部分插件失败——详情见提示',
+    'The AddOns folder exists twice with different copies of this addon. Choose which to keep, then try again.':
+        'AddOns 文件夹存在两份，且该插件的副本不同。请选择保留哪一份，然后重试。',
+    "The addon's address is not on an allowed git host.":
+        '该插件的地址不在允许的 git 托管站点上。',
+    'The file from {host} is not a valid addon archive. Try again later.':
+        '来自 {host} 的文件不是有效的插件压缩包。请稍后重试。',
+    "The files were blocked or removed while being written — usually antivirus. Open Settings (⚙) → 'Add game folder to Defender exclusions', then retry.":
+        '文件在写入时被拦截或删除——通常是杀毒软件所致。请打开设置 (⚙) →“将游戏文件夹加入 Defender 排除项”，然后重试。',
+    'The installed copy was left as it was.':
+        '已安装的版本保持不变。',
+    'The other {n} finished.':
+        '其余 {n} 个已完成。',
+    'The secure connection to {host} failed (TLS/certificate error).':
+        '与 {host} 的安全连接失败（TLS/证书错误）。',
+    'Unexpected error ({error}).':
+        '意外错误（{error}）。',
+    '{host} did not answer in time. Try again later.':
+        '{host} 未及时响应。请稍后重试。',
+    '{host} is having problems (HTTP {code}). Try again later.':
+        '{host} 出现问题（HTTP {code}）。请稍后重试。',
+    '{host} is limiting requests (HTTP 429). Try again later.':
+        '{host} 正在限制请求（HTTP 429）。请稍后重试。',
+    '{host} is showing its DDoS-protection check instead of the download. Try again later.':
+        '{host} 返回了 DDoS 防护检查页面而不是下载内容。请稍后重试。',
+    '{host} refused or dropped the connection. Try again later.':
+        '{host} 拒绝或中断了连接。请稍后重试。',
+    '{host} refused the download (HTTP 403). It may be limiting automated downloads. Try again later.':
+        '{host} 拒绝了下载（HTTP 403）。它可能在限制自动下载。请稍后重试。',
+    '{host} refused the download (HTTP {code}).':
+        '{host} 拒绝了下载（HTTP {code}）。',
+    '{host} says the repository or version does not exist (HTTP 404).':
+        '{host} 表示该仓库或版本不存在（HTTP 404）。',
+    '{name} (update)':
+        '{name}（更新）',
+    '…and {n} more':
+        '……还有 {n} 个',
 }
